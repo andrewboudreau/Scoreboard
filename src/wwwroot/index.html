@@ -89,6 +89,87 @@
             color: #aaa;
         }
 
+        .control-buttons {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .control-btn {
+            background-color: rgba(51, 51, 51, 0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+            .control-btn:hover {
+                background-color: rgba(51, 51, 51, 1);
+            }
+
+        .settings-panel {
+            position: absolute;
+            bottom: 80px;
+            right: 20px;
+            background-color: rgba(51, 51, 51, 0.9);
+            border-radius: 10px;
+            padding: 20px;
+            width: 300px;
+            display: none;
+            z-index: 99;
+        }
+
+            .settings-panel.active {
+                display: block;
+            }
+
+            .settings-panel h3 {
+                margin-bottom: 15px;
+                text-align: center;
+            }
+
+        .settings-group {
+            margin-bottom: 15px;
+        }
+
+            .settings-group label {
+                display: block;
+                margin-bottom: 5px;
+            }
+
+            .settings-group input {
+                width: 100%;
+                padding: 8px;
+                background-color: #444;
+                border: none;
+                border-radius: 5px;
+                color: white;
+            }
+
+            .settings-group button {
+                width: 100%;
+                padding: 8px;
+                background-color: #444;
+                border: none;
+                border-radius: 5px;
+                color: white;
+                cursor: pointer;
+                margin-top: 5px;
+            }
+
+                .settings-group button:hover {
+                    background-color: #555;
+                }
+
         @media (max-width: 768px) {
             .team-name {
                 font-size: 1.5rem;
@@ -153,6 +234,44 @@
         <div class="timer-container">
             <div class="timer" id="timer">10:00</div>
         </div>
+        <div class="control-buttons">
+            <button id="settings-btn" class="control-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            </button>
+            <button id="fullscreen-btn" class="control-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div id="settings-panel" class="settings-panel">
+            <h3>Settings</h3>
+            <div class="settings-group">
+                <label for="timer-minutes">Timer (minutes)</label>
+                <input type="number" id="timer-minutes" min="1" max="60" value="10">
+                <button id="set-timer-btn">Set Timer</button>
+            </div>
+            <div class="settings-group">
+                <label for="team1-name">Team 1 Name</label>
+                <input type="text" id="team1-name" value="BLACK">
+                <button id="set-team1-btn">Update</button>
+            </div>
+            <div class="settings-group">
+                <label for="team2-name">Team 2 Name</label>
+                <input type="text" id="team2-name" value="WHITE">
+                <button id="set-team2-btn">Update</button>
+            </div>
+            <div class="settings-group">
+                <button id="reset-scores-btn">Reset Scores</button>
+            </div>
+            <div class="settings-group">
+                <button id="test-buzzer-btn">Test Buzzer Sound</button>
+            </div>
+        </div>
     </div>
 
     <audio id="alarm" src="buzzer.mp3"></audio>
@@ -169,7 +288,7 @@
         let awayPoints = 0;
         let timerRunning = false;
         let timerInterval;
-        let timeLeft = .5 * 60; // 10 minutes in seconds
+        let timeLeft = 15 * 60; // 10 minutes in seconds
 
         // Format time as MM:SS
         function formatTime(seconds) {
@@ -293,6 +412,96 @@
                 timerRunning = false;
                 timeLeft = 10 * 60;
                 timerDisplay.textContent = formatTime(timeLeft);
+            } else if (e.key === 'f') {
+                toggleFullscreen();
+            }
+        });
+
+        // Settings and Fullscreen functionality
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsPanel = document.getElementById('settings-panel');
+        const setTimerBtn = document.getElementById('set-timer-btn');
+        const timerMinutesInput = document.getElementById('timer-minutes');
+        const team1NameInput = document.getElementById('team1-name');
+        const team2NameInput = document.getElementById('team2-name');
+        const setTeam1Btn = document.getElementById('set-team1-btn');
+        const setTeam2Btn = document.getElementById('set-team2-btn');
+        const resetScoresBtn = document.getElementById('reset-scores-btn');
+        const testBuzzerBtn = document.getElementById('test-buzzer-btn');
+        const team1NameElement = document.querySelector('.team:nth-of-type(1) .team-name');
+        const team2NameElement = document.querySelector('.team:nth-of-type(2) .team-name');
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                // Enter fullscreen
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) { /* IE11 */
+                    document.documentElement.msRequestFullscreen();
+                }
+            } else {
+                // Exit fullscreen
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) { /* Safari */
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) { /* IE11 */
+                    document.msExitFullscreen();
+                }
+            }
+        }
+
+        function toggleSettings() {
+            settingsPanel.classList.toggle('active');
+        }
+
+        function setTimer() {
+            const minutes = parseInt(timerMinutesInput.value);
+            if (minutes > 0 && minutes <= 60) {
+                clearInterval(timerInterval);
+                timerRunning = false;
+                timeLeft = minutes * 60;
+                timerDisplay.textContent = formatTime(timeLeft);
+                timerDisplay.style.backgroundColor = '#333';
+            }
+        }
+
+        function setTeam1Name() {
+            team1NameElement.textContent = team1NameInput.value;
+        }
+
+        function setTeam2Name() {
+            team2NameElement.textContent = team2NameInput.value;
+        }
+
+        function resetScores() {
+            homePoints = 0;
+            awayPoints = 0;
+            homeScore.textContent = homePoints;
+            awayScore.textContent = awayPoints;
+        }
+
+        // Initialize settings inputs with current values
+        team1NameInput.value = team1NameElement.textContent;
+        team2NameInput.value = team2NameElement.textContent;
+        timerMinutesInput.value = Math.floor(timeLeft / 60);
+
+        // Event listeners for settings
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+        settingsBtn.addEventListener('click', toggleSettings);
+        setTimerBtn.addEventListener('click', setTimer);
+        setTeam1Btn.addEventListener('click', setTeam1Name);
+        setTeam2Btn.addEventListener('click', setTeam2Name);
+        resetScoresBtn.addEventListener('click', resetScores);
+        testBuzzerBtn.addEventListener('click', playAlarm);
+
+        // Close settings panel when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+                settingsPanel.classList.remove('active');
             }
         });
     </script>
