@@ -1,0 +1,300 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDL Scoreboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .scoreboard {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .scores {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .team {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        .team-name {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .score {
+            font-size: 8rem;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #333;
+            padding: 20px 40px;
+            border-radius: 10px;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .timer-container {
+            width: 80%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 30px;
+        }
+
+        .timer {
+            font-size: 10rem;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #333;
+            padding: 20px 40px;
+            border-radius: 10px;
+            min-width: 400px;
+            text-align: center;
+        }
+
+        .timer-status {
+            margin-top: 15px;
+            font-size: 1.5rem;
+            color: #aaa;
+        }
+
+        @media (max-width: 768px) {
+            .team-name {
+                font-size: 1.5rem;
+            }
+
+            .score {
+                font-size: 5rem;
+                min-width: 120px;
+                padding: 10px 20px;
+            }
+
+            .timer {
+                font-size: 6rem;
+                min-width: 280px;
+                padding: 10px 20px;
+            }
+        }
+
+        /* Landscape mode for widescreen */
+        @media (orientation: landscape) and (max-height: 600px) {
+            .scoreboard {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            .scores {
+                flex-direction: column;
+                width: 30%;
+                margin-bottom: 0;
+                margin-right: 20px;
+            }
+
+            .team {
+                width: 100%;
+                margin-bottom: 20px;
+            }
+
+            .timer-container {
+                width: 60%;
+                margin-top: 0;
+            }
+
+            .timer {
+                font-size: 8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="scoreboard">
+        <div class="scores">
+            <div class="team">
+                <div class="team-name" contenteditable="true">BLACK</div>
+                <div class="score" id="score-home">0</div>
+            </div>
+            <div class="team">
+                <div class="team-name" contenteditable="true">WHITE</div>
+                <div class="score" id="score-away">0</div>
+            </div>
+        </div>
+        <div class="timer-container">
+            <div class="timer" id="timer">10:00</div>
+        </div>
+    </div>
+
+    <audio id="alarm" src="buzzer.mp3"></audio>
+
+    <script>
+        // Elements
+        const homeScore = document.getElementById('score-home');
+        const awayScore = document.getElementById('score-away');
+        const timerDisplay = document.getElementById('timer');
+        const alarm = document.getElementById('alarm');
+
+        // Initial values
+        let homePoints = 0;
+        let awayPoints = 0;
+        let timerRunning = false;
+        let timerInterval;
+        let timeLeft = .5 * 60; // 10 minutes in seconds
+
+        // Format time as MM:SS
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        // Initialize timer display
+        timerDisplay.textContent = formatTime(timeLeft);
+
+        // Timer logic
+        function startStopTimer() {
+            if (timerRunning) {
+                // Stop timer
+                clearInterval(timerInterval);
+                timerRunning = false;
+            } else {
+                // Start timer
+                timerRunning = true;
+                timerInterval = setInterval(() => {
+                    timeLeft--;
+                    timerDisplay.textContent = formatTime(timeLeft);
+
+                    if (timeLeft <= 0) {
+                        clearInterval(timerInterval);
+                        timerRunning = false;
+                        playAlarm();
+                    }
+                }, 1000);
+            }
+        }
+
+        // Play alarm sound
+        function playAlarm() {
+            alarm.play();
+            timerDisplay.style.backgroundColor = '#f00';
+            setTimeout(() => {
+                timerDisplay.style.backgroundColor = '#333';
+            }, 500);
+        }
+
+        // Reset timer (double tap)
+        let lastTap = 0;
+        function handleTimerTap() {
+            const now = new Date().getTime();
+            const timeSince = now - lastTap;
+
+            if (timeSince < 300 && timeSince > 0) {
+                // Double tap - reset timer
+                clearInterval(timerInterval);
+                timerRunning = false;
+                timeLeft = 10 * 60;
+                timerDisplay.textContent = formatTime(timeLeft);
+                timerDisplay.style.backgroundColor = '#333';
+            } else {
+                // Single tap - start/stop
+                startStopTimer();
+            }
+
+            lastTap = now;
+        }
+
+        // Event Listeners
+        homeScore.addEventListener('click', () => {
+            homePoints++;
+            homeScore.textContent = homePoints;
+        });
+
+        awayScore.addEventListener('click', () => {
+            awayPoints++;
+            awayScore.textContent = awayPoints;
+        });
+
+        timerDisplay.addEventListener('click', handleTimerTap);
+
+        // Allow team names to be edited (they're contenteditable)
+
+        // Long press on score to decrease (for corrections)
+        let pressTimer;
+
+        homeScore.addEventListener('touchstart', function () {
+            pressTimer = window.setTimeout(() => {
+                if (homePoints > 0) {
+                    homePoints--;
+                    homeScore.textContent = homePoints;
+                }
+            }, 800);
+        });
+
+        awayScore.addEventListener('touchstart', function () {
+            pressTimer = window.setTimeout(() => {
+                if (awayPoints > 0) {
+                    awayPoints--;
+                    awayScore.textContent = awayPoints;
+                }
+            }, 800);
+        });
+
+        // Clear the timeout if the user lifts their finger
+        homeScore.addEventListener('touchend', () => {
+            clearTimeout(pressTimer);
+        });
+
+        awayScore.addEventListener('touchend', () => {
+            clearTimeout(pressTimer);
+        });
+
+        // Add keyboard support for desktop testing
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'h') {
+                homePoints++;
+                homeScore.textContent = homePoints;
+            } else if (e.key === 'a') {
+                awayPoints++;
+                awayScore.textContent = awayPoints;
+            } else if (e.key === ' ') {
+                startStopTimer();
+            } else if (e.key === 'r') {
+                clearInterval(timerInterval);
+                timerRunning = false;
+                timeLeft = 10 * 60;
+                timerDisplay.textContent = formatTime(timeLeft);
+            }
+        });
+    </script>
+</body>
+</html>
