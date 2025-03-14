@@ -5,6 +5,11 @@ var app = builder.Build();
 
 app.MapFavicon();
 app.MapHtmlPage("/", "index.html");
-app.MapAudioFile("buzzer.mp3");
+app.MapResource("styles.css");
+
+app.MapResource("audio/buzzer.mp3");
+app.MapResource("icons/fullscreen.svg");
+app.MapResource("icons/settings.svg");
+
 
 app.Run();

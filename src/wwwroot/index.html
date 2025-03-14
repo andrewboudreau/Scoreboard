@@ -4,291 +4,83 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MDL Scoreboard</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            user-select: none;
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #000;
-            color: #fff;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .scoreboard {
-            width: 100%;
-            max-width: 1200px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .scores {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .team {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            width: 45%;
-        }
-
-        .team-name {
-            font-size: 2rem;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-        }
-
-        .score {
-            font-size: 8rem;
-            font-weight: bold;
-            cursor: pointer;
-            background-color: #333;
-            padding: 20px 40px;
-            border-radius: 10px;
-            min-width: 200px;
-            text-align: center;
-        }
-
-        .timer-container {
-            width: 80%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-top: 30px;
-        }
-
-        .timer {
-            font-size: 10rem;
-            font-weight: bold;
-            cursor: pointer;
-            background-color: #333;
-            padding: 20px 40px;
-            border-radius: 10px;
-            min-width: 400px;
-            text-align: center;
-        }
-
-        .timer-status {
-            margin-top: 15px;
-            font-size: 1.5rem;
-            color: #aaa;
-        }
-
-        .control-buttons {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            display: flex;
-            gap: 10px;
-            z-index: 100;
-        }
-
-        .control-btn {
-            background-color: rgba(51, 51, 51, 0.7);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-            .control-btn:hover {
-                background-color: rgba(51, 51, 51, 1);
-            }
-
-        .settings-panel {
-            position: absolute;
-            bottom: 80px;
-            right: 20px;
-            background-color: rgba(51, 51, 51, 0.9);
-            border-radius: 10px;
-            padding: 20px;
-            width: 300px;
-            display: none;
-            z-index: 99;
-        }
-
-            .settings-panel.active {
-                display: block;
-            }
-
-            .settings-panel h3 {
-                margin-bottom: 15px;
-                text-align: center;
-            }
-
-        .settings-group {
-            margin-bottom: 15px;
-        }
-
-            .settings-group label {
-                display: block;
-                margin-bottom: 5px;
-            }
-
-            .settings-group input {
-                width: 100%;
-                padding: 8px;
-                background-color: #444;
-                border: none;
-                border-radius: 5px;
-                color: white;
-            }
-
-            .settings-group button {
-                width: 100%;
-                padding: 8px;
-                background-color: #444;
-                border: none;
-                border-radius: 5px;
-                color: white;
-                cursor: pointer;
-                margin-top: 5px;
-            }
-
-                .settings-group button:hover {
-                    background-color: #555;
-                }
-
-        @media (max-width: 768px) {
-            .team-name {
-                font-size: 1.5rem;
-            }
-
-            .score {
-                font-size: 5rem;
-                min-width: 120px;
-                padding: 10px 20px;
-            }
-
-            .timer {
-                font-size: 6rem;
-                min-width: 280px;
-                padding: 10px 20px;
-            }
-        }
-
-        /* Landscape mode for widescreen */
-        @media (orientation: landscape) and (max-height: 600px) {
-            .scoreboard {
-                flex-direction: row;
-                justify-content: space-between;
-                align-items: center;
-            }
-
-            .scores {
-                flex-direction: column;
-                width: 30%;
-                margin-bottom: 0;
-                margin-right: 20px;
-            }
-
-            .team {
-                width: 100%;
-                margin-bottom: 20px;
-            }
-
-            .timer-container {
-                width: 60%;
-                margin-top: 0;
-            }
-
-            .timer {
-                font-size: 8rem;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="scoreboard">
         <div class="scores">
             <div class="team">
                 <div class="team-name" contenteditable="true">BLACK</div>
-                <div class="score" id="score-home">0</div>
+                <div class="score" id="score-team1">0</div>
             </div>
             <div class="team">
                 <div class="team-name" contenteditable="true">WHITE</div>
-                <div class="score" id="score-away">0</div>
+                <div class="score" id="score-team2">0</div>
             </div>
         </div>
         <div class="timer-container">
             <div class="timer" id="timer">10:00</div>
+            <div class="score-history" id="score-history"></div>
         </div>
         <div class="control-buttons">
             <button id="settings-btn" class="control-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                </svg>
+                <img src="icons/settings.svg" alt="Settings Icon" width="24" height="24">
             </button>
             <button id="fullscreen-btn" class="control-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-                </svg>
+                <img src="icons/fullscreen.svg" alt="Fullscreen Icon" width="24" height="24">
             </button>
         </div>
 
         <div id="settings-panel" class="settings-panel">
-            <h3>Settings</h3>
             <div class="settings-group">
                 <label for="timer-minutes">Timer (minutes)</label>
                 <input type="number" id="timer-minutes" min="1" max="60" value="10">
                 <button id="set-timer-btn">Set Timer</button>
             </div>
             <div class="settings-group">
-                <label for="team1-name">Team 1 Name</label>
+                <label for="team1-name">Teams</label>
                 <input type="text" id="team1-name" value="BLACK">
-                <button id="set-team1-btn">Update</button>
-            </div>
-            <div class="settings-group">
-                <label for="team2-name">Team 2 Name</label>
                 <input type="text" id="team2-name" value="WHITE">
-                <button id="set-team2-btn">Update</button>
+                <button id="set-team-btn">Update</button>
             </div>
             <div class="settings-group">
+                <button id="reset-history-btn">Reset Score History</button>
                 <button id="reset-scores-btn">Reset Scores</button>
+                <button id="test-buzzer-btn">Test Buzzer Sound</button>
             </div>
             <div class="settings-group">
-                <button id="test-buzzer-btn">Test Buzzer Sound</button>
+                <label for="score-font-size">Score Font Size: <span id="score-font-size-value">10</span>rem</label>
+                <input type="range" id="score-font-size" min="5" max="15" value="10" step="0.5">
+            </div>
+            <div class="settings-group">
+                <label for="timer-font-size">Timer Font Size: <span id="timer-font-size-value">14</span>rem</label>
+                <input type="range" id="timer-font-size" min="6" max="20" value="14" step="0.5">
+            </div>
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="keep-screen-on"> Keep screen on (prevents device sleep)
+                </label>
             </div>
         </div>
     </div>
 
-    <audio id="alarm" src="buzzer.mp3"></audio>
+    <audio id="alarm" src="audio/buzzer.mp3"></audio>
 
     <script>
         // Elements
-        const homeScore = document.getElementById('score-home');
-        const awayScore = document.getElementById('score-away');
+        const team1Score = document.getElementById('score-team1');
+        const team2Score = document.getElementById('score-team2');
         const timerDisplay = document.getElementById('timer');
         const alarm = document.getElementById('alarm');
 
         // Initial values
-        let homePoints = 0;
-        let awayPoints = 0;
+        let team1Points = 0;
+        let team2Points = 0;
         let timerRunning = false;
         let timerInterval;
         let timeLeft = 15 * 60; // 10 minutes in seconds
+        let periodScores = [];
+        let wakeLock = null;
 
         // Format time as MM:SS
         function formatTime(seconds) {
@@ -316,10 +108,43 @@
                     if (timeLeft <= 0) {
                         clearInterval(timerInterval);
                         timerRunning = false;
+
+                        // Capture the current score
+                        captureScore();
+
+                        // Play alarm and reset timer
                         playAlarm();
+
+                        // Reset timer to configured time
+                        timeLeft = parseInt(timerMinutesInput.value) * 60;
+                        timerDisplay.textContent = formatTime(timeLeft);
                     }
                 }, 1000);
             }
+        }
+
+        // Function to capture the score at the end of a period
+        function captureScore() {
+            // Add current score to the period scores array
+            periodScores.push(`${team1Points} - ${team2Points}`);
+
+            // Update the score history display
+            updateScoreHistory();
+        }
+
+        // Function to update the score history display
+        function updateScoreHistory() {
+            const scoreHistoryElement = document.getElementById('score-history');
+            scoreHistoryElement.innerHTML = '';
+
+            // Display each period score
+            periodScores.forEach((score, index) => {
+                const periodElement = document.createElement('span');
+                periodElement.className = 'period-score';
+                periodElement.textContent = score;
+                periodElement.contentEditable = 'true';
+                scoreHistoryElement.appendChild(periodElement);
+            });
         }
 
         // Play alarm sound
@@ -341,7 +166,7 @@
                 // Double tap - reset timer
                 clearInterval(timerInterval);
                 timerRunning = false;
-                timeLeft = 10 * 60;
+                timeLeft = parseInt(timerMinutesInput.value) * 60;
                 timerDisplay.textContent = formatTime(timeLeft);
                 timerDisplay.style.backgroundColor = '#333';
             } else {
@@ -353,58 +178,71 @@
         }
 
         // Event Listeners
-        homeScore.addEventListener('click', () => {
-            homePoints++;
-            homeScore.textContent = homePoints;
+        team1Score.addEventListener('click', () => {
+            team1Points++;
+            team1Score.textContent = team1Points;
         });
 
-        awayScore.addEventListener('click', () => {
-            awayPoints++;
-            awayScore.textContent = awayPoints;
+        team2Score.addEventListener('click', () => {
+            team2Points++;
+            team2Score.textContent = team2Points;
         });
 
         timerDisplay.addEventListener('click', handleTimerTap);
 
-        // Allow team names to be edited (they're contenteditable)
+        // Font size adjustment functions
+        function updateScoreFontSize(value) {
+            const scoreElements = document.querySelectorAll('.score');
+            scoreElements.forEach(el => {
+                el.style.fontSize = `${value}rem`;
+            });
+            document.getElementById('score-font-size-value').textContent = value;
+            localStorage.setItem('scoreFontSize', value);
+        }
 
-        // Long press on score to decrease (for corrections)
+        function updateTimerFontSize(value) {
+            timerDisplay.style.fontSize = `${value}rem`;
+            document.getElementById('timer-font-size-value').textContent = value;
+            localStorage.setItem('timerFontSize', value);
+        }
+
         let pressTimer;
 
-        homeScore.addEventListener('touchstart', function () {
+        team1Score.addEventListener('touchstart', function () {
             pressTimer = window.setTimeout(() => {
-                if (homePoints > 0) {
-                    homePoints--;
-                    homeScore.textContent = homePoints;
+                if (team1Points > 0) {
+                    team1Points--;
+                    team1Score.textContent = team1Points;
                 }
             }, 800);
         });
 
-        awayScore.addEventListener('touchstart', function () {
+        team2Score.addEventListener('touchstart', function () {
             pressTimer = window.setTimeout(() => {
-                if (awayPoints > 0) {
-                    awayPoints--;
-                    awayScore.textContent = awayPoints;
+                if (team2Points > 0) {
+                    team2Points--;
+                    team2Score.textContent = team2Points;
                 }
             }, 800);
         });
 
         // Clear the timeout if the user lifts their finger
-        homeScore.addEventListener('touchend', () => {
+        team1Score.addEventListener('touchend', () => {
             clearTimeout(pressTimer);
         });
 
-        awayScore.addEventListener('touchend', () => {
+        team2Score.addEventListener('touchend', () => {
             clearTimeout(pressTimer);
         });
 
         // Add keyboard support for desktop testing
         document.addEventListener('keydown', (e) => {
             if (e.key === 'h') {
-                homePoints++;
-                homeScore.textContent = homePoints;
+                team1Points++;
+                team1Score.textContent = team1Points;
             } else if (e.key === 'a') {
-                awayPoints++;
-                awayScore.textContent = awayPoints;
+                team2Points++;
+                team2Score.textContent = team2Points;
             } else if (e.key === ' ') {
                 startStopTimer();
             } else if (e.key === 'r') {
@@ -425,12 +263,15 @@
         const timerMinutesInput = document.getElementById('timer-minutes');
         const team1NameInput = document.getElementById('team1-name');
         const team2NameInput = document.getElementById('team2-name');
-        const setTeam1Btn = document.getElementById('set-team1-btn');
-        const setTeam2Btn = document.getElementById('set-team2-btn');
+        const setTeamBtn = document.getElementById('set-team-btn');
         const resetScoresBtn = document.getElementById('reset-scores-btn');
+        const resetHistoryBtn = document.getElementById('reset-history-btn');
         const testBuzzerBtn = document.getElementById('test-buzzer-btn');
         const team1NameElement = document.querySelector('.team:nth-of-type(1) .team-name');
         const team2NameElement = document.querySelector('.team:nth-of-type(2) .team-name');
+        const scoreFontSizeSlider = document.getElementById('score-font-size');
+        const timerFontSizeSlider = document.getElementById('timer-font-size');
+        const keepScreenOnCheckbox = document.getElementById('keep-screen-on');
 
         function toggleFullscreen() {
             if (!document.fullscreenElement) {
@@ -470,19 +311,21 @@
             }
         }
 
-        function setTeam1Name() {
-            team1NameElement.textContent = team1NameInput.value;
+        function resetScoreHistory() {
+            periodScores = [];
+            updateScoreHistory();
         }
 
-        function setTeam2Name() {
+        function setTeamName() {
+            team1NameElement.textContent = team1NameInput.value;
             team2NameElement.textContent = team2NameInput.value;
         }
 
         function resetScores() {
-            homePoints = 0;
-            awayPoints = 0;
-            homeScore.textContent = homePoints;
-            awayScore.textContent = awayPoints;
+            team1Points = 0;
+            team2Points = 0;
+            team1Score.textContent = team1Points;
+            team2Score.textContent = team2Points;
         }
 
         // Initialize settings inputs with current values
@@ -490,14 +333,43 @@
         team2NameInput.value = team2NameElement.textContent;
         timerMinutesInput.value = Math.floor(timeLeft / 60);
 
+        // Load saved font sizes if available
+        if (localStorage.getItem('scoreFontSize')) {
+            const savedScoreFontSize = localStorage.getItem('scoreFontSize');
+            scoreFontSizeSlider.value = savedScoreFontSize;
+            updateScoreFontSize(savedScoreFontSize);
+        }
+
+        if (localStorage.getItem('timerFontSize')) {
+            const savedTimerFontSize = localStorage.getItem('timerFontSize');
+            timerFontSizeSlider.value = savedTimerFontSize;
+            updateTimerFontSize(savedTimerFontSize);
+        }
+
+        // Load saved screen wake lock preference
+        if (localStorage.getItem('keepScreenOn') === 'true') {
+            keepScreenOnCheckbox.checked = true;
+            requestWakeLock();
+        }
+
         // Event listeners for settings
         fullscreenBtn.addEventListener('click', toggleFullscreen);
         settingsBtn.addEventListener('click', toggleSettings);
         setTimerBtn.addEventListener('click', setTimer);
-        setTeam1Btn.addEventListener('click', setTeam1Name);
-        setTeam2Btn.addEventListener('click', setTeam2Name);
+        setTeamBtn.addEventListener('click', setTeamName);
         resetScoresBtn.addEventListener('click', resetScores);
+        resetHistoryBtn.addEventListener('click', resetScoreHistory);
         testBuzzerBtn.addEventListener('click', playAlarm);
+        keepScreenOnCheckbox.addEventListener('change', toggleWakeLock);
+
+        // Font size slider event listeners
+        scoreFontSizeSlider.addEventListener('input', (e) => {
+            updateScoreFontSize(e.target.value);
+        });
+
+        timerFontSizeSlider.addEventListener('input', (e) => {
+            updateTimerFontSize(e.target.value);
+        });
 
         // Close settings panel when clicking outside
         document.addEventListener('click', (e) => {
@@ -505,6 +377,55 @@
                 settingsPanel.classList.remove('active');
             }
         });
+
+        // Wake Lock API to prevent screen from turning off
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Wake Lock is active');
+
+                    // Listen for visibility changes to reacquire wake lock if needed
+                    document.addEventListener('visibilitychange', handleVisibilityChange);
+                } catch (err) {
+                    console.error(`Failed to get wake lock: ${err.message}`);
+                }
+            } else {
+                console.warn('Wake Lock API not supported in this browser');
+                alert('Keep screen on feature is not supported in your browser');
+                keepScreenOnCheckbox.checked = false;
+            }
+        }
+
+        // Release the wake lock when no longer needed
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release()
+                    .then(() => {
+                        console.log('Wake Lock has been released');
+                        wakeLock = null;
+                    });
+                document.removeEventListener('visibilitychange', handleVisibilityChange);
+            }
+        }
+
+        // Handle visibility changes (when user switches tabs/apps)
+        function handleVisibilityChange() {
+            if (document.visibilityState === 'visible' && keepScreenOnCheckbox.checked) {
+                requestWakeLock();
+            }
+        }
+
+        // Toggle wake lock based on checkbox
+        function toggleWakeLock() {
+            if (keepScreenOnCheckbox.checked) {
+                requestWakeLock();
+                localStorage.setItem('keepScreenOn', 'true');
+            } else {
+                releaseWakeLock();
+                localStorage.setItem('keepScreenOn', 'false');
+            }
+        }
     </script>
 </body>
 </html>
