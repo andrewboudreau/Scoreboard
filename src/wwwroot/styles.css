@@ -221,26 +221,40 @@ body {
     gap: 20px;
 }
 
-.team-players h4 {
-    margin-bottom: 10px;
-    font-size: 1.1rem;
+.players-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 15px;
 }
 
-.players-list {
-    list-style: none;
-    margin-bottom: 10px;
-    max-height: 150px;
-    overflow-y: auto;
+.players-table th, 
+.players-table td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #555;
 }
 
-.player-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px;
-    margin-bottom: 5px;
+.players-table th {
+    background-color: #333;
+    font-weight: bold;
+}
+
+.players-table tr:nth-child(even) {
+    background-color: #3a3a3a;
+}
+
+.players-table tr:hover {
     background-color: #444;
+}
+
+.player-points {
+    width: 40px;
+    background-color: #444;
+    border: 1px solid #555;
     border-radius: 4px;
+    color: white;
+    text-align: center;
+    padding: 2px;
 }
 
 .remove-player {
@@ -257,18 +271,31 @@ body {
     background-color: #777;
 }
 
+.team-select {
+    background-color: #444;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
 .add-player {
     display: flex;
     gap: 5px;
+    margin-top: 10px;
 }
 
-.add-player input {
-    flex-grow: 1;
+.add-player input,
+.add-player select {
     padding: 6px;
     background-color: #444;
     border: 1px solid gray;
     border-radius: 4px;
     color: white;
+}
+
+.add-player input {
+    flex-grow: 1;
 }
 
 .add-player button {
@@ -282,6 +309,13 @@ body {
 
 .add-player button:hover {
     background-color: #555;
+}
+
+/* Checkbox styling */
+.player-active {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
 }
 
 @media (max-width: 768px) {
