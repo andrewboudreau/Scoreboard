@@ -4,12 +4,15 @@ class ScoreboardApp {
         // Initialize components
         this.timer = new Timer(this);
         this.teams = new Teams(this);
+        this.players = new Players(this);
         this.settings = new Settings(this);
         this.ui = new UI(this);
 
         // Global state
         this.periodScores = [];
         this.wakeLock = null;
+        this.team1Players = [];
+        this.team2Players = [];
 
         // Initialize app
         this.loadSavedSettings();
@@ -34,6 +37,17 @@ class ScoreboardApp {
         if (localStorage.getItem('keepScreenOn') === 'true') {
             this.settings.keepScreenOnCheckbox.checked = true;
             this.requestWakeLock();
+        }
+        
+        // Load saved players
+        if (localStorage.getItem('team1Players')) {
+            this.team1Players = JSON.parse(localStorage.getItem('team1Players'));
+            this.players.updatePlayersList(1);
+        }
+        
+        if (localStorage.getItem('team2Players')) {
+            this.team2Players = JSON.parse(localStorage.getItem('team2Players'));
+            this.players.updatePlayersList(2);
         }
     }
 
@@ -423,6 +437,129 @@ class Settings {
 
     toggle() {
         this.settingsPanel.classList.toggle('active');
+    }
+}
+
+class Players {
+    constructor(app) {
+        this.app = app;
+        
+        // Elements
+        this.playersBtn = document.getElementById('players-btn');
+        this.playersPanel = document.getElementById('players-panel');
+        this.team1PlayersList = document.getElementById('team1-players-list');
+        this.team2PlayersList = document.getElementById('team2-players-list');
+        this.team1PlayerInput = document.getElementById('team1-player-input');
+        this.team2PlayerInput = document.getElementById('team2-player-input');
+        this.team1AddPlayerBtn = document.getElementById('team1-add-player-btn');
+        this.team2AddPlayerBtn = document.getElementById('team2-add-player-btn');
+        this.team1PlayersTitle = document.getElementById('team1-players-title');
+        this.team2PlayersTitle = document.getElementById('team2-players-title');
+        
+        // Initialize
+        this.setupEventListeners();
+        this.updateTeamTitles();
+    }
+    
+    setupEventListeners() {
+        // Players panel toggle
+        this.playersBtn.addEventListener('click', () => this.toggle());
+        
+        // Close players panel when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!this.playersPanel.contains(e.target) &&
+                e.target !== this.playersBtn &&
+                !this.playersBtn.contains(e.target)) {
+                this.playersPanel.classList.remove('active');
+            }
+        });
+        
+        // Add player buttons
+        this.team1AddPlayerBtn.addEventListener('click', () => this.addPlayer(1));
+        this.team2AddPlayerBtn.addEventListener('click', () => this.addPlayer(2));
+        
+        // Add player on Enter key
+        this.team1PlayerInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.addPlayer(1);
+            }
+        });
+        
+        this.team2PlayerInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.addPlayer(2);
+            }
+        });
+        
+        // Update team titles when team names change
+        this.app.teams.team1NameElement.addEventListener('input', () => this.updateTeamTitles());
+        this.app.teams.team2NameElement.addEventListener('input', () => this.updateTeamTitles());
+    }
+    
+    toggle() {
+        this.playersPanel.classList.toggle('active');
+        // Close settings panel if open
+        document.getElementById('settings-panel').classList.remove('active');
+    }
+    
+    addPlayer(teamNumber) {
+        const input = teamNumber === 1 ? this.team1PlayerInput : this.team2PlayerInput;
+        const playerName = input.value.trim();
+        
+        if (playerName) {
+            if (teamNumber === 1) {
+                this.app.team1Players.push(playerName);
+                localStorage.setItem('team1Players', JSON.stringify(this.app.team1Players));
+            } else {
+                this.app.team2Players.push(playerName);
+                localStorage.setItem('team2Players', JSON.stringify(this.app.team2Players));
+            }
+            
+            this.updatePlayersList(teamNumber);
+            input.value = '';
+            input.focus();
+        }
+    }
+    
+    removePlayer(teamNumber, index) {
+        if (teamNumber === 1) {
+            this.app.team1Players.splice(index, 1);
+            localStorage.setItem('team1Players', JSON.stringify(this.app.team1Players));
+        } else {
+            this.app.team2Players.splice(index, 1);
+            localStorage.setItem('team2Players', JSON.stringify(this.app.team2Players));
+        }
+        
+        this.updatePlayersList(teamNumber);
+    }
+    
+    updatePlayersList(teamNumber) {
+        const list = teamNumber === 1 ? this.team1PlayersList : this.team2PlayersList;
+        const players = teamNumber === 1 ? this.app.team1Players : this.app.team2Players;
+        
+        list.innerHTML = '';
+        
+        players.forEach((player, index) => {
+            const li = document.createElement('li');
+            li.className = 'player-item';
+            
+            const playerName = document.createElement('span');
+            playerName.textContent = player;
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-player';
+            removeBtn.textContent = 'X';
+            removeBtn.addEventListener('click', () => this.removePlayer(teamNumber, index));
+            
+            li.appendChild(playerName);
+            li.appendChild(removeBtn);
+            list.appendChild(li);
+        });
+    }
+    
+    updateTeamTitles() {
+        this.team1PlayersTitle.textContent = `${this.app.teams.team1NameElement.textContent} Players`;
+        this.team2PlayersTitle.textContent = `${this.app.teams.team2NameElement.textContent} Players`;
     }
 }
 

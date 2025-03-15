@@ -26,6 +26,9 @@
             <div class="score-history" id="score-history"></div>
         </div>
         <div class="control-buttons">
+            <button id="players-btn" class="control-btn">
+                <img src="icons/players.svg" alt="Players Icon" width="24" height="24">
+            </button>
             <button id="settings-btn" class="control-btn">
                 <img src="icons/settings.svg" alt="Settings Icon" width="24" height="24">
             </button>
@@ -34,7 +37,29 @@
             </button>
         </div>
 
-        <div id="settings-panel" class="settings-panel">
+        <div id="players-panel" class="side-panel">
+            <h3>Players</h3>
+            <div class="players-container">
+                <div class="team-players">
+                    <h4 id="team1-players-title">BLACK Players</h4>
+                    <ul id="team1-players-list" class="players-list"></ul>
+                    <div class="add-player">
+                        <input type="text" id="team1-player-input" placeholder="Add player...">
+                        <button id="team1-add-player-btn">Add</button>
+                    </div>
+                </div>
+                <div class="team-players">
+                    <h4 id="team2-players-title">WHITE Players</h4>
+                    <ul id="team2-players-list" class="players-list"></ul>
+                    <div class="add-player">
+                        <input type="text" id="team2-player-input" placeholder="Add player...">
+                        <button id="team2-add-player-btn">Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="settings-panel" class="side-panel">
             <div class="settings-group">
                 <label for="timer-minutes">Timer (minutes)</label>
                 <input type="number" id="timer-minutes" min="1" max="60" value="10">
