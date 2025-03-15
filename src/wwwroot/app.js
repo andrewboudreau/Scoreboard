@@ -13,7 +13,6 @@ class ScoreboardApp {
 
         // Initialize app
         this.loadSavedSettings();
-        this.setupKeyboardControls();
     }
 
     // Load saved settings from localStorage
@@ -38,22 +37,6 @@ class ScoreboardApp {
         }
     }
 
-    // Setup keyboard shortcuts
-    setupKeyboardControls() {
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'h') {
-                this.teams.incrementScore(1);
-            } else if (e.key === 'a') {
-                this.teams.incrementScore(2);
-            } else if (e.key === ' ') {
-                this.timer.startStop();
-            } else if (e.key === 'r') {
-                this.timer.reset();
-            } else if (e.key === 'f') {
-                this.ui.toggleFullscreen();
-            }
-        });
-    }
 
     // Capture score at end of timer
     captureScore() {
