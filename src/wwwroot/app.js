@@ -605,82 +605,83 @@ class Players {
         // Add each player to the table
         if (this.app.playersList && Array.isArray(this.app.playersList)) {
             this.app.playersList.forEach(player => {
-            const row = document.createElement('tr');
-            
-            // Name cell
-            const nameCell = document.createElement('td');
-            nameCell.textContent = player.name;
-            row.appendChild(nameCell);
-            
-            // Team cell
-            const teamCell = document.createElement('td');
-            const teamSelect = document.createElement('select');
-            teamSelect.className = 'team-select';
-            
-            const team1Option = document.createElement('option');
-            team1Option.value = '1';
-            team1Option.textContent = team1Name;
-            
-            const team2Option = document.createElement('option');
-            team2Option.value = '2';
-            team2Option.textContent = team2Name;
-            
-            teamSelect.appendChild(team1Option);
-            teamSelect.appendChild(team2Option);
-            teamSelect.value = player.team;
-            
-            teamSelect.addEventListener('change', (e) => {
-                this.updatePlayerTeam(player.id, e.target.value);
+                const row = document.createElement('tr');
+                
+                // Name cell
+                const nameCell = document.createElement('td');
+                nameCell.textContent = player.name;
+                row.appendChild(nameCell);
+                
+                // Team cell
+                const teamCell = document.createElement('td');
+                const teamSelect = document.createElement('select');
+                teamSelect.className = 'team-select';
+                
+                const team1Option = document.createElement('option');
+                team1Option.value = '1';
+                team1Option.textContent = team1Name;
+                
+                const team2Option = document.createElement('option');
+                team2Option.value = '2';
+                team2Option.textContent = team2Name;
+                
+                teamSelect.appendChild(team1Option);
+                teamSelect.appendChild(team2Option);
+                teamSelect.value = player.team;
+                
+                teamSelect.addEventListener('change', (e) => {
+                    this.updatePlayerTeam(player.id, e.target.value);
+                });
+                
+                teamCell.appendChild(teamSelect);
+                row.appendChild(teamCell);
+                
+                // Active cell
+                const activeCell = document.createElement('td');
+                const activeCheckbox = document.createElement('input');
+                activeCheckbox.type = 'checkbox';
+                activeCheckbox.className = 'player-active';
+                activeCheckbox.checked = player.active;
+                
+                activeCheckbox.addEventListener('change', (e) => {
+                    this.updatePlayerActive(player.id, e.target.checked);
+                });
+                
+                activeCell.appendChild(activeCheckbox);
+                row.appendChild(activeCell);
+                
+                // Points cell
+                const pointsCell = document.createElement('td');
+                const pointsInput = document.createElement('input');
+                pointsInput.type = 'number';
+                pointsInput.className = 'player-points';
+                pointsInput.value = player.points;
+                pointsInput.min = 0;
+                
+                pointsInput.addEventListener('change', (e) => {
+                    this.updatePlayerPoints(player.id, e.target.value);
+                });
+                
+                pointsCell.appendChild(pointsInput);
+                row.appendChild(pointsCell);
+                
+                // Action cell
+                const actionCell = document.createElement('td');
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-player';
+                removeBtn.textContent = 'X';
+                
+                removeBtn.addEventListener('click', () => {
+                    this.removePlayer(player.id);
+                });
+                
+                actionCell.appendChild(removeBtn);
+                row.appendChild(actionCell);
+                
+                // Add the row to the table
+                this.playersList.appendChild(row);
             });
-            
-            teamCell.appendChild(teamSelect);
-            row.appendChild(teamCell);
-            
-            // Active cell
-            const activeCell = document.createElement('td');
-            const activeCheckbox = document.createElement('input');
-            activeCheckbox.type = 'checkbox';
-            activeCheckbox.className = 'player-active';
-            activeCheckbox.checked = player.active;
-            
-            activeCheckbox.addEventListener('change', (e) => {
-                this.updatePlayerActive(player.id, e.target.checked);
-            });
-            
-            activeCell.appendChild(activeCheckbox);
-            row.appendChild(activeCell);
-            
-            // Points cell
-            const pointsCell = document.createElement('td');
-            const pointsInput = document.createElement('input');
-            pointsInput.type = 'number';
-            pointsInput.className = 'player-points';
-            pointsInput.value = player.points;
-            pointsInput.min = 0;
-            
-            pointsInput.addEventListener('change', (e) => {
-                this.updatePlayerPoints(player.id, e.target.value);
-            });
-            
-            pointsCell.appendChild(pointsInput);
-            row.appendChild(pointsCell);
-            
-            // Action cell
-            const actionCell = document.createElement('td');
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'remove-player';
-            removeBtn.textContent = 'X';
-            
-            removeBtn.addEventListener('click', () => {
-                this.removePlayer(player.id);
-            });
-            
-            actionCell.appendChild(removeBtn);
-            row.appendChild(actionCell);
-            
-            // Add the row to the table
-            this.playersList.appendChild(row);
-        });
+        }
     }
 }
 
