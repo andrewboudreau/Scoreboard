@@ -262,6 +262,15 @@ class Teams {
         this.team2ScoreElement.addEventListener('touchend', () => {
             clearTimeout(pressTimer);
         });
+        
+        // Team name sync from UI to settings
+        this.team1NameElement.addEventListener('input', () => {
+            this.app.settings.team1NameInput.value = this.team1NameElement.textContent;
+        });
+        
+        this.team2NameElement.addEventListener('input', () => {
+            this.app.settings.team2NameInput.value = this.team2NameElement.textContent;
+        });
     }
 
     incrementScore(teamNumber) {
@@ -310,7 +319,6 @@ class Settings {
         this.setTimerBtn = document.getElementById('set-timer-btn');
         this.team1NameInput = document.getElementById('team1-name');
         this.team2NameInput = document.getElementById('team2-name');
-        this.setTeamBtn = document.getElementById('set-team-btn');
         this.resetScoresBtn = document.getElementById('reset-scores-btn');
         this.resetHistoryBtn = document.getElementById('reset-history-btn');
         this.testBuzzerBtn = document.getElementById('test-buzzer-btn');
@@ -348,8 +356,13 @@ class Settings {
             this.app.timer.setTime(parseInt(this.timerMinutesInput.value));
         });
 
-        this.setTeamBtn.addEventListener('click', () => {
-            this.app.teams.setTeamNames(this.team1NameInput.value, this.team2NameInput.value);
+        // Team name sync from settings to UI
+        this.team1NameInput.addEventListener('input', () => {
+            this.app.teams.team1NameElement.textContent = this.team1NameInput.value;
+        });
+        
+        this.team2NameInput.addEventListener('input', () => {
+            this.app.teams.team2NameElement.textContent = this.team2NameInput.value;
         });
 
         this.resetScoresBtn.addEventListener('click', () => {
