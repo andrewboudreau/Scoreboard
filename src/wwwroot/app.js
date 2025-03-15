@@ -277,8 +277,7 @@ class Teams {
             pressTimer = window.setTimeout(() => {
                 this.decrementScore(1);
             }, 800);
-            });
-        }
+        });
 
         this.team2ScoreElement.addEventListener('touchstart', () => {
             pressTimer = window.setTimeout(() => {
