@@ -338,6 +338,15 @@ class Settings {
         this.setTimerBtn.addEventListener('click', () => {
             this.app.timer.setTime(parseInt(this.timerMinutesInput.value));
         });
+        
+        // Team score decrement buttons
+        document.getElementById('team1-decrement').addEventListener('click', () => {
+            this.app.teams.decrementScore(1);
+        });
+        
+        document.getElementById('team2-decrement').addEventListener('click', () => {
+            this.app.teams.decrementScore(2);
+        });
 
         // Team name sync from settings to UI
         this.team1NameInput.addEventListener('input', () => {

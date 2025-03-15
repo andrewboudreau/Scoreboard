@@ -42,8 +42,14 @@
             </div>
             <div class="settings-group">
                 <label for="team1-name">Teams</label>
-                <input type="text" id="team1-name" value="BLACK">
-                <input type="text" id="team2-name" value="WHITE">
+                <div class="team-settings">
+                    <input type="text" id="team1-name" value="BLACK">
+                    <button class="decrement-btn" id="team1-decrement">-1</button>
+                </div>
+                <div class="team-settings">
+                    <input type="text" id="team2-name" value="WHITE">
+                    <button class="decrement-btn" id="team2-decrement">-1</button>
+                </div>
             </div>
             <div class="settings-group">
                 <button id="reset-scores-btn">Reset Scores</button>
