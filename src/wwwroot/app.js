@@ -172,6 +172,22 @@ class Timer {
         }, 500);
     }
 
+    simulateTimerEnd() {
+        // Stop the timer if it's running
+        if (this.isRunning) {
+            clearInterval(this.interval);
+            this.isRunning = false;
+        }
+        
+        // Capture score and play alarm
+        this.app.captureScore();
+        this.playAlarm();
+        
+        // Reset timer to configured time
+        this.timeLeft = parseInt(this.app.settings.timerMinutesInput.value) * 60;
+        this.updateDisplay();
+    }
+
     handleTimerTap() {
         const now = new Date().getTime();
         const timeSince = now - this.lastTap;
@@ -367,6 +383,11 @@ class Settings {
 
         this.testBuzzerBtn.addEventListener('click', () => {
             this.app.timer.playAlarm();
+        });
+
+        // Simulate timer end button
+        document.getElementById('simulate-timer-end-btn').addEventListener('click', () => {
+            this.app.timer.simulateTimerEnd();
         });
 
         // Font size sliders
