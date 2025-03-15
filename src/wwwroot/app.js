@@ -167,10 +167,10 @@ class Timer {
     playAlarm() {
         this.alarm.play();
         
-        // Blink red 3 times
+        // Blink red a few times
         let blinkCount = 0;
         const blinkInterval = setInterval(() => {
-            if (blinkCount >= 3) {
+            if (blinkCount >= 5) {
                 clearInterval(blinkInterval);
                 this.timerDisplay.style.backgroundColor = '#333';
                 return;
