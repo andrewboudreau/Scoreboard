@@ -4,68 +4,57 @@ namespace SharedTools;
 
 public static class EndpointExtensions
 {
+    private const string wwwrootPath = "wwwroot/";
+
+    private static readonly Dictionary<string, string> ContentTypeMap = new()
+    {
+        { ".css", "text/css" },
+        { ".js", "text/javascript" },
+        { ".ico", "image/x-icon" },
+        { ".mp3", "audio/mpeg" },
+        { ".svg", "image/svg+xml" },
+        { ".jpeg", "image/jpeg" },
+        { ".jpg", "image/jpeg" },
+        { ".gif", "image/gif" },
+        { ".png", "image/png" },
+        { ".webm", "video/webm" },
+        { ".bmp", "image/bmp" },
+        { ".wav", "audio/wav" }
+    };
+
     public static IEndpointConventionBuilder MapHtmlPage(this IEndpointRouteBuilder endpoints, string path, string filePath)
     {
-        var content = Results.Content(File.ReadAllText("wwwroot/" + filePath), "text/html");
+        var content = Results.Content(File.ReadAllText(wwwrootPath + filePath), "text/html");
         return endpoints.MapGet(path, () => content);
     }
 
-    public static IEndpointConventionBuilder MapCss(this IEndpointRouteBuilder endpoints, string path)
+    public static IEndpointConventionBuilder MapResource(this IEndpointRouteBuilder endpoints, string requestPath, string? filePath = null)
     {
-        var content = Results.Content(File.ReadAllText("wwwroot/" + path), "text/css");
-        return endpoints.MapGet(path, () => content);
-    }
+        filePath ??= requestPath;
+        var extension = Path.GetExtension(filePath);
 
-    public static IEndpointConventionBuilder MapJs(this IEndpointRouteBuilder endpoints, string path)
-    {
-        var content = Results.Content(File.ReadAllText("wwwroot/" + path), "text/javascript");
-        return endpoints.MapGet(path, () => content);
+        if (!ContentTypeMap.TryGetValue(extension, out var contentType))
+        {
+            throw new InvalidOperationException($"Unsupported file type: {extension}");
+        }
+
+        // Path normalization: ensure it starts with "/" if not already
+        string normalizedPath = requestPath.StartsWith('/') ? requestPath : "/" + requestPath;
+
+        return endpoints.MapGet(normalizedPath, async context =>
+        {
+            context.Response.ContentType = contentType;
+            await context.Response.SendFileAsync(wwwrootPath + filePath);
+        });
     }
 
     public static IEndpointConventionBuilder MapFavicon(this IEndpointRouteBuilder endpoints)
     {
-        return endpoints.MapGet("/favicon.ico", async context =>
-        {
-            context.Response.ContentType = "image/x-icon";
-            await context.Response.SendFileAsync("wwwroot/favicon.ico");
-        });
-    }
-
-    public static IEndpointConventionBuilder MapAudioFile(this IEndpointRouteBuilder endpoints, string requestPath, string? filePath = default)
-    {
-        filePath ??= requestPath;
-        return endpoints.MapGet("/" + requestPath, async context =>
-        {
-            context.Response.ContentType = "audio/mpeg";
-            await context.Response.SendFileAsync("wwwroot/" + filePath);
-        });
-    }
-
-    public static IEndpointConventionBuilder MapSvgFile(this IEndpointRouteBuilder endpoints, string requestPath, string? filePath = default)
-    {
-        filePath ??= requestPath;
-        return endpoints.MapGet("/" + requestPath, async context =>
-        {
-            context.Response.ContentType = "image/svg+xml";
-            await context.Response.SendFileAsync("wwwroot/" + filePath);
-        });
+        return endpoints.MapResource("favicon.ico");
     }
 
     public static IEndpointConventionBuilder MapDotNetVersion(this IEndpointRouteBuilder endpoints)
     {
         return endpoints.MapGet("/dotnetversion", () => RuntimeInformation.FrameworkDescription);
-    }
-
-    public static IEndpointConventionBuilder MapResource(this IEndpointRouteBuilder endpoints, string path)
-    {
-        return Path.GetExtension(path) switch
-        {
-            ".css" => endpoints.MapCss(path),
-            ".js" => endpoints.MapJs(path),
-            ".ico" => endpoints.MapFavicon(),
-            ".mp3" => endpoints.MapAudioFile(path),
-            ".svg" => endpoints.MapSvgFile(path),
-            _ => throw new InvalidOperationException("Unsupported file type."),
-        };
     }
 }
