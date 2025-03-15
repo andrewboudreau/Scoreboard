@@ -671,7 +671,8 @@ class Players {
                 removeBtn.className = 'remove-player';
                 removeBtn.textContent = 'X';
                 
-                removeBtn.addEventListener('click', () => {
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent event from bubbling up
                     this.removePlayer(player.id);
                 });
                 
