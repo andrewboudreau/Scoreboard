@@ -166,10 +166,26 @@ class Timer {
 
     playAlarm() {
         this.alarm.play();
-        this.timerDisplay.style.backgroundColor = '#f00';
-        setTimeout(() => {
-            this.timerDisplay.style.backgroundColor = '#333';
-        }, 500);
+        
+        // Blink red 3 times
+        let blinkCount = 0;
+        const blinkInterval = setInterval(() => {
+            if (blinkCount >= 3) {
+                clearInterval(blinkInterval);
+                this.timerDisplay.style.backgroundColor = '#333';
+                return;
+            }
+            
+            if (blinkCount % 2 === 0) {
+                // Turn red
+                this.timerDisplay.style.backgroundColor = '#f00';
+            } else {
+                // Turn back to normal
+                this.timerDisplay.style.backgroundColor = '#333';
+            }
+            
+            blinkCount++;
+        }, 250);
     }
 
     simulateTimerEnd() {
