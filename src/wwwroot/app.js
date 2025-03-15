@@ -48,6 +48,7 @@ class ScoreboardApp {
             setTimeout(() => {
                 if (this.players) {
                     this.players.updatePlayersList();
+                    this.players.updatePlayersDisplay();
                 }
             }, 0);
         }
@@ -453,6 +454,8 @@ class Players {
         this.playerNameInput = document.getElementById('player-name-input');
         this.playerTeamSelect = document.getElementById('player-team-select');
         this.addPlayerBtn = document.getElementById('add-player-btn');
+        this.team1PlayersDisplay = document.getElementById('team1-players-display');
+        this.team2PlayersDisplay = document.getElementById('team2-players-display');
         
         // Ensure playersList is initialized
         if (!this.app.playersList) {
@@ -462,6 +465,7 @@ class Players {
         // Initialize
         this.setupEventListeners();
         this.updateTeamSelectOptions();
+        this.updatePlayersDisplay();
     }
     
     setupEventListeners() {
@@ -532,6 +536,7 @@ class Players {
             
             // Update the UI
             this.updatePlayersList();
+            this.updatePlayersDisplay();
             
             // Clear input
             this.playerNameInput.value = '';
@@ -552,6 +557,7 @@ class Players {
             
             // Update the UI
             this.updatePlayersList();
+            this.updatePlayersDisplay();
         }
     }
     
@@ -565,6 +571,9 @@ class Players {
             
             // Save to localStorage
             localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            
+            // Update the players display
+            this.updatePlayersDisplay();
         }
     }
     
@@ -578,6 +587,90 @@ class Players {
             
             // Save to localStorage
             localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            
+            // Update the players display
+            this.updatePlayersDisplay();
+        }
+    }
+    
+    incrementPlayerPoints(playerId) {
+        // Find the player
+        const player = this.app.playersList.find(player => player.id === playerId);
+        
+        if (player) {
+            // Increment points
+            player.points += 1;
+            
+            // Increment team score
+            this.app.teams.incrementScore(parseInt(player.team));
+            
+            // Save to localStorage
+            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            
+            // Update the players display
+            this.updatePlayersDisplay();
+        }
+    }
+    
+    updatePlayersDisplay() {
+        // Clear the displays
+        this.team1PlayersDisplay.innerHTML = '';
+        this.team2PlayersDisplay.innerHTML = '';
+        
+        if (this.app.playersList && Array.isArray(this.app.playersList)) {
+            // Filter active players by team
+            const team1Players = this.app.playersList.filter(player => player.team === '1' && player.active);
+            const team2Players = this.app.playersList.filter(player => player.team === '2' && player.active);
+            
+            // Add team 1 players
+            team1Players.forEach(player => {
+                const playerItem = document.createElement('div');
+                playerItem.className = 'player-item-display';
+                playerItem.dataset.playerId = player.id;
+                
+                const playerName = document.createElement('div');
+                playerName.className = 'player-name-display';
+                playerName.textContent = player.name;
+                
+                const playerPoints = document.createElement('div');
+                playerPoints.className = 'player-points-display';
+                playerPoints.textContent = player.points;
+                
+                playerItem.appendChild(playerName);
+                playerItem.appendChild(playerPoints);
+                
+                // Add click event to increment points
+                playerItem.addEventListener('click', () => {
+                    this.incrementPlayerPoints(player.id);
+                });
+                
+                this.team1PlayersDisplay.appendChild(playerItem);
+            });
+            
+            // Add team 2 players
+            team2Players.forEach(player => {
+                const playerItem = document.createElement('div');
+                playerItem.className = 'player-item-display';
+                playerItem.dataset.playerId = player.id;
+                
+                const playerName = document.createElement('div');
+                playerName.className = 'player-name-display';
+                playerName.textContent = player.name;
+                
+                const playerPoints = document.createElement('div');
+                playerPoints.className = 'player-points-display';
+                playerPoints.textContent = player.points;
+                
+                playerItem.appendChild(playerName);
+                playerItem.appendChild(playerPoints);
+                
+                // Add click event to increment points
+                playerItem.addEventListener('click', () => {
+                    this.incrementPlayerPoints(player.id);
+                });
+                
+                this.team2PlayersDisplay.appendChild(playerItem);
+            });
         }
     }
     
@@ -591,6 +684,9 @@ class Players {
             
             // Save to localStorage
             localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            
+            // Update the players display
+            this.updatePlayersDisplay();
         }
     }
     

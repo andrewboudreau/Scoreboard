@@ -11,14 +11,22 @@
     <audio id="alarm" src="audio/buzzer.mp3"></audio>
 
     <div class="scoreboard">
-        <div class="scores">
-            <div class="team">
-                <div class="team-name" contenteditable="true">BLACK</div>
-                <div class="score" id="score-team1">0</div>
+        <div class="scores-container">
+            <div class="team-players-list" id="team1-players-display">
+                <!-- Team 1 players will be displayed here -->
             </div>
-            <div class="team">
-                <div class="team-name" contenteditable="true">WHITE</div>
-                <div class="score" id="score-team2">0</div>
+            <div class="scores">
+                <div class="team">
+                    <div class="team-name" contenteditable="true">BLACK</div>
+                    <div class="score" id="score-team1">0</div>
+                </div>
+                <div class="team">
+                    <div class="team-name" contenteditable="true">WHITE</div>
+                    <div class="score" id="score-team2">0</div>
+                </div>
+            </div>
+            <div class="team-players-list" id="team2-players-display">
+                <!-- Team 2 players will be displayed here -->
             </div>
         </div>
         <div class="timer-container">
