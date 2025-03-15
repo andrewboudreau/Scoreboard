@@ -189,6 +189,31 @@ body {
             background-color: #555;
         }
 
+    .team-settings {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+
+    .team-settings input {
+        margin-right: 8px;
+    }
+
+    .decrement-btn {
+        padding: 4px 8px;
+        background-color: #444;
+        color: white;
+        border: 1px solid gray;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        margin-left: 5px;
+    }
+
+    .decrement-btn:hover {
+        background-color: #555;
+    }
+
 @media (max-width: 768px) {
     .team-name {
         font-size: 1.5rem;
