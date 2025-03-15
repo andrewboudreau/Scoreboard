@@ -19,6 +19,9 @@ class ScoreboardApp {
 
     // Load saved settings from localStorage
     loadSavedSettings() {
+        // Initialize playersList
+        this.playersList = [];
+        
         // Font sizes
         if (localStorage.getItem('scoreFontSize')) {
             const savedScoreFontSize = localStorage.getItem('scoreFontSize');
@@ -41,7 +44,12 @@ class ScoreboardApp {
         // Load saved players
         if (localStorage.getItem('playersList')) {
             this.playersList = JSON.parse(localStorage.getItem('playersList'));
-            this.players.updatePlayersList();
+            // Update player list after players component is initialized
+            setTimeout(() => {
+                if (this.players) {
+                    this.players.updatePlayersList();
+                }
+            }, 0);
         }
     }
 
@@ -269,7 +277,8 @@ class Teams {
             pressTimer = window.setTimeout(() => {
                 this.decrementScore(1);
             }, 800);
-        });
+            });
+        }
 
         this.team2ScoreElement.addEventListener('touchstart', () => {
             pressTimer = window.setTimeout(() => {
@@ -446,6 +455,11 @@ class Players {
         this.playerTeamSelect = document.getElementById('player-team-select');
         this.addPlayerBtn = document.getElementById('add-player-btn');
         
+        // Ensure playersList is initialized
+        if (!this.app.playersList) {
+            this.app.playersList = [];
+        }
+        
         // Initialize
         this.setupEventListeners();
         this.updateTeamSelectOptions();
@@ -590,7 +604,8 @@ class Players {
         const team2Name = this.app.teams.team2NameElement.textContent;
         
         // Add each player to the table
-        this.app.playersList.forEach(player => {
+        if (this.app.playersList && Array.isArray(this.app.playersList)) {
+            this.app.playersList.forEach(player => {
             const row = document.createElement('tr');
             
             // Name cell
