@@ -813,6 +813,9 @@ class Players {
         // Update the UI
         this.updatePlayersList();
         this.updatePlayersDisplay();
+        
+        // Update team scores to match player points
+        this.syncTeamScoresWithPlayerPoints();
     }
 
     importPlayers() {
