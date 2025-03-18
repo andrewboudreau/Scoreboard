@@ -774,8 +774,6 @@ class Players {
             // Update the UI
             this.updatePlayersList();
             this.updatePlayersDisplay();
-
-            alert('Default players loaded successfully!');
         }
         catch (error) {
             console.error('Error loading default players:', error);
@@ -807,6 +805,7 @@ class Players {
                     !player.hasOwnProperty('active')) {
                     throw new Error('Invalid player data format');
                 }
+                debugger;
                 player.points = 0;
             });
 
