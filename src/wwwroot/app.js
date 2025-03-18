@@ -305,7 +305,7 @@ class Teams {
     }
 
     incrementScore(teamNumber) {
-        if (teamNumber === 1) {
+        if (teamNumber == 1) {
             this.team1Points++;
         } else {
             this.team2Points++;
@@ -314,9 +314,9 @@ class Teams {
     }
 
     decrementScore(teamNumber) {
-        if (teamNumber === 1 && this.team1Points > 0) {
+        if (teamNumber == 1 && this.team1Points > 0) {
             this.team1Points--;
-        } else if (teamNumber === 2 && this.team2Points > 0) {
+        } else if (teamNumber == 2 && this.team2Points > 0) {
             this.team2Points--;
         }
         this.updateScoreDisplay();
@@ -916,6 +916,8 @@ class Players {
                     if (player.points > 0) {
                         player.points--;
                         pointsDisplay.textContent = player.points;
+                        debugger;
+                        this.app.teams.decrementScore(player.team);
                         // Save to localStorage
                         localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
                         // Update the players display
@@ -936,6 +938,8 @@ class Players {
                     e.stopPropagation();
                     player.points++;
                     pointsDisplay.textContent = player.points;
+                    debugger;
+                    this.app.teams.incrementScore(player.team);
                     // Save to localStorage
                     localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
                     // Update the players display
