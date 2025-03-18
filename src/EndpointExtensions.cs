@@ -10,6 +10,7 @@ public static class EndpointExtensions
     {
         { ".css", "text/css" },
         { ".js", "text/javascript" },
+        { ".json", "application/json" },
         { ".ico", "image/x-icon" },
         { ".mp3", "audio/mpeg" },
         { ".svg", "image/svg+xml" },
