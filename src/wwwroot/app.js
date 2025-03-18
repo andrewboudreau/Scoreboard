@@ -801,8 +801,6 @@ class Players {
         // Update the UI
         this.updatePlayersList();
         this.updatePlayersDisplay();
-
-        alert(successMessage);
     }
 
     importPlayers() {
