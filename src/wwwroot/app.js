@@ -54,7 +54,6 @@ class ScoreboardApp {
         }
     }
 
-
     // Capture score at end of timer
     captureScore() {
         this.periodScores.push(`${this.teams.team1Points} - ${this.teams.team2Points}`);
@@ -805,10 +804,10 @@ class Players {
             parsedData.forEach(player => {
                 if (!player.hasOwnProperty('name') ||
                     !player.hasOwnProperty('team') ||
-                    !player.hasOwnProperty('active') ||
-                    !player.hasOwnProperty('points')) {
+                    !player.hasOwnProperty('active')) {
                     throw new Error('Invalid player data format');
                 }
+                player.points = 0;
             });
 
             // Confirm before replacing
