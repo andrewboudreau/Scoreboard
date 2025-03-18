@@ -97,4 +97,15 @@
 		"active": true,
 		"points": 0
 	}
+][
+  { "id": 1001, "name": "Player 1", "team": "1", "active": true, "points": 0 },
+  { "id": 1002, "name": "Player 2", "team": "1", "active": true, "points": 0 },
+  { "id": 1003, "name": "Player 3", "team": "1", "active": true, "points": 0 },
+  { "id": 1004, "name": "Player 4", "team": "1", "active": true, "points": 0 },
+  { "id": 1005, "name": "Player 5", "team": "1", "active": true, "points": 0 },
+  { "id": 2001, "name": "Player 6", "team": "2", "active": true, "points": 0 },
+  { "id": 2002, "name": "Player 7", "team": "2", "active": true, "points": 0 },
+  { "id": 2003, "name": "Player 8", "team": "2", "active": true, "points": 0 },
+  { "id": 2004, "name": "Player 9", "team": "2", "active": true, "points": 0 },
+  { "id": 2005, "name": "Player 10", "team": "2", "active": true, "points": 0 }
 ]
