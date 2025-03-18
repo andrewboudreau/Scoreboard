@@ -454,6 +454,8 @@ class Players {
         this.playerNameInput = document.getElementById('player-name-input');
         this.playerTeamSelect = document.getElementById('player-team-select');
         this.addPlayerBtn = document.getElementById('add-player-btn');
+        this.exportPlayersBtn = document.getElementById('export-players-btn');
+        this.importPlayersBtn = document.getElementById('import-players-btn');
         this.team1PlayersDisplay = document.getElementById('team1-players-display');
         this.team2PlayersDisplay = document.getElementById('team2-players-display');
         
@@ -490,6 +492,10 @@ class Players {
                 this.addPlayer();
             }
         });
+        
+        // Export/Import players
+        this.exportPlayersBtn.addEventListener('click', () => this.exportPlayers());
+        this.importPlayersBtn.addEventListener('click', () => this.importPlayers());
         
         // Update team options when team names change
         this.app.teams.team1NameElement.addEventListener('input', () => this.updateTeamSelectOptions());
@@ -687,6 +693,106 @@ class Players {
             
             // Update the players display
             this.updatePlayersDisplay();
+        }
+    }
+    
+    exportPlayers() {
+        try {
+            // Convert players list to JSON string
+            const playersData = JSON.stringify(this.app.playersList, null, 2);
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(playersData)
+                .then(() => {
+                    alert('Players data copied to clipboard!');
+                })
+                .catch(err => {
+                    console.error('Failed to copy to clipboard:', err);
+                    // Fallback method
+                    this.fallbackCopyToClipboard(playersData);
+                });
+        } catch (error) {
+            console.error('Error exporting players:', error);
+            alert('Error exporting players data');
+        }
+    }
+    
+    fallbackCopyToClipboard(text) {
+        // Create temporary textarea
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            // Execute copy command
+            const successful = document.execCommand('copy');
+            if (successful) {
+                alert('Players data copied to clipboard!');
+            } else {
+                alert('Unable to copy to clipboard');
+            }
+        } catch (err) {
+            console.error('Fallback clipboard copy failed:', err);
+            alert('Unable to copy to clipboard');
+        }
+        
+        document.body.removeChild(textArea);
+    }
+    
+    importPlayers() {
+        try {
+            // Prompt user to paste the JSON data
+            const playersData = prompt('Paste players data here:');
+            
+            if (!playersData) {
+                return; // User cancelled
+            }
+            
+            // Parse the JSON data
+            const parsedData = JSON.parse(playersData);
+            
+            // Validate the data structure
+            if (!Array.isArray(parsedData)) {
+                throw new Error('Invalid data format. Expected an array.');
+            }
+            
+            // Check if each item has required properties
+            parsedData.forEach(player => {
+                if (!player.hasOwnProperty('name') || 
+                    !player.hasOwnProperty('team') || 
+                    !player.hasOwnProperty('active') || 
+                    !player.hasOwnProperty('points')) {
+                    throw new Error('Invalid player data format');
+                }
+            });
+            
+            // Confirm before replacing
+            if (confirm(`Import ${parsedData.length} players? This will replace your current player list.`)) {
+                // Add unique IDs if missing
+                parsedData.forEach(player => {
+                    if (!player.id) {
+                        player.id = Date.now() + Math.floor(Math.random() * 1000);
+                    }
+                });
+                
+                // Replace the current players list
+                this.app.playersList = parsedData;
+                
+                // Save to localStorage
+                localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+                
+                // Update the UI
+                this.updatePlayersList();
+                this.updatePlayersDisplay();
+                
+                alert('Players imported successfully!');
+            }
+        } catch (error) {
+            console.error('Error importing players:', error);
+            alert(`Error importing players: ${error.message}`);
         }
     }
     
