@@ -452,7 +452,6 @@ class Players {
         this.playersPanel = document.getElementById('players-panel');
         this.playersList = document.getElementById('players-list');
         this.playerNameInput = document.getElementById('player-name-input');
-        this.playerTeamSelect = document.getElementById('player-team-select');
         this.addPlayerBtn = document.getElementById('add-player-btn');
         this.exportPlayersBtn = document.getElementById('export-players-btn');
         this.importPlayersBtn = document.getElementById('import-players-btn');
@@ -497,9 +496,9 @@ class Players {
         this.exportPlayersBtn.addEventListener('click', () => this.exportPlayers());
         this.importPlayersBtn.addEventListener('click', () => this.importPlayers());
         
-        // Update team options when team names change
-        this.app.teams.team1NameElement.addEventListener('input', () => this.updateTeamSelectOptions());
-        this.app.teams.team2NameElement.addEventListener('input', () => this.updateTeamSelectOptions());
+        // Update team display when team names change
+        this.app.teams.team1NameElement.addEventListener('input', () => this.updatePlayersList());
+        this.app.teams.team2NameElement.addEventListener('input', () => this.updatePlayersList());
     }
     
     toggle() {
@@ -509,27 +508,19 @@ class Players {
     }
     
     updateTeamSelectOptions() {
-        const team1Name = this.app.teams.team1NameElement.textContent;
-        const team2Name = this.app.teams.team2NameElement.textContent;
-        
-        // Update dropdown options
-        this.playerTeamSelect.options[0].text = team1Name;
-        this.playerTeamSelect.options[1].text = team2Name;
-        
         // Update existing player rows if any
         this.updatePlayersList();
     }
     
     addPlayer() {
         const playerName = this.playerNameInput.value.trim();
-        const teamNumber = this.playerTeamSelect.value;
         
         if (playerName) {
             // Create a new player object
             const newPlayer = {
                 id: Date.now(), // Use timestamp as unique ID
                 name: playerName,
-                team: teamNumber,
+                team: '1', // Default to team 1
                 active: true,
                 points: 0
             };
