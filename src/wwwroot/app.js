@@ -624,9 +624,14 @@ class Players {
         this.team2PlayersDisplay.innerHTML = '';
 
         if (this.app.playersList && Array.isArray(this.app.playersList)) {
-            // Filter active players by team
-            const team1Players = this.app.playersList.filter(player => player.team === '1' && player.active);
-            const team2Players = this.app.playersList.filter(player => player.team === '2' && player.active);
+            // Filter active players by team and sort by name
+            const team1Players = this.app.playersList
+                .filter(player => player.team === '1' && player.active)
+                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                
+            const team2Players = this.app.playersList
+                .filter(player => player.team === '2' && player.active)
+                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
             // Add team 1 players
             team1Players.forEach(player => {
@@ -864,9 +869,25 @@ class Players {
         const team1Name = this.app.teams.team1NameElement.textContent;
         const team2Name = this.app.teams.team2NameElement.textContent;
 
+        // Sort players by team, name, and active status
+        const sortedPlayers = [...this.app.playersList].sort((a, b) => {
+            // First sort by team
+            if (a.team !== b.team) {
+                return parseInt(a.team) - parseInt(b.team);
+            }
+            
+            // Then sort by active status (active first)
+            if (a.active !== b.active) {
+                return b.active ? 1 : -1;
+            }
+            
+            // Finally sort by name (case insensitive)
+            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+        });
+
         // Add each player to the table
-        if (this.app.playersList && Array.isArray(this.app.playersList)) {
-            this.app.playersList.forEach(player => {
+        if (sortedPlayers && Array.isArray(sortedPlayers)) {
+            sortedPlayers.forEach(player => {
                 const row = document.createElement('tr');
 
                 // Name cell
