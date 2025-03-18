@@ -3,109 +3,84 @@
 		"id": 1742075931014,
 		"name": "Andrew",
 		"team": "2",
-		"active": true,
-		"points": 2
+		"active": true
 	},
 	{
 		"id": 1742075931914,
 		"name": "Seth",
 		"team": "2",
-		"active": true,
-		"points": 2
+		"active": true
 	},
 	{
 		"id": 1742075933790,
 		"name": "Jason",
 		"team": "1",
-		"active": true,
-		"points": 0
+		"active": true
 	},
 	{
 		"id": 1742075935050,
 		"name": "Nate",
 		"team": "2",
-		"active": true,
-		"points": 3
+		"active": true
 	},
 	{
 		"id": 1742075939280,
 		"name": "Joe",
 		"team": "1",
-		"active": false,
-		"points": 3
+		"active": false
 	},
 	{
 		"id": 1742075941065,
 		"name": "Ryan",
 		"team": "1",
-		"active": true,
-		"points": 1
+		"active": true
 	},
 	{
 		"id": 1742075943344,
 		"name": "JD",
 		"team": "1",
-		"active": true,
-		"points": 8
+		"active": true
 	},
 	{
 		"id": 1742075954745,
 		"name": "Frank",
 		"team": "2",
-		"active": true,
-		"points": 9
+		"active": true
 	},
 	{
 		"id": 1742075979391,
 		"name": "Ricardo",
 		"team": "1",
-		"active": true,
-		"points": 4
+		"active": true
 	},
 	{
 		"id": 1742075987612,
 		"name": "Nick",
 		"team": "2",
-		"active": true,
-		"points": 3
+		"active": true
 	},
 	{
 		"id": 1742076001247,
 		"name": "Loukas",
 		"team": "1",
-		"active": true,
-		"points": 5
+		"active": true
 	},
 	{
 		"id": 1742076029522,
 		"name": "Adam",
 		"team": "2",
-		"active": false,
-		"points": 2
+		"active": false
 	},
 	{
 		"id": 1742267332075,
 		"name": "Rodney",
 		"team": "1",
-		"active": true,
-		"points": 0
+		"active": true
 	},
 	{
 		"id": 1742267457728,
 		"name": "Mark",
 		"team": "2",
-		"active": true,
-		"points": 0
+		"active": true
 	}
-][
-  { "id": 1001, "name": "Player 1", "team": "1", "active": true, "points": 0 },
-  { "id": 1002, "name": "Player 2", "team": "1", "active": true, "points": 0 },
-  { "id": 1003, "name": "Player 3", "team": "1", "active": true, "points": 0 },
-  { "id": 1004, "name": "Player 4", "team": "1", "active": true, "points": 0 },
-  { "id": 1005, "name": "Player 5", "team": "1", "active": true, "points": 0 },
-  { "id": 2001, "name": "Player 6", "team": "2", "active": true, "points": 0 },
-  { "id": 2002, "name": "Player 7", "team": "2", "active": true, "points": 0 },
-  { "id": 2003, "name": "Player 8", "team": "2", "active": true, "points": 0 },
-  { "id": 2004, "name": "Player 9", "team": "2", "active": true, "points": 0 },
-  { "id": 2005, "name": "Player 10", "team": "2", "active": true, "points": 0 }
 ]
