@@ -751,34 +751,58 @@ class Players {
                     return response.json();
                 })
                 .then(defaultPlayers => {
-                    // Replace the current players list
-                    this.app.playersList = defaultPlayers;
-
-                    // Save to localStorage
-                    localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
-
-                    // Update the UI
-                    this.updatePlayersList();
-                    this.updatePlayersDisplay();
-
-                    alert(`${defaultPlayers.length} default players loaded successfully!`);
+                    // Process the imported players
+                    this.processImportedPlayers(defaultPlayers, `${defaultPlayers.length} default players loaded successfully!`);
                 })
                 .catch(error => {
                     console.error('Error loading default players:', error);
                     alert(`Error loading default players: ${error.message}`);
                 });
-
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
-
-            // Update the UI
-            this.updatePlayersList();
-            this.updatePlayersDisplay();
         }
         catch (error) {
             console.error('Error loading default players:', error);
             alert(`Error loading default players: ${error.message}`);
         }
+    }
+
+    processImportedPlayers(parsedData, successMessage = 'Players imported successfully!') {
+        // Validate the data structure
+        if (!Array.isArray(parsedData)) {
+            throw new Error('Invalid data format. Expected an array.');
+        }
+
+        // Check if each item has required properties
+        parsedData.forEach(player => {
+            if (!player.hasOwnProperty('name') ||
+                !player.hasOwnProperty('team') ||
+                !player.hasOwnProperty('active')) {
+                throw new Error('Invalid player data format');
+            }
+            
+            // Ensure points property exists
+            if (!player.hasOwnProperty('points')) {
+                player.points = 0;
+            }
+        });
+
+        // Add unique IDs if missing
+        parsedData.forEach(player => {
+            if (!player.id) {
+                player.id = Date.now() + Math.floor(Math.random() * 1000);
+            }
+        });
+
+        // Replace the current players list
+        this.app.playersList = parsedData;
+
+        // Save to localStorage
+        localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+
+        // Update the UI
+        this.updatePlayersList();
+        this.updatePlayersDisplay();
+
+        alert(successMessage);
     }
 
     importPlayers() {
@@ -793,42 +817,9 @@ class Players {
             // Parse the JSON data
             const parsedData = JSON.parse(playersData);
 
-            // Validate the data structure
-            if (!Array.isArray(parsedData)) {
-                throw new Error('Invalid data format. Expected an array.');
-            }
-
-            // Check if each item has required properties
-            parsedData.forEach(player => {
-                if (!player.hasOwnProperty('name') ||
-                    !player.hasOwnProperty('team') ||
-                    !player.hasOwnProperty('active')) {
-                    throw new Error('Invalid player data format');
-                }
-                debugger;
-                player.points = 0;
-            });
-
             // Confirm before replacing
             if (confirm(`Import ${parsedData.length} players? This will replace your current player list.`)) {
-                // Add unique IDs if missing
-                parsedData.forEach(player => {
-                    if (!player.id) {
-                        player.id = Date.now() + Math.floor(Math.random() * 1000);
-                    }
-                });
-
-                // Replace the current players list
-                this.app.playersList = parsedData;
-
-                // Save to localStorage
-                localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
-
-                // Update the UI
-                this.updatePlayersList();
-                this.updatePlayersDisplay();
-
-                alert('Players imported successfully!');
+                this.processImportedPlayers(parsedData);
             }
         } catch (error) {
             console.error('Error importing players:', error);
