@@ -455,6 +455,7 @@ class Players {
         this.addPlayerBtn = document.getElementById('add-player-btn');
         this.exportPlayersBtn = document.getElementById('export-players-btn');
         this.importPlayersBtn = document.getElementById('import-players-btn');
+        this.loadDefaultPlayersBtn = document.getElementById('load-default-players-btn');
         this.team1PlayersDisplay = document.getElementById('team1-players-display');
         this.team2PlayersDisplay = document.getElementById('team2-players-display');
         
@@ -495,6 +496,7 @@ class Players {
         // Export/Import players
         this.exportPlayersBtn.addEventListener('click', () => this.exportPlayers());
         this.importPlayersBtn.addEventListener('click', () => this.importPlayers());
+        this.loadDefaultPlayersBtn.addEventListener('click', () => this.loadDefaultPlayers());
         
         // Update team display when team names change
         this.app.teams.team1NameElement.addEventListener('input', () => this.updatePlayersList());
@@ -731,6 +733,42 @@ class Players {
         }
         
         document.body.removeChild(textArea);
+    }
+    
+    loadDefaultPlayers() {
+        try {
+            // Default player list
+            const defaultPlayers = [
+                { id: 1001, name: "Player 1", team: "1", active: true, points: 0 },
+                { id: 1002, name: "Player 2", team: "1", active: true, points: 0 },
+                { id: 1003, name: "Player 3", team: "1", active: true, points: 0 },
+                { id: 1004, name: "Player 4", team: "1", active: true, points: 0 },
+                { id: 1005, name: "Player 5", team: "1", active: true, points: 0 },
+                { id: 2001, name: "Player 6", team: "2", active: true, points: 0 },
+                { id: 2002, name: "Player 7", team: "2", active: true, points: 0 },
+                { id: 2003, name: "Player 8", team: "2", active: true, points: 0 },
+                { id: 2004, name: "Player 9", team: "2", active: true, points: 0 },
+                { id: 2005, name: "Player 10", team: "2", active: true, points: 0 }
+            ];
+            
+            // Confirm before replacing
+            if (confirm(`Load ${defaultPlayers.length} default players? This will replace your current player list.`)) {
+                // Replace the current players list
+                this.app.playersList = defaultPlayers;
+                
+                // Save to localStorage
+                localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+                
+                // Update the UI
+                this.updatePlayersList();
+                this.updatePlayersDisplay();
+                
+                alert('Default players loaded successfully!');
+            }
+        } catch (error) {
+            console.error('Error loading default players:', error);
+            alert(`Error loading default players: ${error.message}`);
+        }
     }
     
     importPlayers() {
