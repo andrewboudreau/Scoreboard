@@ -253,13 +253,6 @@ class Teams {
         // Team scores
         this.team1Points = 0;
         this.team2Points = 0;
-        
-        // Initialize with any existing player points
-        setTimeout(() => {
-            if (this.app.players) {
-                this.app.players.syncTeamScoresWithPlayerPoints();
-            }
-        }, 100);
 
         // Team elements
         this.team1ScoreElement = document.getElementById('score-team1');
@@ -653,8 +646,6 @@ class Players {
                 // Add click event to increment points
                 playerItem.addEventListener('click', () => {
                     this.incrementPlayerPoints(player.id);
-                    // Update team scores
-                    this.syncTeamScoresWithPlayerPoints();
                 });
 
                 this.team1PlayersDisplay.appendChild(playerItem);
@@ -680,8 +671,6 @@ class Players {
                 // Add click event to increment points
                 playerItem.addEventListener('click', () => {
                     this.incrementPlayerPoints(player.id);
-                    // Update team scores
-                    this.syncTeamScoresWithPlayerPoints();
                 });
 
                 this.team2PlayersDisplay.appendChild(playerItem);
@@ -818,9 +807,6 @@ class Players {
         // Update the UI
         this.updatePlayersList();
         this.updatePlayersDisplay();
-        
-        // Update team scores to match player points
-        this.syncTeamScoresWithPlayerPoints();
     }
 
     importPlayers() {
@@ -843,22 +829,6 @@ class Players {
             console.error('Error importing players:', error);
             alert(`Error importing players: ${error.message}`);
         }
-    }
-
-    syncTeamScoresWithPlayerPoints() {
-        // Calculate total points for each team
-        const team1Points = this.app.playersList
-            .filter(player => player.team === '1')
-            .reduce((sum, player) => sum + (parseInt(player.points) || 0), 0);
-            
-        const team2Points = this.app.playersList
-            .filter(player => player.team === '2')
-            .reduce((sum, player) => sum + (parseInt(player.points) || 0), 0);
-        
-        // Update team scores
-        this.app.teams.team1Points = team1Points;
-        this.app.teams.team2Points = team2Points;
-        this.app.teams.updateScoreDisplay();
     }
 
     updatePlayersList() {
@@ -950,8 +920,6 @@ class Players {
                         localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
                         // Update the players display
                         this.updatePlayersDisplay();
-                        // Sync team scores
-                        this.syncTeamScoresWithPlayerPoints();
                     }
                 });
                 
@@ -972,8 +940,6 @@ class Players {
                     localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
                     // Update the players display
                     this.updatePlayersDisplay();
-                    // Sync team scores
-                    this.syncTeamScoresWithPlayerPoints();
                 });
                 
                 // Add all elements to the cell
