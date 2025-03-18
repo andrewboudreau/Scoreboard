@@ -933,19 +933,53 @@ class Players {
                 activeCell.appendChild(activeCheckbox);
                 row.appendChild(activeCell);
 
-                // Points cell
+                // Points cell with increment/decrement controls
                 const pointsCell = document.createElement('td');
-                const pointsInput = document.createElement('input');
-                pointsInput.type = 'number';
-                pointsInput.className = 'player-points';
-                pointsInput.value = player.points;
-                pointsInput.min = 0;
-
-                pointsInput.addEventListener('change', (e) => {
-                    this.updatePlayerPoints(player.id, e.target.value);
+                pointsCell.className = 'points-cell';
+                
+                // Create decrement button
+                const decrementBtn = document.createElement('button');
+                decrementBtn.className = 'points-btn decrement-btn';
+                decrementBtn.textContent = '-';
+                decrementBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (player.points > 0) {
+                        player.points--;
+                        pointsDisplay.textContent = player.points;
+                        // Save to localStorage
+                        localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+                        // Update the players display
+                        this.updatePlayersDisplay();
+                        // Sync team scores
+                        this.syncTeamScoresWithPlayerPoints();
+                    }
                 });
-
-                pointsCell.appendChild(pointsInput);
+                
+                // Create points display
+                const pointsDisplay = document.createElement('span');
+                pointsDisplay.className = 'points-display';
+                pointsDisplay.textContent = player.points;
+                
+                // Create increment button
+                const incrementBtn = document.createElement('button');
+                incrementBtn.className = 'points-btn increment-btn';
+                incrementBtn.textContent = '+';
+                incrementBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    player.points++;
+                    pointsDisplay.textContent = player.points;
+                    // Save to localStorage
+                    localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+                    // Update the players display
+                    this.updatePlayersDisplay();
+                    // Sync team scores
+                    this.syncTeamScoresWithPlayerPoints();
+                });
+                
+                // Add all elements to the cell
+                pointsCell.appendChild(decrementBtn);
+                pointsCell.appendChild(pointsDisplay);
+                pointsCell.appendChild(incrementBtn);
                 row.appendChild(pointsCell);
 
                 // Action cell

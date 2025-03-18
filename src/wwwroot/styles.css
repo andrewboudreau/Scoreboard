@@ -303,14 +303,44 @@ body {
     background-color: #444;
 }
 
-.player-points {
-    width: 40px;
-    background-color: #444;
-    border: 1px solid #555;
+/* Points increment/decrement controls */
+.points-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.points-btn {
+    width: 25px;
+    height: 25px;
     border-radius: 4px;
+    border: 1px solid #555;
+    background-color: #444;
     color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.points-btn:hover {
+    background-color: #555;
+}
+
+.points-display {
+    min-width: 20px;
     text-align: center;
-    padding: 2px;
+    font-weight: bold;
+}
+
+.decrement-btn {
+    color: #ff6b6b;
+}
+
+.increment-btn {
+    color: #69db7c;
 }
 
 .remove-player {
