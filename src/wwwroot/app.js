@@ -13,6 +13,12 @@ class ScoreboardApp {
         this.scoreHistory = []; // Add this new array to store detailed history
         this.wakeLock = null;
         this.playersList = [];
+        
+        // Blob storage configuration
+        this.blobStorageUrl = ''; // Will be set in settings
+        this.blobStorageKey = ''; // Will be set in settings
+        this.uploadTimeout = null;
+        this.lastUploadAttempt = null;
 
         // Initialize app
         this.loadSavedSettings();
@@ -52,6 +58,33 @@ class ScoreboardApp {
             this.requestWakeLock();
         }
 
+        // Load blob storage settings
+        if (localStorage.getItem('blobStorageUrl')) {
+            this.blobStorageUrl = localStorage.getItem('blobStorageUrl');
+            this.settings.blobStorageUrlInput.value = this.blobStorageUrl;
+        }
+
+        if (localStorage.getItem('blobStorageKey')) {
+            this.blobStorageKey = localStorage.getItem('blobStorageKey');
+            this.settings.blobStorageKeyInput.value = this.blobStorageKey;
+        }
+
+        // Load last upload attempt info
+        if (localStorage.getItem('lastUploadAttempt')) {
+            try {
+                this.lastUploadAttempt = JSON.parse(localStorage.getItem('lastUploadAttempt'));
+                if (this.lastUploadAttempt) {
+                    const status = this.lastUploadAttempt.success ? 
+                        `Last upload: ${new Date(this.lastUploadAttempt.timestamp).toLocaleString()} (Success)` : 
+                        `Last upload: ${new Date(this.lastUploadAttempt.timestamp).toLocaleString()} (Failed: ${this.lastUploadAttempt.error})`;
+                    document.getElementById('upload-status').textContent = status;
+                }
+            } catch (e) {
+                console.error('Error loading last upload attempt:', e);
+                this.lastUploadAttempt = null;
+            }
+        }
+
         // Load saved players
         if (localStorage.getItem('playersList')) {
             this.playersList = JSON.parse(localStorage.getItem('playersList'));
@@ -86,7 +119,6 @@ class ScoreboardApp {
     // Record score change in history
     recordScoreChange(teamNumber, isIncrement, playerName = undefined) {
         const now = new Date();
-        debugger;
         const historyEntry = {
             timestamp: now.toLocaleString(),
             timerCurrent: this.timer.timeLeft,
@@ -107,6 +139,83 @@ class ScoreboardApp {
         
         // Log to console for debugging
         console.log('Score change recorded:', historyEntry);
+        
+        // Schedule upload after 10 seconds of inactivity
+        this.uploadScoreHistory();
+    }
+    
+    // Upload score history to blob storage
+    uploadScoreHistory() {
+        // Clear any existing timeout
+        if (this.uploadTimeout) {
+            clearTimeout(this.uploadTimeout);
+            this.uploadTimeout = null;
+        }
+        
+        // Set a new timeout to upload after 10 seconds of inactivity
+        this.uploadTimeout = setTimeout(() => {
+            this.performHistoryUpload();
+        }, 10000);
+    }
+
+    performHistoryUpload() {
+        // Don't proceed if URL or key is missing
+        if (!this.blobStorageUrl || !this.blobStorageKey) {
+            console.log('Blob storage not configured, skipping upload');
+            return;
+        }
+        
+        // Don't upload if history is empty
+        if (this.scoreHistory.length === 0) {
+            console.log('No score history to upload');
+            return;
+        }
+        
+        // Create a timestamp for the filename
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/[:.]/g, '-');
+        const filename = `score-history-${timestamp}.json`;
+        
+        // Prepare the data
+        const historyData = JSON.stringify(this.scoreHistory);
+        
+        // Create the upload URL
+        const uploadUrl = `${this.blobStorageUrl}/${filename}${this.blobStorageKey ? `?${this.blobStorageKey}` : ''}`;
+        
+        console.log(`Uploading score history to ${filename}`);
+        
+        // Upload the data
+        fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-ms-blob-type': 'BlockBlob'
+            },
+            body: historyData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            console.log('Score history uploaded successfully');
+            this.lastUploadAttempt = {
+                timestamp: now,
+                success: true,
+                filename: filename
+            };
+            localStorage.setItem('lastUploadAttempt', JSON.stringify(this.lastUploadAttempt));
+            document.getElementById('upload-status').textContent = `Last upload: ${now.toLocaleString()} (Success)`;
+        })
+        .catch(error => {
+            console.error('Error uploading score history:', error);
+            this.lastUploadAttempt = {
+                timestamp: now,
+                success: false,
+                error: error.message
+            };
+            localStorage.setItem('lastUploadAttempt', JSON.stringify(this.lastUploadAttempt));
+            document.getElementById('upload-status').textContent = `Last upload: ${now.toLocaleString()} (Failed: ${error.message})`;
+        });
     }
 
     // Wake Lock API functions
@@ -405,6 +514,9 @@ class Settings {
         this.scoreFontSizeSlider = document.getElementById('score-font-size');
         this.timerFontSizeSlider = document.getElementById('timer-font-size');
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
+        this.blobStorageUrlInput = document.getElementById('blob-storage-url');
+        this.blobStorageKeyInput = document.getElementById('blob-storage-key');
+        this.testBlobStorageBtn = document.getElementById('test-blob-storage-btn');
 
         // Initialize
         this.updateInputsFromCurrent();
@@ -485,10 +597,59 @@ class Settings {
         this.keepScreenOnCheckbox.addEventListener('change', () => {
             this.app.toggleWakeLock();
         });
+        
+        // Blob storage settings
+        this.blobStorageUrlInput.addEventListener('change', () => {
+            this.app.blobStorageUrl = this.blobStorageUrlInput.value;
+            localStorage.setItem('blobStorageUrl', this.blobStorageUrlInput.value);
+        });
+        
+        this.blobStorageKeyInput.addEventListener('change', () => {
+            this.app.blobStorageKey = this.blobStorageKeyInput.value;
+            localStorage.setItem('blobStorageKey', this.blobStorageKeyInput.value);
+        });
+        
+        this.testBlobStorageBtn.addEventListener('click', () => {
+            this.testBlobStorageConnection();
+        });
     }
 
     toggle() {
         this.settingsPanel.classList.toggle('active');
+    }
+    
+    testBlobStorageConnection() {
+        const url = this.blobStorageUrlInput.value;
+        const key = this.blobStorageKeyInput.value;
+        
+        if (!url) {
+            alert('Please enter a Blob Storage URL');
+            return;
+        }
+        
+        // Create a test file name
+        const testFilename = `connection-test-${Date.now()}.txt`;
+        const uploadUrl = `${url}/${testFilename}${key ? `?${key}` : ''}`;
+        
+        // Try to upload a small test file
+        fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'text/plain',
+                'x-ms-blob-type': 'BlockBlob'
+            },
+            body: 'Connection test successful'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            alert('Connection to blob storage successful!');
+        })
+        .catch(error => {
+            console.error('Error testing blob storage connection:', error);
+            alert(`Connection test failed: ${error.message}`);
+        });
     }
 }
 
