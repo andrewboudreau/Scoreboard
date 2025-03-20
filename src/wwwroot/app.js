@@ -10,6 +10,7 @@ class ScoreboardApp {
 
         // Global state
         this.periodScores = [];
+        this.scoreHistory = []; // Add this new array to store detailed history
         this.wakeLock = null;
         this.playersList = [];
 
@@ -21,6 +22,16 @@ class ScoreboardApp {
     loadSavedSettings() {
         // Initialize playersList
         this.playersList = [];
+
+        // Load saved score history
+        if (localStorage.getItem('scoreHistory')) {
+            try {
+                this.scoreHistory = JSON.parse(localStorage.getItem('scoreHistory'));
+            } catch (e) {
+                console.error('Error loading score history:', e);
+                this.scoreHistory = [];
+            }
+        }
 
         // Font sizes
         if (localStorage.getItem('scoreFontSize')) {
@@ -64,6 +75,35 @@ class ScoreboardApp {
     resetScoreHistory() {
         this.periodScores = [];
         this.ui.updateScoreHistory();
+    }
+
+    // Clear detailed score history
+    clearScoreHistory() {
+        this.scoreHistory = [];
+        localStorage.removeItem('scoreHistory');
+    }
+
+    // Record score change in history
+    recordScoreChange(teamNumber, isIncrement, playerName = undefined) {
+        const now = new Date();
+        const historyEntry = {
+            timestamp: now.toLocaleString(),
+            timerCurrent: this.timer.timeLeft,
+            timerStart: parseInt(this.settings.timerMinutesInput.value) * 60,
+            teamNumber: teamNumber,
+            action: isIncrement ? 'increment' : 'decrement',
+            playerName: playerName,
+            team1Score: this.teams.team1Points,
+            team2Score: this.teams.team2Points
+        };
+        
+        this.scoreHistory.push(historyEntry);
+        
+        // Save to localStorage
+        localStorage.setItem('scoreHistory', JSON.stringify(this.scoreHistory));
+        
+        // Log to console for debugging
+        console.log('Score change recorded:', historyEntry);
     }
 
     // Wake Lock API functions
@@ -311,6 +351,9 @@ class Teams {
             this.team2Points++;
         }
         this.updateScoreDisplay();
+        
+        // Record the score change in history
+        this.app.recordScoreChange(teamNumber, true);
     }
 
     decrementScore(teamNumber) {
@@ -320,6 +363,9 @@ class Teams {
             this.team2Points--;
         }
         this.updateScoreDisplay();
+        
+        // Record the score change in history
+        this.app.recordScoreChange(teamNumber, false);
     }
 
     updateScoreDisplay() {
@@ -411,6 +457,7 @@ class Settings {
 
         this.resetHistoryBtn.addEventListener('click', () => {
             this.app.resetScoreHistory();
+            this.app.clearScoreHistory(); // Also clear detailed history
         });
 
         this.testBuzzerBtn.addEventListener('click', () => {
@@ -599,8 +646,17 @@ class Players {
             // Increment points
             player.points += 1;
 
-            // Increment team score
-            this.app.teams.incrementScore(parseInt(player.team));
+            // Increment team score but don't record history yet
+            // (we'll do it with player info below)
+            if (parseInt(player.team) === 1) {
+                this.app.teams.team1Points += 1;
+            } else {
+                this.app.teams.team2Points += 1;
+            }
+            this.app.teams.updateScoreDisplay();
+            
+            // Record the score change with player name
+            this.app.recordScoreChange(parseInt(player.team), true, player.name);
 
             // Save to localStorage
             localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
@@ -916,8 +972,18 @@ class Players {
                     if (player.points > 0) {
                         player.points--;
                         pointsDisplay.textContent = player.points;
-                        debugger;
-                        this.app.teams.decrementScore(player.team);
+                        
+                        // Update team score
+                        if (parseInt(player.team) === 1) {
+                            this.app.teams.team1Points -= 1;
+                        } else {
+                            this.app.teams.team2Points -= 1;
+                        }
+                        this.app.teams.updateScoreDisplay();
+                        
+                        // Record the score change with player name
+                        this.app.recordScoreChange(parseInt(player.team), false, player.name);
+                        
                         // Save to localStorage
                         localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
                         // Update the players display
@@ -938,8 +1004,18 @@ class Players {
                     e.stopPropagation();
                     player.points++;
                     pointsDisplay.textContent = player.points;
-                    debugger;
-                    this.app.teams.incrementScore(player.team);
+                    
+                    // Update team score
+                    if (parseInt(player.team) === 1) {
+                        this.app.teams.team1Points += 1;
+                    } else {
+                        this.app.teams.team2Points += 1;
+                    }
+                    this.app.teams.updateScoreDisplay();
+                    
+                    // Record the score change with player name
+                    this.app.recordScoreChange(parseInt(player.team), true, player.name);
+                    
                     // Save to localStorage
                     localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
                     // Update the players display
