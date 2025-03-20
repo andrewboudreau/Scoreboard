@@ -86,6 +86,7 @@ class ScoreboardApp {
     // Record score change in history
     recordScoreChange(teamNumber, isIncrement, playerName = undefined) {
         const now = new Date();
+        debugger;
         const historyEntry = {
             timestamp: now.toLocaleString(),
             timerCurrent: this.timer.timeLeft,
@@ -94,7 +95,9 @@ class ScoreboardApp {
             action: isIncrement ? 'increment' : 'decrement',
             playerName: playerName,
             team1Score: this.teams.team1Points,
-            team2Score: this.teams.team2Points
+            team2Score: this.teams.team2Points,
+            team1Name: this.teams.team1NameElement.textContent,
+            team2Name: this.teams.team2NameElement.textContent
         };
         
         this.scoreHistory.push(historyEntry);
