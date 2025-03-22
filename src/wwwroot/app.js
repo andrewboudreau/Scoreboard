@@ -619,7 +619,8 @@ class Settings {
         const testFilename = `connection-test-${Date.now()}.txt`;
         // Replace the filename in the SAS URL
         const uploadUrl = url.replace(/\/[^\/]*$/, `/${testFilename}`);
-        
+
+        console.log("Upload url is " + uploadUrl);
         // Try to upload a small test file
         fetch(uploadUrl, {
             method: 'PUT',
