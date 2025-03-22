@@ -177,6 +177,12 @@ class ScoreboardApp {
         // The URL should already contain the SAS token
         const uploadUrl = this.blobStorageUrl.replace(/\/[^\/]*$/, `/${filename}`);
         
+        // Check if the URL contains SAS token
+        if (!this.blobStorageUrl.includes('?sv=')) {
+            console.error('The URL does not appear to contain a SAS token');
+            return;
+        }
+        
         console.log(`Uploading score history to ${filename}`);
         
         // Upload the data
@@ -184,7 +190,8 @@ class ScoreboardApp {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'x-ms-blob-type': 'BlockBlob'
+                'x-ms-blob-type': 'BlockBlob',
+                'x-ms-version': '2020-04-08'
             },
             body: historyData
         })
@@ -621,18 +628,30 @@ class Settings {
         const uploadUrl = url.replace(/\/[^\/]*$/, `/${testFilename}`);
 
         console.log("Upload url is " + uploadUrl);
+        
+        // Check if the URL contains SAS token
+        if (!url.includes('?sv=')) {
+            alert('The URL does not appear to contain a SAS token. Make sure your URL includes the full SAS signature.');
+            return;
+        }
+        
         // Try to upload a small test file
         fetch(uploadUrl, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'text/plain',
-                'x-ms-blob-type': 'BlockBlob'
+                'x-ms-blob-type': 'BlockBlob',
+                'x-ms-version': '2020-04-08'
             },
             body: 'Connection test successful'
         })
         .then(response => {
             if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
+                if (response.status === 404) {
+                    throw new Error('Container not found or SAS URL is incorrect. Make sure the container exists and the SAS token has write permissions.');
+                } else {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
             }
             alert('Connection to blob storage successful!');
         })

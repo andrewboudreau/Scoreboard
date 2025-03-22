@@ -109,7 +109,8 @@
             </div>
             <div class="settings-group">
                 <label for="blob-storage-url">Blob Storage SAS URL</label>
-                <input type="text" id="blob-storage-url" placeholder="https://yourstorage.blob.core.windows.net/container/file.json?sv=...">
+                <input type="text" id="blob-storage-url" placeholder="https://yourstorage.blob.core.windows.net/container/placeholder.json?sv=2020-08-04&ss=b&srt=c&sp=rwdlacitfx&se=...">
+                <div class="help-text">The URL must include a valid SAS token with write permissions. The filename will be replaced automatically.</div>
                 <button id="test-blob-storage-btn">Test Connection</button>
                 <div id="upload-status">Last upload: Never</div>
             </div>
