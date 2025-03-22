@@ -630,10 +630,10 @@ class Settings {
         console.log("Upload url is " + uploadUrl);
         
         // Check if the URL contains SAS token
-        if (!url.includes('?sv=')) {
-            alert('The URL does not appear to contain a SAS token. Make sure your URL includes the full SAS signature.');
-            return;
-        }
+        //if (!url.includes('?sv=')) {
+        //    alert('The URL does not appear to contain a SAS token. Make sure your URL includes the full SAS signature.');
+        //    return;
+        //}
         
         // Try to upload a small test file
         fetch(uploadUrl, {
