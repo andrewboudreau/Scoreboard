@@ -15,8 +15,7 @@ class ScoreboardApp {
         this.playersList = [];
         
         // Blob storage configuration
-        this.blobStorageUrl = ''; // Will be set in settings
-        this.blobStorageKey = ''; // Will be set in settings
+        this.blobStorageUrl = ''; // Will be set in settings - full SAS URL
         this.uploadTimeout = null;
         this.lastUploadAttempt = null;
 
@@ -62,11 +61,6 @@ class ScoreboardApp {
         if (localStorage.getItem('blobStorageUrl')) {
             this.blobStorageUrl = localStorage.getItem('blobStorageUrl');
             this.settings.blobStorageUrlInput.value = this.blobStorageUrl;
-        }
-
-        if (localStorage.getItem('blobStorageKey')) {
-            this.blobStorageKey = localStorage.getItem('blobStorageKey');
-            this.settings.blobStorageKeyInput.value = this.blobStorageKey;
         }
 
         // Load last upload attempt info
@@ -159,8 +153,8 @@ class ScoreboardApp {
     }
 
     performHistoryUpload() {
-        // Don't proceed if URL or key is missing
-        if (!this.blobStorageUrl || !this.blobStorageKey) {
+        // Don't proceed if URL is missing
+        if (!this.blobStorageUrl) {
             console.log('Blob storage not configured, skipping upload');
             return;
         }
@@ -179,8 +173,9 @@ class ScoreboardApp {
         // Prepare the data
         const historyData = JSON.stringify(this.scoreHistory);
         
-        // Create the upload URL
-        const uploadUrl = `${this.blobStorageUrl}/${filename}${this.blobStorageKey ? `?${this.blobStorageKey}` : ''}`;
+        // Create the upload URL - use the full SAS URL
+        // The URL should already contain the SAS token
+        const uploadUrl = this.blobStorageUrl.replace(/\/[^\/]*$/, `/${filename}`);
         
         console.log(`Uploading score history to ${filename}`);
         
@@ -604,11 +599,6 @@ class Settings {
             localStorage.setItem('blobStorageUrl', this.blobStorageUrlInput.value);
         });
         
-        this.blobStorageKeyInput.addEventListener('change', () => {
-            this.app.blobStorageKey = this.blobStorageKeyInput.value;
-            localStorage.setItem('blobStorageKey', this.blobStorageKeyInput.value);
-        });
-        
         this.testBlobStorageBtn.addEventListener('click', () => {
             this.testBlobStorageConnection();
         });
@@ -620,16 +610,16 @@ class Settings {
     
     testBlobStorageConnection() {
         const url = this.blobStorageUrlInput.value;
-        const key = this.blobStorageKeyInput.value;
         
         if (!url) {
-            alert('Please enter a Blob Storage URL');
+            alert('Please enter a full Blob Storage SAS URL');
             return;
         }
         
         // Create a test file name
         const testFilename = `connection-test-${Date.now()}.txt`;
-        const uploadUrl = `${url}/${testFilename}${key ? `?${key}` : ''}`;
+        // Replace the filename in the SAS URL
+        const uploadUrl = url.replace(/\/[^\/]*$/, `/${testFilename}`);
         
         // Try to upload a small test file
         fetch(uploadUrl, {
