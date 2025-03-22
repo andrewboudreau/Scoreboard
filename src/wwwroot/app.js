@@ -14,8 +14,7 @@ class ScoreboardApp {
         this.wakeLock = null;
         this.playersList = [];
         
-        // Blob storage configuration
-        this.blobStorageUrl = ''; // Will be set in settings - full SAS URL
+        // Upload configuration
         this.uploadTimeout = null;
         this.lastUploadAttempt = null;
 
@@ -55,12 +54,6 @@ class ScoreboardApp {
         if (localStorage.getItem('keepScreenOn') === 'true') {
             this.settings.keepScreenOnCheckbox.checked = true;
             this.requestWakeLock();
-        }
-
-        // Load blob storage settings
-        if (localStorage.getItem('blobStorageUrl')) {
-            this.blobStorageUrl = localStorage.getItem('blobStorageUrl');
-            this.settings.blobStorageUrlInput.value = this.blobStorageUrl;
         }
 
         // Load last upload attempt info
@@ -153,45 +146,24 @@ class ScoreboardApp {
     }
 
     performHistoryUpload() {
-        // Don't proceed if URL is missing
-        if (!this.blobStorageUrl) {
-            console.log('Blob storage not configured, skipping upload');
-            return;
-        }
-        
         // Don't upload if history is empty
         if (this.scoreHistory.length === 0) {
             console.log('No score history to upload');
             return;
         }
         
-        // Create a timestamp for the filename
         const now = new Date();
-        const timestamp = now.toISOString().replace(/[:.]/g, '-');
-        const filename = `score-history-${timestamp}.json`;
         
         // Prepare the data
         const historyData = JSON.stringify(this.scoreHistory);
         
-        // Create the upload URL - use the full SAS URL
-        // The URL should already contain the SAS token
-        const uploadUrl = this.blobStorageUrl.replace(/\/[^\/]*$/, `/${filename}`);
+        console.log('Uploading score history to server');
         
-        // Check if the URL contains SAS token
-        if (!this.blobStorageUrl.includes('?sv=')) {
-            console.error('The URL does not appear to contain a SAS token');
-            return;
-        }
-        
-        console.log(`Uploading score history to ${filename}`);
-        
-        // Upload the data
-        fetch(uploadUrl, {
-            method: 'PUT',
+        // Upload the data to our API endpoint
+        fetch('/api/upload-history', {
+            method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'x-ms-blob-type': 'BlockBlob',
-                'x-ms-version': '2020-04-08'
+                'Content-Type': 'application/json'
             },
             body: historyData
         })
@@ -199,11 +171,14 @@ class ScoreboardApp {
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
-            console.log('Score history uploaded successfully');
+            return response.json();
+        })
+        .then(data => {
+            console.log('Score history uploaded successfully', data);
             this.lastUploadAttempt = {
                 timestamp: now,
                 success: true,
-                filename: filename
+                filename: data.filename
             };
             localStorage.setItem('lastUploadAttempt', JSON.stringify(this.lastUploadAttempt));
             document.getElementById('upload-status').textContent = `Last upload: ${now.toLocaleString()} (Success)`;
@@ -516,7 +491,6 @@ class Settings {
         this.scoreFontSizeSlider = document.getElementById('score-font-size');
         this.timerFontSizeSlider = document.getElementById('timer-font-size');
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
-        this.blobStorageUrlInput = document.getElementById('blob-storage-url');
         this.testBlobStorageBtn = document.getElementById('test-blob-storage-btn');
 
         // Initialize
@@ -599,12 +573,7 @@ class Settings {
             this.app.toggleWakeLock();
         });
         
-        // Blob storage settings
-        this.blobStorageUrlInput.addEventListener('change', () => {
-            this.app.blobStorageUrl = this.blobStorageUrlInput.value;
-            localStorage.setItem('blobStorageUrl', this.blobStorageUrlInput.value);
-        });
-        
+        // Test blob storage connection
         this.testBlobStorageBtn.addEventListener('click', () => {
             this.testBlobStorageConnection();
         });
@@ -615,50 +584,23 @@ class Settings {
     }
     
     testBlobStorageConnection() {
-        const url = this.blobStorageUrlInput.value;
+        console.log('Testing blob storage connection via server API');
         
-        if (!url) {
-            alert('Please enter a full Blob Storage SAS URL');
-            return;
-        }
-        
-        // Create a test file name
-        const testFilename = `connection-test-${Date.now()}.txt`;
-        // Replace the filename in the SAS URL
-        const uploadUrl = url.replace(/\/[^\/]*$/, `/${testFilename}`);
-
-        console.log("Upload url is " + uploadUrl);
-        
-        // Check if the URL contains SAS token
-        //if (!url.includes('?sv=')) {
-        //    alert('The URL does not appear to contain a SAS token. Make sure your URL includes the full SAS signature.');
-        //    return;
-        //}
-        
-        // Try to upload a small test file
-        fetch(uploadUrl, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'text/plain',
-                'x-ms-blob-type': 'BlockBlob',
-                'x-ms-version': '2020-04-08'
-            },
-            body: 'Connection test successful'
-        })
-        .then(response => {
-            if (!response.ok) {
-                if (response.status === 404) {
-                    throw new Error('Container not found or SAS URL is incorrect. Make sure the container exists and the SAS token has write permissions.');
-                } else {
+        // Test the connection using our API endpoint
+        fetch('/api/test-blob-connection')
+            .then(response => {
+                if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
                 }
-            }
-            alert('Connection to blob storage successful!');
-        })
-        .catch(error => {
-            console.error('Error testing blob storage connection:', error);
-            alert(`Connection test failed: ${error.message}`);
-        });
+                return response.json();
+            })
+            .then(data => {
+                alert(data.message || 'Connection to blob storage successful!');
+            })
+            .catch(error => {
+                console.error('Error testing blob storage connection:', error);
+                alert(`Connection test failed: ${error.message}`);
+            });
     }
 }
 
