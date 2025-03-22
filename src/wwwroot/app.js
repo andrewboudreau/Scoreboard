@@ -510,7 +510,6 @@ class Settings {
         this.timerFontSizeSlider = document.getElementById('timer-font-size');
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
         this.blobStorageUrlInput = document.getElementById('blob-storage-url');
-        this.blobStorageKeyInput = document.getElementById('blob-storage-key');
         this.testBlobStorageBtn = document.getElementById('test-blob-storage-btn');
 
         // Initialize
