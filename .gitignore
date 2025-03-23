@@ -363,3 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 .aider*
 /__blobstorage__
+*__azurite**
+*AzuriteConfig*

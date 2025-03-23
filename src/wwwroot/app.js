@@ -160,7 +160,7 @@ class ScoreboardApp {
         console.log('Uploading score history to server');
         
         // Upload the data to our API endpoint
-        fetch('/api/upload-history', {
+        fetch('/scoreboard/upload-history', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -587,7 +587,7 @@ class Settings {
         console.log('Testing blob storage connection via server API');
         
         // Test the connection using our API endpoint
-        fetch('/api/test-blob-connection')
+        fetch('/scoreboard/test-blob-connection')
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
