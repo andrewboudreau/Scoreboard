@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <VersionPrefix>0.0.9</VersionPrefix>
+    <VersionPrefix>0.0.10</VersionPrefix>
     <Authors>Andrew Boudreau</Authors>
     <Product>Scoreboard</Product>
     <Copyright>Copyright © 2025</Copyright>
