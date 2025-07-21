@@ -1,13 +1,36 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
+    <PackageId>Scoreboard</PackageId>
+    
+    <!-- Razor compilation settings -->
+    <RazorCompileOnBuild>true</RazorCompileOnBuild>
+    <RazorCompileOnPublish>true</RazorCompileOnPublish>
+    
+    <!-- Static asset base path for module -->
+    <StaticWebAssetBasePath>_content/Scoreboard</StaticWebAssetBasePath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1" />
+    <!-- Framework reference for ASP.NET Core -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    
+    <PackageReference Include="SharedTools.Web" Version="0.0.32">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    
+    <!-- Your other dependencies (will be included in package) -->
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0-beta.1" />
   </ItemGroup>
+
+
+  <!-- Local NuGet feed for development -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <PackageOutputPath>C:\LocalNuGet</PackageOutputPath>
+  </PropertyGroup>
 
 </Project>

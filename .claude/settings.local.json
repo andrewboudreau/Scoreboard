@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(del:*)",
+      "Bash(rm:*)",
+      "Bash(dotnet build)",
+      "Bash(ls:*)",
+      "Bash(dotnet new:*)",
+      "Bash(cp:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(powershell:*)",
+      "Bash(dotnet sln:*)"
+    ],
+    "deny": []
+  }
+}

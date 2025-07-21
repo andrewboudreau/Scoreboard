@@ -65,9 +65,9 @@ body {
     transition: background-color 0.2s;
 }
 
-.player-item-display:hover {
-    background-color: #555;
-}
+    .player-item-display:hover {
+        background-color: #555;
+    }
 
 .player-name-display {
     font-weight: bold;
@@ -204,10 +204,10 @@ body {
         display: block;
     }
 
-    .settings-panel h3 {
-        margin-bottom: 15px;
-        text-align: center;
-    }
+.settings-panel h3 {
+    margin-bottom: 15px;
+    text-align: center;
+}
 
 .settings-group {
     margin-bottom: 15px;
@@ -225,6 +225,7 @@ body {
         border-radius: 5px;
         color: white;
     }
+
         .settings-group input:focus-visible {
             outline: solid 1px lightgray;
             backdrop-filter: drop-shadow();
@@ -245,26 +246,26 @@ body {
             background-color: #555;
         }
 
-    .team-settings {
-        display: flex;
-        align-items: center;
-        margin-bottom: 5px;
-    }
+.team-settings {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
 
     .team-settings input {
         margin-right: 8px;
     }
 
-    .decrement-btn {
-        padding: 4px 8px;
-        background-color: #444;
-        color: white;
-        border: 1px solid gray;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        margin-left: 5px;
-    }
+.decrement-btn {
+    padding: 4px 8px;
+    background-color: #444;
+    color: white;
+    border: 1px solid gray;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-left: 5px;
+}
 
     .decrement-btn:hover {
         background-color: #555;
@@ -283,25 +284,25 @@ body {
     margin-bottom: 15px;
 }
 
-.players-table th, 
-.players-table td {
-    padding: 8px;
-    text-align: left;
-    border-bottom: 1px solid #555;
-}
+    .players-table th,
+    .players-table td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #555;
+    }
 
-.players-table th {
-    background-color: #333;
-    font-weight: bold;
-}
+    .players-table th {
+        background-color: #333;
+        font-weight: bold;
+    }
 
-.players-table tr:nth-child(even) {
-    background-color: #3a3a3a;
-}
+    .players-table tr:nth-child(even) {
+        background-color: #3a3a3a;
+    }
 
-.players-table tr:hover {
-    background-color: #444;
-}
+    .players-table tr:hover {
+        background-color: #444;
+    }
 
 /* Points increment/decrement controls */
 .points-cell {
@@ -325,9 +326,9 @@ body {
     font-weight: bold;
 }
 
-.points-btn:hover {
-    background-color: #555;
-}
+    .points-btn:hover {
+        background-color: #555;
+    }
 
 .points-display {
     min-width: 20px;
@@ -353,9 +354,9 @@ body {
     font-size: 0.8rem;
 }
 
-.remove-player:hover {
-    background-color: #777;
-}
+    .remove-player:hover {
+        background-color: #777;
+    }
 
 .team-select {
     background-color: #444;
@@ -371,31 +372,31 @@ body {
     margin-top: 10px;
 }
 
-.add-player input,
-.add-player select {
-    padding: 6px;
-    background-color: #444;
-    border: 1px solid gray;
-    border-radius: 4px;
-    color: white;
-}
+    .add-player input,
+    .add-player select {
+        padding: 6px;
+        background-color: #444;
+        border: 1px solid gray;
+        border-radius: 4px;
+        color: white;
+    }
 
-.add-player input {
-    flex-grow: 1;
-}
+    .add-player input {
+        flex-grow: 1;
+    }
 
-.add-player button {
-    padding: 6px 10px;
-    background-color: #444;
-    border: 1px solid gray;
-    border-radius: 4px;
-    color: white;
-    cursor: pointer;
-}
+    .add-player button {
+        padding: 6px 10px;
+        background-color: #444;
+        border: 1px solid gray;
+        border-radius: 4px;
+        color: white;
+        cursor: pointer;
+    }
 
-.add-player button:hover {
-    background-color: #555;
-}
+        .add-player button:hover {
+            background-color: #555;
+        }
 
 /* Checkbox styling */
 .player-active {
@@ -461,4 +462,4 @@ body {
     .timer {
         font-size: 8rem;
     }
-} 
+}

@@ -1,0 +1,49 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump_version:
+    runs-on: ubuntu-latest
+    # This job only runs for pushes to main, not for tags or bot commits
+    if: github.actor != 'github-actions[bot]'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore --configfile nuget.ci.config
+
+      - name: Build
+        run: dotnet build --no-restore --configfile nuget.ci.config
+
+      - name: Bump version
+        id: bump
+        run: |
+          file=Directory.Build.props
+          version=$(grep -oP '(?<=<VersionPrefix>).*?(?=</VersionPrefix>)' "$file")
+          IFS='.' read -r major minor patch <<< "$version"
+          patch=$((patch + 1))
+          new_version="$major.$minor.$patch"
+          sed -i "s/<VersionPrefix>$version<\/VersionPrefix>/<VersionPrefix>$new_version<\/VersionPrefix>/" "$file"
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.new_version }}"
+          git push

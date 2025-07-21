@@ -1,6 +1,9 @@
 ﻿using Azure.Storage.Blobs;
 
-namespace Scoreboard;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+
+namespace ScoreboardModule;
 
 public class ScoreboardLogger { };
 

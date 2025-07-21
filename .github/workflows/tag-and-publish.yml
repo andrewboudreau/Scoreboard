@@ -1,0 +1,65 @@
+name: Tag and Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  tag_and_publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          file=Directory.Build.props
+          version=$(grep -oP '(?<=<VersionPrefix>).*?(?=</VersionPrefix>)' "$file")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create Git Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.get_version.outputs.version }}"
+          git push origin "v${{ steps.get_version.outputs.version }}"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build project
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Pack Scoreboard Module
+        run: |
+          # Set CI to true to use explicit pack command instead of GeneratePackageOnBuild
+          export CI=true
+          dotnet pack src/Scoreboard.csproj --configuration Release --no-build --output ./artifacts
+
+      - name: Push to NuGet
+        run: |
+          for package in ./artifacts/*.nupkg; do
+            echo "Pushing $package"
+            dotnet nuget push "$package" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            ./artifacts/*.nupkg
+            ./artifacts/*.snupkg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
