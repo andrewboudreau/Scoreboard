@@ -10,7 +10,7 @@ using SharedTools.Web.Modules;
 
 using System.Threading.RateLimiting;
 
-namespace ScoreboardModule;
+namespace Scoreboard.App;
 
 public class ScoreboardModule : IApplicationPartModule
 {
@@ -68,6 +68,8 @@ public class ScoreboardModule : IApplicationPartModule
 
     public void Configure(WebApplication app)
     {
+        app.UseRateLimiter();
+
         // Map the module's home page
         app.MapGet("/Scoreboard/", () => Results.Redirect("/_content/Scoreboard/index.html"));
 

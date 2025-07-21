@@ -5,14 +5,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
-    <PackageId>Scoreboard</PackageId>
+    <PackageId>Scoreboard.App</PackageId>
     
     <!-- Razor compilation settings -->
     <RazorCompileOnBuild>true</RazorCompileOnBuild>
     <RazorCompileOnPublish>true</RazorCompileOnPublish>
     
     <!-- Static asset base path for module -->
-    <StaticWebAssetBasePath>_content/Scoreboard</StaticWebAssetBasePath>
+    <StaticWebAssetBasePath>_content/Scoreboard.App</StaticWebAssetBasePath>
   </PropertyGroup>
 
   <ItemGroup>

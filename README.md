@@ -5,12 +5,12 @@ A simple scoreboard application for keeping track of scores in games.
 ![Scoreboard Application Screenshot](demo.gif)
 
 # Running the Application
-To run the application, you need to have [.NET 9 installed](https://dotnet.microsoft.com/en-us/download/dotnet/9.0). Next,
+To run the application, you need to have [.NET 10 installed](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Next,
 ```bash
 dotnet run
 ```
 
-# C# .NET 9 Minimal Api
+# C# .NET 10 Minimal Api
 ```csharp
 using SharedTools;
 
