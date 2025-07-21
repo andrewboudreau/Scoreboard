@@ -12,7 +12,7 @@
     <RazorCompileOnPublish>true</RazorCompileOnPublish>
     
     <!-- Static asset base path for module -->
-    <StaticWebAssetBasePath>_content/Scoreboard.App</StaticWebAssetBasePath>
+    <StaticWebAssetBasePath>_content/Scoreboard</StaticWebAssetBasePath>
   </PropertyGroup>
 
   <ItemGroup>

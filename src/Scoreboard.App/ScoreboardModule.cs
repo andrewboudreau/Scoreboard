@@ -72,6 +72,7 @@ public class ScoreboardModule : IApplicationPartModule
 
         // Map the module's home page
         app.MapGet("/Scoreboard/", () => Results.Redirect("/_content/Scoreboard/index.html"));
+        app.MapGet("/Scoreboard.App/", () => Results.Redirect("/Scoreboard/"));
 
         // Map API endpoints with module prefix
         app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory)
