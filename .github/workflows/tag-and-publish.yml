@@ -42,7 +42,7 @@ jobs:
         run: |
           # Set CI to true to use explicit pack command instead of GeneratePackageOnBuild
           export CI=true
-          dotnet pack src/Scoreboard.csproj -c Release --no-build -o./artifacts 
+          dotnet pack src/Scoreboard.csproj -c Release --no-build -o ./artifacts 
 
       - name: Push to NuGet
         run: |
