@@ -36,13 +36,13 @@ jobs:
         run: dotnet restore --configfile nuget.ci.config
 
       - name: Build project
-        run: dotnet build src/Scoreboard.csproj --configuration Release --no-restore --configfile nuget.ci.config
+        run: dotnet build src/Scoreboard.csproj -c Release --no-restore --configfile nuget.ci.config
 
       - name: Pack Scoreboard Module
         run: |
           # Set CI to true to use explicit pack command instead of GeneratePackageOnBuild
           export CI=true
-          dotnet pack src/Scoreboard.csproj --configuration Release --no-build --output ./artifacts 
+          dotnet pack src/Scoreboard.csproj -c Release --no-build -o./artifacts 
 
       - name: Push to NuGet
         run: |
