@@ -19,7 +19,7 @@
     <!-- Framework reference for ASP.NET Core -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     
-    <PackageReference Include="SharedTools.Web" Version="0.0.32">
+    <PackageReference Include="SharedTools.Web" Version="0.0.37">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     
