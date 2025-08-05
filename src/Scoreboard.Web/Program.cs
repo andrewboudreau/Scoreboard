@@ -7,10 +7,10 @@ builder.Services
     .AddMemoryCache()
     .AddRazorPages();
 
-// Load modules from configuration or default to ScoreboardModule
+// Load modules from configuration or default to Scoreboard
 var modulesToLoad = builder.Configuration
     .GetSection("Modules")
-    .Get<string[]>() ?? ["ScoreboardModule"];
+    .Get<string[]>() ?? ["Scoreboard"];
 
 await builder.AddApplicationPartModules(modulesToLoad);
 
@@ -22,10 +22,6 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
-
-// Middleware pipeline
-app.UseStaticFiles();
-app.UseRouting();
 
 // Add a simple home page that redirects to the Scoreboard module
 app.MapGet("/", () => Results.Redirect("/Scoreboard/"));

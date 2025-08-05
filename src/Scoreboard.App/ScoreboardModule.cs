@@ -10,7 +10,7 @@ using SharedTools.Web.Modules;
 
 using System.Threading.RateLimiting;
 
-namespace Scoreboard.App;
+namespace Scoreboard;
 
 public class ScoreboardModule : IApplicationPartModule
 {

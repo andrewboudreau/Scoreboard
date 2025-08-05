@@ -1,25 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
-    <PackageId>Scoreboard.App</PackageId>
-    
-    <!-- Razor compilation settings -->
-    <RazorCompileOnBuild>true</RazorCompileOnBuild>
-    <RazorCompileOnPublish>true</RazorCompileOnPublish>
-    
-    <!-- Static asset base path for module -->
-    <StaticWebAssetBasePath>_content/Scoreboard</StaticWebAssetBasePath>
+    <PackageId>SharedTools.Web.Scoreboard</PackageId>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Framework reference for ASP.NET Core -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     
-    <PackageReference Include="SharedTools.Web" Version="0.0.32">
+    <PackageReference Include="SharedTools.Web" Version="0.0.37">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     
@@ -27,6 +20,10 @@
     <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0-beta.1" />
   </ItemGroup>
 
+  <!-- Include static assets as embedded resources -->
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**\*" />
+  </ItemGroup>
 
   <!-- Local NuGet feed for development -->
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
