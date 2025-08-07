@@ -36,13 +36,13 @@ jobs:
         run: dotnet restore --configfile nuget.ci.config
 
       - name: Build project
-        run: dotnet build src/Scoreboard.App/Scoreboard.App.csproj -c Release --no-restore --configfile nuget.ci.config
+        run: dotnet build src/Scoreboard/Scoreboard.csproj -c Release --no-restore --configfile nuget.ci.config
 
       - name: Pack Scoreboard Module
         run: |
           # Set CI to true to use explicit pack command instead of GeneratePackageOnBuild
           export CI=true
-          dotnet pack src/Scoreboard.App/Scoreboard.App.csproj -c Release --no-build -o ./artifacts 
+          dotnet pack src/Scoreboard/Scoreboard.csproj -c Release --no-build -o ./artifacts 
 
       - name: Push to NuGet
         run: dotnet nuget push "./artifacts/*.nupkg" --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
