@@ -1,33 +1,35 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
-    <PackageId>SharedTools.Scoreboard</PackageId>
-  </PropertyGroup>
+	<PropertyGroup>
+		<AssemblyName>SharedTools.Scoreboard</AssemblyName>
+		<PackageId>SharedTools.Scoreboard</PackageId>
+		<TargetFramework>net10.0</TargetFramework>
+		
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <!-- Framework reference for ASP.NET Core -->
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    
-    <PackageReference Include="SharedTools.Web" Version="1.0.2">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    
-    <!-- Your other dependencies (will be included in package) -->
-    <PackageReference Include="Azure.Storage.Blobs" Version="12.26.0-beta.1" />
-  </ItemGroup>
+	<ItemGroup>
+		<!-- Framework reference for ASP.NET Core -->
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 
-  <!-- Include static assets as embedded resources -->
-  <ItemGroup>
-    <EmbeddedResource Include="wwwroot\**\*" />
-  </ItemGroup>
+		<PackageReference Include="SharedTools.Web" Version="1.0.2">
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
 
-  <!-- Local NuGet feed for development -->
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
-    <PackageOutputPath>C:\LocalNuGet</PackageOutputPath>
-  </PropertyGroup>
+		<!-- Your other dependencies (will be included in package) -->
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.26.0-beta.1" />
+	</ItemGroup>
+
+	<!-- Include static assets as embedded resources -->
+	<ItemGroup>
+		<EmbeddedResource Include="wwwroot\**\*" />
+	</ItemGroup>
+
+	<!-- Local NuGet feed for development -->
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<PackageOutputPath>C:\LocalNuGet</PackageOutputPath>
+	</PropertyGroup>
 
 </Project>
