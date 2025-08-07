@@ -1,6 +1,6 @@
 using SharedTools.Web.Modules;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = await Extn (args);
 
 // Core services
 builder.Services

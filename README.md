@@ -28,23 +28,19 @@ The Scoreboard application is built using a modular architecture that separates 
 
 ```
 Scoreboard/
-├── src/
-│   ├── Scoreboard.App/          # The scoreboard module
-│   │   ├── ScoreboardModule.cs  # Module entry point implementing IApplicationPartModule
-│   │   ├── ScoreboardApiMethods.cs # API endpoints for the module
-│   │   └── wwwroot/            # Static assets (HTML, CSS, JS, audio)
-│   │       ├── index.html      # Main scoreboard UI
-│   │       ├── app.js          # Client-side JavaScript
-│   │       ├── styles.css      # Styling
-│   │       ├── audio/          # Sound effects
-│   │       └── icons/          # UI icons
-│   │
-│   └── Scoreboard.Web/         # The host application
-│       └── Program.cs          # Minimal host for loading modules
-│
-├── MODULE_README.md            # SharedTools module system documentation
-├── MODULE_PUBLISH.md           # Guide for publishing modules to NuGet
-└── MODULE_MIGRATION.md         # Guide for converting projects to modules
+└── src/
+    ├── Scoreboard.App/          # The scoreboard module
+    │   ├── ScoreboardModule.cs  # Module entry point implementing IApplicationPartModule
+    │   ├── ScoreboardApiMethods.cs # API endpoints for the module
+    │   └── wwwroot/            # Static assets (HTML, CSS, JS, audio)
+    │       ├── index.html      # Main scoreboard UI
+    │       ├── app.js          # Client-side JavaScript
+    │       ├── styles.css      # Styling
+    │       ├── audio/          # Sound effects
+    │       └── icons/          # UI icons
+    │
+    └── Scoreboard.Web/         # The host application
+        └── Program.cs          # Minimal host for loading modules
 ```
 
 ## Quick Start

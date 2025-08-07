@@ -3,7 +3,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
-namespace Scoreboard;
+namespace SharedTools.Scoreboard;
 
 public class ScoreboardLogger { };
 

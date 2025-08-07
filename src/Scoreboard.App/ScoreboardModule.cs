@@ -10,7 +10,7 @@ using SharedTools.Web.Modules;
 
 using System.Threading.RateLimiting;
 
-namespace Scoreboard;
+namespace SharedTools.Scoreboard;
 
 public class ScoreboardModule : IApplicationPartModule
 {
@@ -72,7 +72,6 @@ public class ScoreboardModule : IApplicationPartModule
 
         // Map the module's home page
         app.MapGet("/Scoreboard/", () => Results.Redirect("/_content/Scoreboard/index.html"));
-        app.MapGet("/Scoreboard.App/", () => Results.Redirect("/Scoreboard/"));
 
         // Map API endpoints with module prefix
         app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory)
