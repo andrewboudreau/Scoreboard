@@ -16,11 +16,13 @@ public class ScoreboardModule : IApplicationPartModule
 {
     public string Name => "Scoreboard";
 
+    private static string htmlIndexContent = "";
+
     public void ConfigureServices(IServiceCollection services)
     {
         // Add HttpContextAccessor for the API methods
         services.AddHttpContextAccessor();
-        
+
         // Add Azure Blob Storage
         services.AddSingleton<BlobContainerClient>(provider =>
         {
@@ -71,7 +73,25 @@ public class ScoreboardModule : IApplicationPartModule
         app.UseRateLimiter();
 
         // Map the module's home page
-        app.MapGet("/Scoreboard/", () => Results.Redirect("/_content/Scoreboard/index.html"));
+        // map to the embedded resource directly as content
+        app.MapGet("/Scoreboard/", () =>
+        {
+            if (string.IsNullOrEmpty(htmlIndexContent))
+            {
+                var assembly = typeof(ScoreboardModule).Assembly;
+                var resourceName = "SharedTools.Scoreboard.wwwroot.index.html";
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+
+                if (stream is null)
+                {
+                    return Results.Problem("Scoreboard home page not found.", statusCode: 404);
+                }
+                using var reader = new StreamReader(stream);
+                htmlIndexContent = reader.ReadToEnd();
+            }
+
+            return Results.Content(htmlIndexContent, "text/html");
+        });
 
         // Map API endpoints with module prefix
         app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory)
