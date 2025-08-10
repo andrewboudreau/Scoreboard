@@ -15,7 +15,38 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="SharedTools.Web" Version="1.0.3" />
+		<PackageReference Include="SharedTools.Web" Version="1.0.4" />
 	</ItemGroup>
+
+	<!-- Custom target to clean SharedTools.Scoreboard packages from local NuGet cache -->
+	<Target Name="CleanLocalNuGetPackages" BeforeTargets="Clean">
+		<PropertyGroup>
+			<LocalNuGetPath>C:\LocalNuGet</LocalNuGetPath>
+			<PackagePattern>SharedTools.Scoreboard *.nupkg</PackagePattern>
+		</PropertyGroup>
+		
+		<Message Text="Checking for SharedTools.Scoreboard packages in $(LocalNuGetPath)..." Importance="normal" />
+		
+		<!-- Check if directory exists -->
+		<ItemGroup Condition="Exists('$(LocalNuGetPath)')">
+			<PackageFiles Include="$(LocalNuGetPath)\$(PackagePattern)" />
+		</ItemGroup>
+		
+		<!-- Delete packages if found -->
+		<Delete Files="@(PackageFiles)" Condition="'@(PackageFiles)' != ''" />
+		
+		<!-- Log results -->
+		<Message Text="Cleaned @(PackageFiles->Count()) SharedTools.Scoreboard package(s) from local NuGet cache." 
+		         Condition="'@(PackageFiles)' != ''" 
+		         Importance="normal" />
+		         
+		<Message Text="No SharedTools.Scoreboard packages found in local NuGet cache." 
+		         Condition="'@(PackageFiles)' == '' AND Exists('$(LocalNuGetPath)')" 
+		         Importance="normal" />
+		         
+		<Message Text="Local NuGet directory $(LocalNuGetPath) does not exist. Skipping cleanup." 
+		         Condition="!Exists('$(LocalNuGetPath)')" 
+		         Importance="normal" />
+	</Target>
 
 </Project>
