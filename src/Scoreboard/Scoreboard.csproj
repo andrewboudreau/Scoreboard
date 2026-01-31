@@ -8,6 +8,12 @@
 		
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+		
+		<!-- Ensure Razor views are compiled into the main assembly -->
+		<RazorCompileOnBuild>true</RazorCompileOnBuild>
+		<RazorCompileOnPublish>true</RazorCompileOnPublish>
+		<AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+		
 		<GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
 	</PropertyGroup>
 
@@ -15,7 +21,7 @@
 		<!-- Framework reference for ASP.NET Core -->
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 
-		<PackageReference Include="SharedTools.Web" Version="1.0.4">
+		<PackageReference Include="SharedTools.Web" Version="1.4.1">
 			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>
 
@@ -26,6 +32,12 @@
 	<!-- Include static assets as embedded resources -->
 	<ItemGroup>
 		<EmbeddedResource Include="wwwroot\**\*" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Content Include="Pages\Scoreboard\ManagePlayers.cshtml">
+	    <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+	    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+	  </Content>
 	</ItemGroup>
 
 	<!-- Local NuGet feed for development -->

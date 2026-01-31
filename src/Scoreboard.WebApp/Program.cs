@@ -2,12 +2,18 @@ using SharedTools.Web.Modules;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add Razor Pages support
+builder.Services.AddRazorPages();
+
 await builder.AddApplicationPartModules([
     "SharedTools.Scoreboard",
     "SharedTools.ModuleManagement"
 ]);
 
 var app = builder.Build();
+
+// Use Razor Pages
+app.MapRazorPages();
 
 app.UseApplicationPartModules();
 

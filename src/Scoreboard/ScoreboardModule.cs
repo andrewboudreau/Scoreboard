@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using Scoreboard.Services;
+
 using SharedTools.Web.Modules;
 
 using System.Threading.RateLimiting;
@@ -66,6 +68,9 @@ public class ScoreboardModule : IApplicationPartModule
 
             options.RejectionStatusCode = 429;
         });
+
+        // Register the default players service as singleton so it persists across requests
+        services.AddSingleton<IDefaultPlayersService, DefaultPlayersService>();
     }
 
     public void Configure(WebApplication app)
