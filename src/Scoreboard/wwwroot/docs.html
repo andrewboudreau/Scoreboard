@@ -652,24 +652,28 @@ Get the default player roster.
         });
 
         // ── Custom marked renderer ──
-        const renderer = new marked.Renderer();
-
-        renderer.code = function ({ text, lang }) {
-            if (lang === 'mermaid') {
-                return `<div class="mermaid">${text}</div>`;
+        marked.use({
+            gfm: true,
+            breaks: false,
+            renderer: {
+                code(text, lang) {
+                    text = text || '';
+                    lang = lang || '';
+                    if (lang === 'mermaid') {
+                        return `<div class="mermaid">${text}</div>`;
+                    }
+                    const highlighted = lang && hljs.getLanguage(lang)
+                        ? hljs.highlight(text, { language: lang }).value
+                        : hljs.highlightAuto(text).value;
+                    return `<pre><code class="hljs language-${lang}">${highlighted}</code></pre>`;
+                },
+                heading(text, level) {
+                    text = text || '';
+                    const id = text.replace(/<[^>]+>/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                    return `<h${level} id="${id}">${text}</h${level}>`;
+                }
             }
-            const highlighted = lang && hljs.getLanguage(lang)
-                ? hljs.highlight(text, { language: lang }).value
-                : hljs.highlightAuto(text).value;
-            return `<pre><code class="hljs language-${lang || ''}">${highlighted}</code></pre>`;
-        };
-
-        renderer.heading = function ({ text, depth }) {
-            const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-            return `<h${depth} id="${id}">${text}</h${depth}>`;
-        };
-
-        marked.setOptions({ renderer, breaks: false, gfm: true });
+        });
 
         // ── Render content ──
         const md = document.getElementById('doc-source').textContent;

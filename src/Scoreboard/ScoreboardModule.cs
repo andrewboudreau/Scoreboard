@@ -18,6 +18,7 @@ public class ScoreboardModule : IApplicationPartModule
 
     private static string htmlIndexContent = "";
     private static string htmlDocsContent = "";
+    private static string htmlManagePlayersContent = "";
 
     public void ConfigureServices(IServiceCollection services)
     {
@@ -93,12 +94,37 @@ public class ScoreboardModule : IApplicationPartModule
             return Results.Content(htmlDocsContent, "text/html");
         });
 
+        app.MapGet("/Scoreboard/ManagePlayers", () =>
+        {
+            if (string.IsNullOrEmpty(htmlManagePlayersContent))
+            {
+                var assembly = typeof(ScoreboardModule).Assembly;
+                var resourceName = "SharedTools.Scoreboard.wwwroot.manage-players.html";
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+
+                if (stream is null)
+                {
+                    return Results.Problem("Manage Players page not found.", statusCode: 404);
+                }
+                using var reader = new StreamReader(stream);
+                htmlManagePlayersContent = reader.ReadToEnd();
+            }
+
+            return Results.Content(htmlManagePlayersContent, "text/html");
+        });
+
         // Map API endpoints with module prefix
         app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory);
 
         app.MapGet("/Scoreboard/api/test-blob-connection", ScoreboardApiMethods.TestBlobClient);
 
         app.MapGet("/Scoreboard/api/default-players", ScoreboardApiMethods.GetDefaultPlayers);
+
+        // Player management endpoints
+        app.MapPost("/Scoreboard/api/default-players/move", ScoreboardApiMethods.MovePlayer);
+        app.MapPost("/Scoreboard/api/default-players/add", ScoreboardApiMethods.AddPlayer);
+        app.MapPost("/Scoreboard/api/default-players/delete", ScoreboardApiMethods.DeletePlayer);
+        app.MapPost("/Scoreboard/api/default-players/save", ScoreboardApiMethods.SaveDefaultPlayers);
 
         // Group management endpoints
         app.MapPost("/Scoreboard/api/groups", GroupApiMethods.CreateGroup);

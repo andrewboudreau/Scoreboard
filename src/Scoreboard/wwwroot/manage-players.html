@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Default Players</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .players-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+        .team-section {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 250px;
+            min-height: 300px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .team-section.drag-over {
+            border-color: #007bff;
+            background-color: #f0f8ff;
+        }
+        .team-section h3 {
+            margin: 0 0 15px 0;
+            padding: 10px;
+            text-align: center;
+            border-radius: 4px;
+            color: white;
+        }
+        .team1-header { background-color: #dc3545; }
+        .team2-header { background-color: #007bff; }
+        .noteam-header { background-color: #6c757d; }
+        .player-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            min-height: 200px;
+        }
+        .player-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            margin: 5px 0;
+            padding: 10px;
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+        .player-item:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .player-item.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
+        .player-item.inactive {
+            opacity: 0.6;
+            background: #f8f9fa;
+            border-style: dashed;
+        }
+        .player-name {
+            font-weight: bold;
+        }
+        .player-status {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .delete-btn:hover {
+            background: #c82333;
+        }
+        .add-player-form {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 1em;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        .actions {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .actions .btn {
+            margin: 0 10px;
+        }
+        .loading {
+            text-align: center;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Manage Default Players</h1>
+        <p>Drag and drop players between teams. Add new players or delete existing ones.</p>
+    </div>
+
+    <div class="players-container">
+        <div class="team-section" id="team1-section" data-team="1">
+            <h3 class="team1-header">Team 1</h3>
+            <ul id="team1-list" class="player-list"></ul>
+        </div>
+
+        <div class="team-section" id="team2-section" data-team="2">
+            <h3 class="team2-header">Team 2</h3>
+            <ul id="team2-list" class="player-list"></ul>
+        </div>
+
+        <div class="team-section" id="noteam-section" data-team="noteam">
+            <h3 class="noteam-header">No Team</h3>
+            <ul id="noteam-list" class="player-list"></ul>
+        </div>
+    </div>
+
+    <div class="add-player-form">
+        <h3>Add New Player</h3>
+        <form id="add-player-form">
+            <div class="form-group">
+                <label for="player-name">Player Name:</label>
+                <input type="text" id="player-name" name="playerName" required>
+            </div>
+            <div class="form-group">
+                <label for="player-team">Initial Team:</label>
+                <select id="player-team" name="playerTeam">
+                    <option value="noteam">No Team</option>
+                    <option value="1">Team 1</option>
+                    <option value="2">Team 2</option>
+                </select>
+            </div>
+            <button type="submit" class="btn">Add Player</button>
+        </form>
+    </div>
+
+    <div class="actions">
+        <button id="save-btn" class="btn btn-success">Save Default Players</button>
+        <button id="export-btn" class="btn">Export as JSON</button>
+        <a href="/Scoreboard/" class="btn">Back to Scoreboard</a>
+    </div>
+
+    <script>
+        let players = [];
+        let draggedPlayerId = null;
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                const res = await fetch('/Scoreboard/api/default-players');
+                if (res.ok) players = await res.json();
+            } catch (e) {
+                console.error('Failed to load players:', e);
+            }
+            renderPlayers();
+            setupEventListeners();
+        });
+
+        function renderPlayers() {
+            const team1List = document.getElementById('team1-list');
+            const team2List = document.getElementById('team2-list');
+            const noteamList = document.getElementById('noteam-list');
+
+            team1List.innerHTML = '';
+            team2List.innerHTML = '';
+            noteamList.innerHTML = '';
+
+            const sortedPlayers = players.sort((a, b) => a.name.localeCompare(b.name));
+
+            sortedPlayers.forEach(player => {
+                const listItem = createPlayerElement(player);
+
+                if (player.team === '1') {
+                    team1List.appendChild(listItem);
+                } else if (player.team === '2') {
+                    team2List.appendChild(listItem);
+                } else {
+                    noteamList.appendChild(listItem);
+                }
+            });
+        }
+
+        function createPlayerElement(player) {
+            const li = document.createElement('li');
+            li.className = 'player-item' + (player.active ? '' : ' inactive');
+            li.draggable = true;
+            li.dataset.playerId = player.id;
+
+            li.innerHTML = `
+                <div>
+                    <div class="player-name">${escapeHtml(player.name)}</div>
+                    <div class="player-status">${player.active ? 'Active' : 'Inactive'}</div>
+                </div>
+                <button class="delete-btn" onclick="deletePlayer(${player.id})" title="Delete player">X</button>
+            `;
+
+            li.addEventListener('dragstart', handleDragStart);
+            li.addEventListener('dragend', handleDragEnd);
+
+            return li;
+        }
+
+        function setupEventListeners() {
+            document.querySelectorAll('.team-section').forEach(section => {
+                section.addEventListener('dragover', handleDragOver);
+                section.addEventListener('drop', handleDrop);
+                section.addEventListener('dragenter', handleDragEnter);
+                section.addEventListener('dragleave', handleDragLeave);
+            });
+
+            document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
+            document.getElementById('save-btn').addEventListener('click', saveDefaultPlayers);
+            document.getElementById('export-btn').addEventListener('click', exportPlayers);
+        }
+
+        function handleDragStart(e) {
+            draggedPlayerId = parseInt(e.target.dataset.playerId);
+            e.target.classList.add('dragging');
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            draggedPlayerId = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDragEnter(e) {
+            if (e.target.classList.contains('team-section')) {
+                e.target.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            if (e.target.classList.contains('team-section') && !e.target.contains(e.relatedTarget)) {
+                e.target.classList.remove('drag-over');
+            }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const section = e.target.closest('.team-section');
+            if (section) {
+                section.classList.remove('drag-over');
+                const newTeam = section.dataset.team;
+                movePlayer(draggedPlayerId, newTeam);
+            }
+        }
+
+        async function movePlayer(playerId, newTeam) {
+            try {
+                const response = await fetch('/Scoreboard/api/default-players/move', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: playerId, team: newTeam })
+                });
+
+                if (response.ok) {
+                    const player = players.find(p => p.id === playerId);
+                    if (player) {
+                        player.team = newTeam;
+                        renderPlayers();
+                    }
+                } else {
+                    alert('Failed to move player');
+                }
+            } catch (error) {
+                console.error('Error moving player:', error);
+                alert('Error moving player');
+            }
+        }
+
+        async function deletePlayer(playerId) {
+            if (!confirm('Are you sure you want to delete this player?')) return;
+
+            try {
+                const response = await fetch('/Scoreboard/api/default-players/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: playerId })
+                });
+
+                if (response.ok) {
+                    players = players.filter(p => p.id !== playerId);
+                    renderPlayers();
+                } else {
+                    alert('Failed to delete player');
+                }
+            } catch (error) {
+                console.error('Error deleting player:', error);
+                alert('Error deleting player');
+            }
+        }
+
+        async function handleAddPlayer(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const name = formData.get('playerName').trim();
+            const team = formData.get('playerTeam');
+
+            if (!name) {
+                alert('Please enter a player name');
+                return;
+            }
+
+            try {
+                const response = await fetch('/Scoreboard/api/default-players/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, team: team })
+                });
+
+                if (response.ok) {
+                    const newPlayer = await response.json();
+                    players.push(newPlayer);
+                    renderPlayers();
+                    document.getElementById('player-name').value = '';
+                    document.getElementById('player-team').value = 'noteam';
+                } else {
+                    alert('Failed to add player');
+                }
+            } catch (error) {
+                console.error('Error adding player:', error);
+                alert('Error adding player');
+            }
+        }
+
+        async function saveDefaultPlayers() {
+            try {
+                const response = await fetch('/Scoreboard/api/default-players/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(players)
+                });
+
+                if (response.ok) {
+                    alert('Default players saved successfully!');
+                } else {
+                    alert('Failed to save default players');
+                }
+            } catch (error) {
+                console.error('Error saving players:', error);
+                alert('Error saving players');
+            }
+        }
+
+        function exportPlayers() {
+            const dataStr = JSON.stringify(players, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'default-players.json';
+            link.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
