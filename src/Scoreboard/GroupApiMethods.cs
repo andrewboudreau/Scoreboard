@@ -6,6 +6,9 @@ using Scoreboard.Services;
 
 namespace SharedTools.Scoreboard;
 
+/// <summary>
+/// Minimal API endpoints for group creation, joining, membership management, and SAS refresh.
+/// </summary>
 public static class GroupApiMethods
 {
     // POST /Scoreboard/api/groups

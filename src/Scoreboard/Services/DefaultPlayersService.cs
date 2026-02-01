@@ -4,15 +4,40 @@ using System.Threading; // Added for System.Threading.Lock
 
 namespace Scoreboard.Services;
 
+/// <summary>
+/// Provides access to an in-memory list of default players used to seed new scoreboards.
+/// </summary>
 public interface IDefaultPlayersService
 {
+    /// <summary>
+    /// Gets a copy of the current default players list.
+    /// </summary>
     Task<List<Player>> GetDefaultPlayersAsync();
+
+    /// <summary>
+    /// Replaces the current default players list.
+    /// </summary>
     Task SaveDefaultPlayersAsync(List<Player> players);
+
+    /// <summary>
+    /// Adds a new player to the default players list.
+    /// </summary>
     Task<Player> AddPlayerAsync(string name, string team);
+
+    /// <summary>
+    /// Moves an existing player to a different team.
+    /// </summary>
     Task<bool> MovePlayerAsync(long id, string team);
+
+    /// <summary>
+    /// Deletes a player from the default players list.
+    /// </summary>
     Task<bool> DeletePlayerAsync(long id);
 }
 
+/// <summary>
+/// In-memory implementation of <see cref="IDefaultPlayersService"/> with a pre-seeded player list.
+/// </summary>
 public class DefaultPlayersService : IDefaultPlayersService
 {
     private readonly List<Player> defaultPlayers;

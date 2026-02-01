@@ -9,17 +9,66 @@ using System.Text.Json;
 
 namespace Scoreboard.Services;
 
+/// <summary>
+/// Group and membership management APIs backed by Azure Blob Storage.
+/// </summary>
 public interface IGroupService
 {
+    /// <summary>
+    /// Creates a new group with the provided display name and a new admin access code.
+    /// </summary>
+    /// <param name="name">The friendly name of the group.</param>
+    /// <returns>The newly created group.</returns>
     Task<Group> CreateGroupAsync(string name);
+
+    /// <summary>
+    /// Gets a group by its unique identifier.
+    /// </summary>
+    /// <param name="groupId">The group identifier.</param>
+    /// <returns>The group if found; otherwise <see langword="null"/>.</returns>
     Task<Group?> GetGroupByIdAsync(string groupId);
+
+    /// <summary>
+    /// Gets a group by its admin access code.
+    /// </summary>
+    /// <param name="adminCode">The admin code provided to the caller.</param>
+    /// <returns>The group if found; otherwise <see langword="null"/>.</returns>
     Task<Group?> GetGroupByAdminCodeAsync(string adminCode);
+
+    /// <summary>
+    /// Gets a group and member entry by a member access code.
+    /// </summary>
+    /// <param name="memberCode">The member code provided to the caller.</param>
+    /// <returns>The group and matching member entry if found; otherwise <see langword="null"/>.</returns>
     Task<(Group Group, MemberAccess Member)?> GetGroupByMemberCodeAsync(string memberCode);
+
+    /// <summary>
+    /// Adds a new member access entry to a group.
+    /// </summary>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="label">A friendly label for the member.</param>
+    /// <returns>The created member access entry.</returns>
     Task<MemberAccess> AddMemberAsync(string groupId, string label);
+
+    /// <summary>
+    /// Revokes (deactivates) a member access code for a group.
+    /// </summary>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="memberCode">The member code to revoke.</param>
+    /// <returns><see langword="true"/> if the member was found and revoked; otherwise <see langword="false"/>.</returns>
     Task<bool> RevokeMemberAsync(string groupId, string memberCode);
+
+    /// <summary>
+    /// Generates SAS URLs for the backing blob container.
+    /// </summary>
+    /// <param name="canWrite">Whether the returned token set should include write access.</param>
+    /// <returns>A read-only SAS URL and (optionally) a write-enabled SAS URL.</returns>
     SasTokenSet GenerateSasUrls(bool canWrite);
 }
 
+/// <summary>
+/// Stores and retrieves group metadata from Azure Blob Storage and generates SAS URLs for client access.
+/// </summary>
 public class GroupService : IGroupService
 {
     private readonly BlobContainerClient _containerClient;
