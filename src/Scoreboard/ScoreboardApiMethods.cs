@@ -2,6 +2,7 @@
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using Scoreboard.Services;
 using System.Text.Json;
 
 namespace SharedTools.Scoreboard;
@@ -16,17 +17,28 @@ public static class ScoreboardApiMethods
         {
             ArgumentNullException.ThrowIfNull(contextAccessor.HttpContext);
 
-            MemoryStream? stream = await SafeReadSmallRequestBody(contextAccessor.HttpContext.Request);
+            using MemoryStream? stream = await SafeReadSmallRequestBody(contextAccessor.HttpContext.Request);
             if (stream is null)
             {
                 return Results.Problem(detail: "Invalid History Data.", statusCode: 400, title: "Bad Request");
             }
 
+            // Validate that the body is valid JSON
+            try
+            {
+                using var doc = JsonDocument.Parse(stream);
+            }
+            catch (JsonException)
+            {
+                return Results.Problem(detail: "Request body is not valid JSON.", statusCode: 400, title: "Bad Request");
+            }
+
+            stream.Position = 0;
+
             var filename = $"score-history-{DateTime.UtcNow:yyyy-MM-dd-HH-mm-ss}.json";
             var blobClientInstance = blobClient.GetBlobClient(filename);
 
             await blobClientInstance.UploadAsync(stream, overwrite: true);
-            await stream.DisposeAsync();
 
             return Results.Ok(new { filename });
         }
@@ -60,27 +72,9 @@ public static class ScoreboardApiMethods
         }
     }
 
-    public static IResult GetDefaultPlayers()
+    public static async Task<IResult> GetDefaultPlayers(IDefaultPlayersService defaultPlayersService)
     {
-        // Return the embedded default players data in the format expected by the JavaScript
-        var defaultPlayers = new[]
-        {
-            new { id = 1742075931014L, name = "Andrew", team = "2", active = true, points = 0 },
-            new { id = 1742075931914L, name = "Seth", team = "2", active = true, points = 0 },
-            new { id = 1742075933790L, name = "Jason", team = "1", active = true, points = 0 },
-            new { id = 1742075935050L, name = "Nate", team = "2", active = true, points = 0 },
-            new { id = 1742075939280L, name = "Joe", team = "1", active = false, points = 0 },
-            new { id = 1742075941065L, name = "Ryan", team = "1", active = true, points = 0 },
-            new { id = 1742075943344L, name = "JD", team = "1", active = true, points = 0 },
-            new { id = 1742075954745L, name = "Frank", team = "2", active = true, points = 0 },
-            new { id = 1742075979391L, name = "Ricardo", team = "1", active = true, points = 0 },
-            new { id = 1742075987612L, name = "Nick", team = "2", active = true, points = 0 },
-            new { id = 1742076001247L, name = "Loukas", team = "1", active = true, points = 0 },
-            new { id = 1742076029522L, name = "Adam", team = "2", active = false, points = 0 },
-            new { id = 1742267332075L, name = "Rodney", team = "1", active = true, points = 0 },
-            new { id = 1742267457728L, name = "Mark", team = "2", active = true, points = 0 }
-        };
-
+        var defaultPlayers = await defaultPlayersService.GetDefaultPlayersAsync();
         return Results.Json(defaultPlayers);
     }
 

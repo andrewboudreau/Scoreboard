@@ -6,6 +6,7 @@ using Scoreboard.Services;
 
 namespace Scoreboard.Pages;
 
+[IgnoreAntiforgeryToken]
 public class ManagePlayersModel : PageModel
 {
     private readonly IDefaultPlayersService defaultPlayersService;

@@ -34,6 +34,9 @@
             <div class="score-history" id="score-history"></div>
         </div>
         <div class="control-buttons">
+            <button id="weekly-btn" class="control-btn" title="Weekly Setup">
+                <span style="font-size: 18px; font-weight: bold;">W</span>
+            </button>
             <button id="players-btn" class="control-btn">
                 <img src="/_content/Scoreboard/icons/players.svg" alt="Players Icon" width="24" height="24">
             </button>
@@ -107,6 +110,24 @@
                     <input type="checkbox" id="keep-screen-on"> Keep screen on (prevents device sleep)
                 </label>
             </div>
+            <div class="settings-group" id="group-section">
+                <label>Group</label>
+                <div id="group-info" style="display: none;">
+                    <div class="help-text">Connected to: <strong id="group-name-display"></strong>
+                        <span id="group-admin-badge" style="display: none; color: #69db7c;">(Admin)</span>
+                    </div>
+                    <div class="help-text">Code: <strong id="group-code-display"></strong></div>
+                    <button id="share-group-btn">Share Link</button>
+                    <button id="leave-group-btn">Leave Group</button>
+                </div>
+                <div id="group-join">
+                    <div class="group-join-row">
+                        <input type="text" id="group-code-input" placeholder="Enter group code...">
+                        <button id="join-group-btn">Join</button>
+                    </div>
+                    <button id="create-group-btn">Create Group</button>
+                </div>
+            </div>
             <div class="settings-group">
                 <label>Player Management</label>
                 <div class="help-text">Configure default players used across all sessions.</div>
@@ -117,6 +138,20 @@
                 <div class="help-text">Score history will be automatically uploaded to Azure Blob Storage.</div>
                 <button id="test-blob-storage-btn">Test Connection</button>
                 <div id="upload-status">Last upload: Never</div>
+            </div>
+        </div>
+
+        <div id="weekly-panel" class="side-panel">
+            <h3 style="margin-bottom: 10px; text-align: center;">Weekly Setup</h3>
+            <div class="settings-group">
+                <label for="weekly-date-input">Game Date</label>
+                <input type="date" id="weekly-date-input" style="width: 100%;">
+            </div>
+            <div id="weekly-roster"></div>
+            <div class="weekly-actions">
+                <button id="randomize-teams-btn">Randomize</button>
+                <button id="publish-weekly-btn">Publish</button>
+                <button id="apply-teams-btn">Apply to Board</button>
             </div>
         </div>
     </div>

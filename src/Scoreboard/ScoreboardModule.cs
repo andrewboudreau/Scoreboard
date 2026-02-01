@@ -10,8 +10,6 @@ using Scoreboard.Services;
 
 using SharedTools.Web.Modules;
 
-using System.Threading.RateLimiting;
-
 namespace SharedTools.Scoreboard;
 
 public class ScoreboardModule : IApplicationPartModule
@@ -19,6 +17,7 @@ public class ScoreboardModule : IApplicationPartModule
     public string Name => "Scoreboard";
 
     private static string htmlIndexContent = "";
+    private static string htmlDocsContent = "";
 
     public void ConfigureServices(IServiceCollection services)
     {
@@ -45,38 +44,15 @@ public class ScoreboardModule : IApplicationPartModule
             return containerClient;
         });
 
-        // Add Rate Limiter
-        services.AddRateLimiter(options =>
-        {
-            options.AddPolicy("ScoreboardEndpoints", httpContext =>
-            {
-                // Only apply rate limiting for paths that start with "/Scoreboard"
-                if (httpContext.Request.Path.StartsWithSegments("/Scoreboard"))
-                {
-                    return RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        factory: partition => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = 6,
-                            Window = TimeSpan.FromMinutes(1)
-                        });
-                }
-
-                // Skip rate limiting for other paths
-                return RateLimitPartition.GetNoLimiter("default");
-            });
-
-            options.RejectionStatusCode = 429;
-        });
-
         // Register the default players service as singleton so it persists across requests
         services.AddSingleton<IDefaultPlayersService, DefaultPlayersService>();
+
+        // Register the group service for shared state management
+        services.AddSingleton<IGroupService, GroupService>();
     }
 
     public void Configure(WebApplication app)
     {
-        app.UseRateLimiter();
-
         // Map the module's home page
         // map to the embedded resource directly as content
         app.MapGet("/Scoreboard/", () =>
@@ -98,12 +74,38 @@ public class ScoreboardModule : IApplicationPartModule
             return Results.Content(htmlIndexContent, "text/html");
         });
 
-        // Map API endpoints with module prefix
-        app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory)
-            .RequireRateLimiting("ScoreboardEndpoints");
+        app.MapGet("/Scoreboard/docs", () =>
+        {
+            if (string.IsNullOrEmpty(htmlDocsContent))
+            {
+                var assembly = typeof(ScoreboardModule).Assembly;
+                var resourceName = "SharedTools.Scoreboard.wwwroot.docs.html";
+                using var stream = assembly.GetManifestResourceStream(resourceName);
 
-        app.MapGet("/Scoreboard/api/test-blob-connection", ScoreboardApiMethods.TestBlobClient)
-            .RequireRateLimiting("ScoreboardEndpoints");
+                if (stream is null)
+                {
+                    return Results.Problem("Scoreboard docs page not found.", statusCode: 404);
+                }
+                using var reader = new StreamReader(stream);
+                htmlDocsContent = reader.ReadToEnd();
+            }
+
+            return Results.Content(htmlDocsContent, "text/html");
+        });
+
+        // Map API endpoints with module prefix
+        app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory);
+
+        app.MapGet("/Scoreboard/api/test-blob-connection", ScoreboardApiMethods.TestBlobClient);
+
+        app.MapGet("/Scoreboard/api/default-players", ScoreboardApiMethods.GetDefaultPlayers);
+
+        // Group management endpoints
+        app.MapPost("/Scoreboard/api/groups", GroupApiMethods.CreateGroup);
+        app.MapGet("/Scoreboard/api/groups/join", GroupApiMethods.JoinGroup);
+        app.MapPost("/Scoreboard/api/groups/{id}/members", GroupApiMethods.AddMember);
+        app.MapDelete("/Scoreboard/api/groups/{id}/members/{code}", GroupApiMethods.RevokeMember);
+        app.MapGet("/Scoreboard/api/groups/{id}/sas/refresh", GroupApiMethods.RefreshSas);
     }
 
     public void ConfigureApplicationParts(ApplicationPartManager partManager)

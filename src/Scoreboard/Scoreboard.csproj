@@ -26,7 +26,7 @@
 		</PackageReference>
 
 		<!-- Your other dependencies (will be included in package) -->
-		<PackageReference Include="Azure.Storage.Blobs" Version="12.26.0-beta.1" />
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
 	</ItemGroup>
 
 	<!-- Include static assets as embedded resources -->

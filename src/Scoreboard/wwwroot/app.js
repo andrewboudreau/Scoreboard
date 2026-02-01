@@ -1,4 +1,122 @@
-﻿
+
+class BlobSync {
+    constructor(app) {
+        this.app = app;
+        this.groupId = null;
+        this.groupName = null;
+        this.isAdmin = false;
+        this.readUrl = null;
+        this.writeUrl = null;
+        this.code = null;
+        this.saveTimeouts = {};
+    }
+
+    get isConnected() {
+        return this.groupId !== null && this.readUrl !== null;
+    }
+
+    async join(code) {
+        const response = await fetch(`/Scoreboard/api/groups/join?code=${encodeURIComponent(code)}`);
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || 'Invalid code');
+        }
+        const data = await response.json();
+        this.groupId = data.groupId;
+        this.groupName = data.groupName;
+        this.isAdmin = data.isAdmin;
+        this.readUrl = data.sasUrls.readUrl;
+        this.writeUrl = data.sasUrls.writeUrl;
+        this.code = code;
+        localStorage.setItem('groupCode', code);
+    }
+
+    async createGroup(name) {
+        const response = await fetch('/Scoreboard/api/groups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        if (!response.ok) throw new Error('Failed to create group');
+        const data = await response.json();
+        await this.join(data.adminCode);
+        return data;
+    }
+
+    leave() {
+        this.groupId = null;
+        this.groupName = null;
+        this.isAdmin = false;
+        this.readUrl = null;
+        this.writeUrl = null;
+        this.code = null;
+        localStorage.removeItem('groupCode');
+    }
+
+    // Build blob URL: insert groupId/path into the container SAS URL
+    _blobUrl(sasUrl, path) {
+        const url = new URL(sasUrl);
+        url.pathname += '/' + this.groupId + '/' + path;
+        return url.toString();
+    }
+
+    // Get fresh SAS URLs from the server (code is the anti-forgery token)
+    async _refreshSas() {
+        try {
+            const res = await fetch(
+                `/Scoreboard/api/groups/${this.groupId}/sas/refresh?code=${encodeURIComponent(this.code)}`
+            );
+            if (!res.ok) return false;
+            const data = await res.json();
+            this.readUrl = data.readUrl;
+            this.writeUrl = data.writeUrl;
+            return true;
+        } catch { return false; }
+    }
+
+    async download(path) {
+        if (!this.isConnected) return null;
+        try {
+            let res = await fetch(this._blobUrl(this.readUrl, path));
+            if (res.status === 403 && await this._refreshSas()) {
+                res = await fetch(this._blobUrl(this.readUrl, path));
+            }
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (e) {
+            console.error(`BlobSync: download ${path} failed`, e);
+            return null;
+        }
+    }
+
+    async upload(path, data) {
+        if (!this.isConnected || !this.writeUrl) return false;
+        const opts = {
+            method: 'PUT',
+            headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        };
+        try {
+            let res = await fetch(this._blobUrl(this.writeUrl, path), opts);
+            if (res.status === 403 && await this._refreshSas()) {
+                res = await fetch(this._blobUrl(this.writeUrl, path), opts);
+            }
+            return res.ok;
+        } catch (e) {
+            console.error(`BlobSync: upload ${path} failed`, e);
+            return false;
+        }
+    }
+
+    debouncedUpload(path, data, delayMs = 3000) {
+        if (this.saveTimeouts[path]) clearTimeout(this.saveTimeouts[path]);
+        this.saveTimeouts[path] = setTimeout(() => {
+            this.upload(path, data);
+            delete this.saveTimeouts[path];
+        }, delayMs);
+    }
+}
+
 class ScoreboardApp {
     constructor() {
         // Initialize components
@@ -7,6 +125,8 @@ class ScoreboardApp {
         this.players = new Players(this);
         this.settings = new Settings(this);
         this.ui = new UI(this);
+        this.blobSync = new BlobSync(this);
+        this.weeklySetup = new WeeklySetup(this);
 
         // Global state
         this.periodScores = [];
@@ -20,6 +140,7 @@ class ScoreboardApp {
 
         // Initialize app
         this.loadSavedSettings();
+        this.initGroupConnection();
     }
 
     // Load saved settings from localStorage
@@ -85,10 +206,130 @@ class ScoreboardApp {
         }
     }
 
+    // Check URL or localStorage for a group code and auto-join
+    async initGroupConnection() {
+        const urlParams = new URLSearchParams(window.location.search);
+        let code = urlParams.get('code');
+
+        if (!code && window.location.hash) {
+            code = window.location.hash.substring(1);
+        }
+
+        if (!code) {
+            code = localStorage.getItem('groupCode');
+        }
+
+        if (code) {
+            try {
+                await this.blobSync.join(code);
+                if (urlParams.has('code') || window.location.hash) {
+                    history.replaceState(null, '', window.location.pathname);
+                }
+                this.settings.updateGroupUI();
+                await this.loadGroupData();
+            } catch (e) {
+                console.error('Failed to join group:', e);
+                localStorage.removeItem('groupCode');
+            }
+        }
+    }
+
+    // Download group data (roster, weekly config, active game) from blob
+    async loadGroupData() {
+        if (!this.blobSync.isConnected) return;
+
+        // Load roster
+        const roster = await this.blobSync.download('roster.json');
+        if (roster && roster.players) {
+            this.playersList = roster.players;
+            localStorage.setItem('playersList', JSON.stringify(this.playersList));
+            if (this.players) {
+                this.players.updatePlayersList();
+                this.players.updatePlayersDisplay();
+            }
+        }
+
+        // Load current week's config
+        const date = this.weeklySetup.getDefaultDate();
+        const weekConfig = await this.blobSync.download(`week/${date}.json`);
+        if (weekConfig) {
+            this.weeklySetup.available = new Set(weekConfig.available || []);
+            this.weeklySetup.teams = weekConfig.teams || { white: [], black: [] };
+            this.weeklySetup.forced = weekConfig.forced || [];
+            this.weeklySetup.dateInput.value = date;
+        }
+
+        // Load active game state
+        const gameId = `game-${date}`;
+        const gameState = await this.blobSync.download(`games/${gameId}.json`);
+        if (gameState) {
+            this.teams.team1Points = gameState.team1?.score || 0;
+            this.teams.team2Points = gameState.team2?.score || 0;
+            this.teams.updateScoreDisplay();
+            if (gameState.team1?.name) this.teams.team1NameElement.textContent = gameState.team1.name;
+            if (gameState.team2?.name) this.teams.team2NameElement.textContent = gameState.team2.name;
+            this.periodScores = gameState.periodScores || [];
+            this.ui.updateScoreHistory();
+        }
+    }
+
+    // Get the current game ID based on weekly date
+    get currentGameId() {
+        const date = this.weeklySetup.dateInput.value || new Date().toISOString().split('T')[0];
+        return `game-${date}`;
+    }
+
+    // Sync current game state to blob
+    syncGameState() {
+        if (!this.blobSync.isConnected) return;
+
+        const state = {
+            id: this.currentGameId,
+            weekDate: this.weeklySetup.dateInput.value,
+            team1: {
+                name: this.teams.team1NameElement.textContent,
+                score: this.teams.team1Points
+            },
+            team2: {
+                name: this.teams.team2NameElement.textContent,
+                score: this.teams.team2Points
+            },
+            period: this.periodScores.length + 1,
+            periodScores: this.periodScores,
+            timerMinutes: parseInt(this.settings.timerMinutesInput.value),
+            players: this.playersList
+        };
+
+        this.blobSync.debouncedUpload(`games/${this.currentGameId}.json`, state, 5000);
+    }
+
+    // Sync event log to blob
+    syncEventLog() {
+        if (!this.blobSync.isConnected || this.scoreHistory.length === 0) return;
+
+        const events = this.scoreHistory.map(entry => ({
+            timestamp: entry.timestamp,
+            type: 'score',
+            teamNumber: entry.teamNumber,
+            playerName: entry.playerName || null,
+            action: entry.action,
+            scores: {
+                team1: entry.team1Score,
+                team2: entry.team2Score
+            },
+            team1Name: entry.team1Name,
+            team2Name: entry.team2Name,
+            timerCurrent: entry.timerCurrent
+        }));
+
+        this.blobSync.debouncedUpload(`games/${this.currentGameId}-events.json`, { events }, 5000);
+    }
+
     // Capture score at end of timer
     captureScore() {
         this.periodScores.push(`${this.teams.team1Points} - ${this.teams.team2Points}`);
         this.ui.updateScoreHistory();
+        this.syncGameState();
     }
 
     // Reset score history
@@ -129,6 +370,10 @@ class ScoreboardApp {
         
         // Schedule upload after 10 seconds of inactivity
         this.uploadScoreHistory();
+
+        // Sync game state and events to blob
+        this.syncGameState();
+        this.syncEventLog();
     }
     
     // Upload score history to blob storage
@@ -160,7 +405,7 @@ class ScoreboardApp {
         console.log('Uploading score history to server');
         
         // Upload the data to our API endpoint
-        fetch('/scoreboard/upload-history', {
+        fetch('/Scoreboard/api/upload-history', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -493,6 +738,18 @@ class Settings {
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
         this.testBlobStorageBtn = document.getElementById('test-blob-storage-btn');
 
+        // Group elements
+        this.groupInfoDiv = document.getElementById('group-info');
+        this.groupJoinDiv = document.getElementById('group-join');
+        this.groupNameDisplay = document.getElementById('group-name-display');
+        this.groupCodeDisplay = document.getElementById('group-code-display');
+        this.groupAdminBadge = document.getElementById('group-admin-badge');
+        this.groupCodeInput = document.getElementById('group-code-input');
+        this.joinGroupBtn = document.getElementById('join-group-btn');
+        this.createGroupBtn = document.getElementById('create-group-btn');
+        this.shareGroupBtn = document.getElementById('share-group-btn');
+        this.leaveGroupBtn = document.getElementById('leave-group-btn');
+
         // Initialize
         this.updateInputsFromCurrent();
         this.setupEventListeners();
@@ -577,6 +834,23 @@ class Settings {
         this.testBlobStorageBtn.addEventListener('click', () => {
             this.testBlobStorageConnection();
         });
+
+        // Manage default players button
+        const manageDefaultPlayersBtn = document.getElementById('manage-default-players-btn');
+        if (manageDefaultPlayersBtn) {
+            manageDefaultPlayersBtn.addEventListener('click', () => {
+                window.location.href = '/Scoreboard/ManagePlayers';
+            });
+        }
+
+        // Group management
+        this.joinGroupBtn.addEventListener('click', () => this.handleJoinGroup());
+        this.createGroupBtn.addEventListener('click', () => this.handleCreateGroup());
+        this.shareGroupBtn.addEventListener('click', () => this.handleShareGroup());
+        this.leaveGroupBtn.addEventListener('click', () => this.handleLeaveGroup());
+        this.groupCodeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleJoinGroup();
+        });
     }
 
     toggle() {
@@ -585,9 +859,9 @@ class Settings {
     
     testBlobStorageConnection() {
         console.log('Testing blob storage connection via server API');
-        
+
         // Test the connection using our API endpoint
-        fetch('/scoreboard/test-blob-connection')
+        fetch('/Scoreboard/api/test-blob-connection')
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
@@ -601,6 +875,68 @@ class Settings {
                 console.error('Error testing blob storage connection:', error);
                 alert(`Connection test failed: ${error.message}`);
             });
+    }
+
+    updateGroupUI() {
+        if (this.app.blobSync.isConnected) {
+            this.groupInfoDiv.style.display = 'block';
+            this.groupJoinDiv.style.display = 'none';
+            this.groupNameDisplay.textContent = this.app.blobSync.groupName;
+            this.groupCodeDisplay.textContent = this.app.blobSync.code;
+            this.groupAdminBadge.style.display = this.app.blobSync.isAdmin ? 'inline' : 'none';
+        } else {
+            this.groupInfoDiv.style.display = 'none';
+            this.groupJoinDiv.style.display = 'block';
+        }
+    }
+
+    async handleJoinGroup() {
+        const code = this.groupCodeInput.value.trim();
+        if (!code) return;
+
+        try {
+            await this.app.blobSync.join(code);
+            this.updateGroupUI();
+            await this.app.loadGroupData();
+            this.groupCodeInput.value = '';
+        } catch (e) {
+            alert('Failed to join group: ' + e.message);
+        }
+    }
+
+    async handleCreateGroup() {
+        const name = prompt('Enter group name:');
+        if (!name) return;
+
+        try {
+            const data = await this.app.blobSync.createGroup(name);
+            this.updateGroupUI();
+            // Upload current roster to the new group
+            if (this.app.playersList.length > 0) {
+                await this.app.blobSync.upload('roster.json', { players: this.app.playersList });
+            }
+            alert(`Group created!\nAdmin code: ${data.adminCode}\nShare this code with your group.`);
+        } catch (e) {
+            alert('Failed to create group: ' + e.message);
+        }
+    }
+
+    handleShareGroup() {
+        if (!this.app.blobSync.isConnected) return;
+
+        const url = `${window.location.origin}${window.location.pathname}?code=${this.app.blobSync.code}`;
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Share link copied to clipboard!');
+        }).catch(() => {
+            prompt('Copy this link:', url);
+        });
+    }
+
+    handleLeaveGroup() {
+        if (confirm('Leave this group? You will need the code to rejoin.')) {
+            this.app.blobSync.leave();
+            this.updateGroupUI();
+        }
     }
 }
 
@@ -675,6 +1011,13 @@ class Players {
         this.updatePlayersList();
     }
 
+    savePlayersState() {
+        localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+        if (this.app.blobSync.isConnected) {
+            this.app.blobSync.debouncedUpload('roster.json', { players: this.app.playersList });
+        }
+    }
+
     addPlayer() {
         const playerName = this.playerNameInput.value.trim();
 
@@ -691,8 +1034,8 @@ class Players {
             // Add to players list
             this.app.playersList.push(newPlayer);
 
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            // Save state (localStorage + blob sync)
+            this.savePlayersState();
 
             // Update the UI
             this.updatePlayersList();
@@ -712,8 +1055,8 @@ class Players {
             // Remove the player
             this.app.playersList.splice(playerIndex, 1);
 
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            // Save state (localStorage + blob sync)
+            this.savePlayersState();
 
             // Update the UI
             this.updatePlayersList();
@@ -729,8 +1072,8 @@ class Players {
             // Update active status
             player.active = isActive;
 
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            // Save state (localStorage + blob sync)
+            this.savePlayersState();
 
             // Update the players display
             this.updatePlayersDisplay();
@@ -745,8 +1088,8 @@ class Players {
             // Update points
             player.points = parseInt(points) || 0;
 
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            // Save state (localStorage + blob sync)
+            this.savePlayersState();
 
             // Update the players display
             this.updatePlayersDisplay();
@@ -773,8 +1116,8 @@ class Players {
             // Record the score change with player name
             this.app.recordScoreChange(parseInt(player.team), true, player.name);
 
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            // Save state (localStorage + blob sync)
+            this.savePlayersState();
 
             // Update the players display and list
             this.updatePlayersDisplay();
@@ -857,8 +1200,8 @@ class Players {
             // Update team
             player.team = teamNumber;
 
-            // Save to localStorage
-            localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+            // Save state (localStorage + blob sync)
+            this.savePlayersState();
 
             // Update the players display
             this.updatePlayersDisplay();
@@ -920,7 +1263,7 @@ class Players {
             }
 
             // Fetch the default players from JSON file
-            fetch('default-players.json')
+            fetch('/Scoreboard/api/default-players')
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -972,8 +1315,8 @@ class Players {
         // Replace the current players list
         this.app.playersList = parsedData;
 
-        // Save to localStorage
-        localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+        // Save state (localStorage + blob sync)
+        this.savePlayersState();
 
         // Update the UI
         this.updatePlayersList();
@@ -1098,9 +1441,9 @@ class Players {
                         
                         // Record the score change with player name
                         this.app.recordScoreChange(parseInt(player.team), false, player.name);
-                        
-                        // Save to localStorage
-                        localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+
+                        // Save state (localStorage + blob sync)
+                        this.savePlayersState();
                         // Update the players display
                         this.updatePlayersDisplay();
                     }
@@ -1130,9 +1473,9 @@ class Players {
                     
                     // Record the score change with player name
                     this.app.recordScoreChange(parseInt(player.team), true, player.name);
-                    
-                    // Save to localStorage
-                    localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
+
+                    // Save state (localStorage + blob sync)
+                    this.savePlayersState();
                     // Update the players display
                     this.updatePlayersDisplay();
                 });
@@ -1228,6 +1571,233 @@ class UI {
         this.app.timer.timerDisplay.style.fontSize = `${value}rem`;
         document.getElementById('timer-font-size-value').textContent = value;
         localStorage.setItem('timerFontSize', value);
+    }
+}
+
+class WeeklySetup {
+    constructor(app) {
+        this.app = app;
+
+        this.weeklyBtn = document.getElementById('weekly-btn');
+        this.weeklyPanel = document.getElementById('weekly-panel');
+        this.dateInput = document.getElementById('weekly-date-input');
+        this.rosterContainer = document.getElementById('weekly-roster');
+        this.randomizeBtn = document.getElementById('randomize-teams-btn');
+        this.publishBtn = document.getElementById('publish-weekly-btn');
+        this.applyBtn = document.getElementById('apply-teams-btn');
+
+        this.available = new Set();
+        this.teams = { white: [], black: [] };
+        this.forced = [];
+
+        this.dateInput.value = this.getDefaultDate();
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        this.weeklyBtn.addEventListener('click', () => this.toggle());
+        this.randomizeBtn.addEventListener('click', () => this.randomizeTeams());
+        this.publishBtn.addEventListener('click', () => this.publish());
+        this.applyBtn.addEventListener('click', () => this.applyToScoreboard());
+        this.dateInput.addEventListener('change', () => this.loadWeekConfig());
+
+        document.addEventListener('click', (e) => {
+            if (!this.weeklyPanel.contains(e.target) &&
+                e.target !== this.weeklyBtn &&
+                !this.weeklyBtn.contains(e.target)) {
+                this.weeklyPanel.classList.remove('active');
+            }
+        });
+    }
+
+    toggle() {
+        this.weeklyPanel.classList.toggle('active');
+        document.getElementById('settings-panel').classList.remove('active');
+        document.getElementById('players-panel').classList.remove('active');
+        if (this.weeklyPanel.classList.contains('active')) {
+            this.render();
+        }
+    }
+
+    getDefaultDate() {
+        const today = new Date();
+        const day = today.getDay();
+        const offset = day === 5 ? 0 : (5 - day + 7) % 7;
+        const target = new Date(today);
+        target.setDate(today.getDate() + offset);
+        return target.toISOString().split('T')[0];
+    }
+
+    async loadWeekConfig() {
+        const date = this.dateInput.value;
+        if (!date) return;
+
+        if (this.app.blobSync.isConnected) {
+            const config = await this.app.blobSync.download(`week/${date}.json`);
+            if (config) {
+                this.available = new Set(config.available || []);
+                this.teams = config.teams || { white: [], black: [] };
+                this.forced = config.forced || [];
+                this.render();
+                return;
+            }
+        }
+
+        // No saved config - default all players available
+        this.available = new Set(this.app.playersList.map(p => p.id));
+        this.teams = { white: [], black: [] };
+        this.forced = [];
+        this.render();
+    }
+
+    render() {
+        this.rosterContainer.innerHTML = '';
+
+        const players = [...this.app.playersList].sort((a, b) =>
+            a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+        players.forEach(player => {
+            const row = document.createElement('div');
+            row.className = 'weekly-player-row';
+
+            const isAvail = this.available.has(player.id);
+            const forcedEntry = this.forced.find(f => f.playerId === player.id);
+            const team = this.teams.white.includes(player.id) ? 'White' :
+                         this.teams.black.includes(player.id) ? 'Black' : '';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = isAvail;
+            cb.className = 'weekly-checkbox';
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    this.available.add(player.id);
+                } else {
+                    this.available.delete(player.id);
+                    this.teams.white = this.teams.white.filter(id => id !== player.id);
+                    this.teams.black = this.teams.black.filter(id => id !== player.id);
+                    this.forced = this.forced.filter(f => f.playerId !== player.id);
+                }
+                this.render();
+            });
+
+            const name = document.createElement('span');
+            name.className = 'weekly-player-name';
+            name.textContent = player.name;
+            if (!isAvail) name.style.opacity = '0.4';
+
+            const pin = document.createElement('select');
+            pin.className = 'weekly-pin';
+            pin.disabled = !isAvail;
+            [{ v: '', t: '\u2014' }, { v: 'white', t: 'Pin W' }, { v: 'black', t: 'Pin B' }].forEach(o => {
+                const opt = document.createElement('option');
+                opt.value = o.v;
+                opt.textContent = o.t;
+                if (forcedEntry && forcedEntry.team === o.v) opt.selected = true;
+                pin.appendChild(opt);
+            });
+            pin.addEventListener('change', () => {
+                this.forced = this.forced.filter(f => f.playerId !== player.id);
+                if (pin.value) {
+                    this.forced.push({ playerId: player.id, team: pin.value });
+                }
+            });
+
+            const badge = document.createElement('span');
+            badge.className = 'weekly-badge';
+            if (team) {
+                badge.textContent = team;
+                badge.classList.add(team === 'White' ? 'badge-white' : 'badge-black');
+            }
+
+            row.appendChild(cb);
+            row.appendChild(name);
+            row.appendChild(pin);
+            row.appendChild(badge);
+            this.rosterContainer.appendChild(row);
+        });
+    }
+
+    randomizeTeams() {
+        let pool = [...this.available];
+        this.teams = { white: [], black: [] };
+
+        // Apply forced placements first
+        this.forced.forEach(f => {
+            if (this.available.has(f.playerId)) {
+                this.teams[f.team].push(f.playerId);
+                pool = pool.filter(id => id !== f.playerId);
+            }
+        });
+
+        // Fisher-Yates shuffle
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+
+        // Distribute evenly
+        pool.forEach(id => {
+            if (this.teams.white.length <= this.teams.black.length) {
+                this.teams.white.push(id);
+            } else {
+                this.teams.black.push(id);
+            }
+        });
+
+        this.render();
+    }
+
+    async publish() {
+        if (!this.app.blobSync.isConnected) {
+            alert('Join a group first.');
+            return;
+        }
+
+        const date = this.dateInput.value;
+        if (!date) { alert('Select a date.'); return; }
+
+        const config = {
+            date,
+            available: [...this.available],
+            teams: this.teams,
+            forced: this.forced,
+            status: 'published'
+        };
+
+        const ok = await this.app.blobSync.upload(`week/${date}.json`, config);
+        alert(ok ? 'Weekly setup published!' : 'Failed to publish.');
+    }
+
+    async applyToScoreboard() {
+        if (this.teams.white.length === 0 && this.teams.black.length === 0) {
+            alert('Randomize or set up teams first.');
+            return;
+        }
+
+        this.app.playersList.forEach(player => {
+            if (this.teams.white.includes(player.id)) {
+                player.team = '1';
+                player.active = true;
+                player.points = 0;
+            } else if (this.teams.black.includes(player.id)) {
+                player.team = '2';
+                player.active = true;
+                player.points = 0;
+            } else {
+                player.active = false;
+                player.points = 0;
+            }
+        });
+
+        this.app.players.savePlayersState();
+        this.app.players.updatePlayersList();
+        this.app.players.updatePlayersDisplay();
+        this.app.teams.reset();
+        this.app.resetScoreHistory();
+        this.app.clearScoreHistory();
+
+        this.weeklyPanel.classList.remove('active');
     }
 }
 

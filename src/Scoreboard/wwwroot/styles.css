@@ -405,6 +405,93 @@ body {
     cursor: pointer;
 }
 
+/* Group section */
+.group-join-row {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.group-join-row input {
+    flex-grow: 1;
+}
+
+.help-text {
+    color: #aaa;
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+}
+
+/* Weekly setup */
+.weekly-player-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid #444;
+}
+
+.weekly-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.weekly-player-name {
+    flex: 1;
+    font-size: 0.9rem;
+}
+
+.weekly-pin {
+    background-color: #444;
+    color: white;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 0.8rem;
+}
+
+.weekly-badge {
+    min-width: 44px;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.badge-white {
+    background-color: #ddd;
+    color: #222;
+}
+
+.badge-black {
+    background-color: #333;
+    color: #ddd;
+    border: 1px solid #555;
+}
+
+.weekly-actions {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.weekly-actions button {
+    padding: 8px 12px;
+    background-color: #444;
+    border: 1px solid gray;
+    border-radius: 5px;
+    color: white;
+    cursor: pointer;
+    flex: 1;
+}
+
+.weekly-actions button:hover {
+    background-color: #555;
+}
+
 @media (max-width: 768px) {
     .team-name {
         font-size: 1.5rem;

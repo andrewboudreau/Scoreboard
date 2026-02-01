@@ -250,7 +250,7 @@
                     <div class="player-name">${escapeHtml(player.name)}</div>
                     <div class="player-status">${player.active ? 'Active' : 'Inactive'}</div>
                 </div>
-                <button class="delete-btn" onclick="deletePlayer(${player.id})" title="Delete player">×</button>
+                <button class="delete-btn" onclick="deletePlayer(${player.id})" title="Delete player">ï¿½</button>
             `;
 
             // Add drag event listeners
@@ -317,7 +317,7 @@
 
         async function movePlayer(playerId, newTeam) {
             try {
-                const response = await fetch('/ManagePlayers/MovePlayer', {
+                const response = await fetch('/Scoreboard/ManagePlayers?handler=MovePlayer', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -347,7 +347,7 @@
             }
 
             try {
-                const response = await fetch('/ManagePlayers/DeletePlayer', {
+                const response = await fetch('/Scoreboard/ManagePlayers?handler=DeletePlayer', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -380,7 +380,7 @@
             }
 
             try {
-                const response = await fetch('/ManagePlayers/AddPlayer', {
+                const response = await fetch('/Scoreboard/ManagePlayers?handler=AddPlayer', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -407,7 +407,7 @@
 
         async function saveDefaultPlayers() {
             try {
-                const response = await fetch('/ManagePlayers/SavePlayers', {
+                const response = await fetch('/Scoreboard/ManagePlayers?handler=SavePlayers', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
