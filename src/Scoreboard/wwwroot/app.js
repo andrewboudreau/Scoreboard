@@ -163,8 +163,6 @@ class ScoreboardApp {
         this.ui = new UI(this);
         this.blobSync = new BlobSync(this);
         this.syncManager = new SyncManager(this);
-        this.weeklySetup = new WeeklySetup(this);
-
         // Global state
         this.periodScores = [];
         this.events = [];
@@ -263,7 +261,7 @@ class ScoreboardApp {
         }
     }
 
-    // Download group data (roster, weekly config, active game) from blob
+    // Download group data (roster, active game) from blob
     async loadGroupData() {
         if (!this.blobSync.isConnected) return;
 
@@ -278,17 +276,8 @@ class ScoreboardApp {
             }
         }
 
-        // Load current week's config
-        const date = this.weeklySetup.getDefaultDate();
-        const weekConfig = await this.blobSync.download(`week/${date}.json`);
-        if (weekConfig) {
-            this.weeklySetup.available = new Set(weekConfig.available || []);
-            this.weeklySetup.teams = weekConfig.teams || { white: [], black: [] };
-            this.weeklySetup.forced = weekConfig.forced || [];
-            this.weeklySetup.dateInput.value = date;
-        }
-
         // Load active game state (consolidated format with events)
+        const date = new Date().toISOString().split('T')[0];
         const gameId = `game-${date}`;
         const gameState = await this.blobSync.download(`games/${gameId}.json`);
         if (gameState) {
@@ -305,10 +294,9 @@ class ScoreboardApp {
         }
     }
 
-    // Get the current game ID based on weekly date
+    // Get the current game ID based on today's date
     get currentGameId() {
-        const date = this.weeklySetup.dateInput.value || new Date().toISOString().split('T')[0];
-        return `game-${date}`;
+        return `game-${new Date().toISOString().split('T')[0]}`;
     }
 
     // Sync consolidated game state + events to blob (fire-and-forget)
@@ -322,7 +310,7 @@ class ScoreboardApp {
         const state = {
             id: this.currentGameId,
             version: 1,
-            weekDate: this.weeklySetup.dateInput.value,
+            weekDate: new Date().toISOString().split('T')[0],
             team1: {
                 name: this.teams.team1NameElement.textContent,
                 score: this.teams.team1Points
@@ -428,7 +416,7 @@ class ScoreboardApp {
         await this.blobSync.upload(`games/${this.currentGameId}.json`, {
             id: this.currentGameId,
             version: 1,
-            weekDate: this.weeklySetup.dateInput.value,
+            weekDate: new Date().toISOString().split('T')[0],
             team1: { name: this.teams.team1NameElement.textContent, score: this.teams.team1Points },
             team2: { name: this.teams.team2NameElement.textContent, score: this.teams.team2Points },
             period: this.periodScores.length + 1,
@@ -823,6 +811,10 @@ class Settings {
 
         this.resetScoresBtn.addEventListener('click', () => {
             this.app.teams.reset();
+            this.app.playersList.forEach(p => p.points = 0);
+            this.app.players.savePlayersState();
+            this.app.players.updatePlayersList();
+            this.app.players.updatePlayersDisplay();
         });
 
         this.resetHistoryBtn.addEventListener('click', () => {
@@ -1575,233 +1567,6 @@ class UI {
         this.app.timer.timerDisplay.style.fontSize = `${value}rem`;
         document.getElementById('timer-font-size-value').textContent = value;
         localStorage.setItem('timerFontSize', value);
-    }
-}
-
-class WeeklySetup {
-    constructor(app) {
-        this.app = app;
-
-        this.weeklyBtn = document.getElementById('weekly-btn');
-        this.weeklyPanel = document.getElementById('weekly-panel');
-        this.dateInput = document.getElementById('weekly-date-input');
-        this.rosterContainer = document.getElementById('weekly-roster');
-        this.randomizeBtn = document.getElementById('randomize-teams-btn');
-        this.publishBtn = document.getElementById('publish-weekly-btn');
-        this.applyBtn = document.getElementById('apply-teams-btn');
-
-        this.available = new Set();
-        this.teams = { white: [], black: [] };
-        this.forced = [];
-
-        this.dateInput.value = this.getDefaultDate();
-        this.setupEventListeners();
-    }
-
-    setupEventListeners() {
-        this.weeklyBtn.addEventListener('click', () => this.toggle());
-        this.randomizeBtn.addEventListener('click', () => this.randomizeTeams());
-        this.publishBtn.addEventListener('click', () => this.publish());
-        this.applyBtn.addEventListener('click', () => this.applyToScoreboard());
-        this.dateInput.addEventListener('change', () => this.loadWeekConfig());
-
-        document.addEventListener('click', (e) => {
-            if (!this.weeklyPanel.contains(e.target) &&
-                e.target !== this.weeklyBtn &&
-                !this.weeklyBtn.contains(e.target)) {
-                this.weeklyPanel.classList.remove('active');
-            }
-        });
-    }
-
-    toggle() {
-        this.weeklyPanel.classList.toggle('active');
-        document.getElementById('settings-panel').classList.remove('active');
-        document.getElementById('players-panel').classList.remove('active');
-        if (this.weeklyPanel.classList.contains('active')) {
-            this.render();
-        }
-    }
-
-    getDefaultDate() {
-        const today = new Date();
-        const day = today.getDay();
-        const offset = day === 5 ? 0 : (5 - day + 7) % 7;
-        const target = new Date(today);
-        target.setDate(today.getDate() + offset);
-        return target.toISOString().split('T')[0];
-    }
-
-    async loadWeekConfig() {
-        const date = this.dateInput.value;
-        if (!date) return;
-
-        if (this.app.blobSync.isConnected) {
-            const config = await this.app.blobSync.download(`week/${date}.json`);
-            if (config) {
-                this.available = new Set(config.available || []);
-                this.teams = config.teams || { white: [], black: [] };
-                this.forced = config.forced || [];
-                this.render();
-                return;
-            }
-        }
-
-        // No saved config - default all players available
-        this.available = new Set(this.app.playersList.map(p => p.id));
-        this.teams = { white: [], black: [] };
-        this.forced = [];
-        this.render();
-    }
-
-    render() {
-        this.rosterContainer.innerHTML = '';
-
-        const players = [...this.app.playersList].sort((a, b) =>
-            a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-
-        players.forEach(player => {
-            const row = document.createElement('div');
-            row.className = 'weekly-player-row';
-
-            const isAvail = this.available.has(player.id);
-            const forcedEntry = this.forced.find(f => f.playerId === player.id);
-            const team = this.teams.white.includes(player.id) ? 'White' :
-                         this.teams.black.includes(player.id) ? 'Black' : '';
-
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = isAvail;
-            cb.className = 'weekly-checkbox';
-            cb.addEventListener('change', () => {
-                if (cb.checked) {
-                    this.available.add(player.id);
-                } else {
-                    this.available.delete(player.id);
-                    this.teams.white = this.teams.white.filter(id => id !== player.id);
-                    this.teams.black = this.teams.black.filter(id => id !== player.id);
-                    this.forced = this.forced.filter(f => f.playerId !== player.id);
-                }
-                this.render();
-            });
-
-            const name = document.createElement('span');
-            name.className = 'weekly-player-name';
-            name.textContent = player.name;
-            if (!isAvail) name.style.opacity = '0.4';
-
-            const pin = document.createElement('select');
-            pin.className = 'weekly-pin';
-            pin.disabled = !isAvail;
-            [{ v: '', t: '\u2014' }, { v: 'white', t: 'Pin W' }, { v: 'black', t: 'Pin B' }].forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = o.v;
-                opt.textContent = o.t;
-                if (forcedEntry && forcedEntry.team === o.v) opt.selected = true;
-                pin.appendChild(opt);
-            });
-            pin.addEventListener('change', () => {
-                this.forced = this.forced.filter(f => f.playerId !== player.id);
-                if (pin.value) {
-                    this.forced.push({ playerId: player.id, team: pin.value });
-                }
-            });
-
-            const badge = document.createElement('span');
-            badge.className = 'weekly-badge';
-            if (team) {
-                badge.textContent = team;
-                badge.classList.add(team === 'White' ? 'badge-white' : 'badge-black');
-            }
-
-            row.appendChild(cb);
-            row.appendChild(name);
-            row.appendChild(pin);
-            row.appendChild(badge);
-            this.rosterContainer.appendChild(row);
-        });
-    }
-
-    randomizeTeams() {
-        let pool = [...this.available];
-        this.teams = { white: [], black: [] };
-
-        // Apply forced placements first
-        this.forced.forEach(f => {
-            if (this.available.has(f.playerId)) {
-                this.teams[f.team].push(f.playerId);
-                pool = pool.filter(id => id !== f.playerId);
-            }
-        });
-
-        // Fisher-Yates shuffle
-        for (let i = pool.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [pool[i], pool[j]] = [pool[j], pool[i]];
-        }
-
-        // Distribute evenly
-        pool.forEach(id => {
-            if (this.teams.white.length <= this.teams.black.length) {
-                this.teams.white.push(id);
-            } else {
-                this.teams.black.push(id);
-            }
-        });
-
-        this.render();
-    }
-
-    async publish() {
-        if (!this.app.blobSync.isConnected) {
-            alert('Join a group first.');
-            return;
-        }
-
-        const date = this.dateInput.value;
-        if (!date) { alert('Select a date.'); return; }
-
-        const config = {
-            date,
-            available: [...this.available],
-            teams: this.teams,
-            forced: this.forced,
-            status: 'published'
-        };
-
-        const ok = await this.app.blobSync.upload(`week/${date}.json`, config);
-        alert(ok ? 'Weekly setup published!' : 'Failed to publish.');
-    }
-
-    async applyToScoreboard() {
-        if (this.teams.white.length === 0 && this.teams.black.length === 0) {
-            alert('Randomize or set up teams first.');
-            return;
-        }
-
-        this.app.playersList.forEach(player => {
-            if (this.teams.white.includes(player.id)) {
-                player.team = '1';
-                player.active = true;
-                player.points = 0;
-            } else if (this.teams.black.includes(player.id)) {
-                player.team = '2';
-                player.active = true;
-                player.points = 0;
-            } else {
-                player.active = false;
-                player.points = 0;
-            }
-        });
-
-        this.app.players.savePlayersState();
-        this.app.players.updatePlayersList();
-        this.app.players.updatePlayersDisplay();
-        this.app.teams.reset();
-        this.app.resetScoreHistory();
-        this.app.clearScoreHistory();
-
-        this.weeklyPanel.classList.remove('active');
     }
 }
 

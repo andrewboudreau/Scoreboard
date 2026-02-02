@@ -211,7 +211,6 @@ graph TD
     App --> UI
     App --> BlobSync
     App --> SyncManager
-    App --> Weekly["WeeklySetup"]
     SyncManager --> BlobSync
 ```
 
@@ -229,7 +228,6 @@ graph TD
 | **UI** | Display updates | (DOM element refs) | `toggleFullscreen()`, `updateScoreHistory()`, `updateScoreFontSize()` |
 | **BlobSync** | Azure Blob I/O + group state | `groupId`, `readUrl`, `writeUrl`, `code` | `join()`, `upload()`, `download()`, `debouncedUpload()` |
 | **SyncManager** | Reliable online/offline sync | `dirty` | `shouldSync()`, `markDirty()`, `markClean()` |
-| **WeeklySetup** | Weekly game configuration | `available`, `teams`, `forced` | `randomizeTeams()`, `publish()`, `applyToScoreboard()` |
 
 ## Scoreboard Engine
 
@@ -354,11 +352,11 @@ The scoreboard layout from top to bottom:
 - **Scores row** — large clickable score displays with team names (`contentEditable`) above them. Player lists flank the scores on each side.
 - **Timer** — large countdown display below the scores. Tap to start/stop, double-tap to reset.
 - **Period history** — row of editable period score spans below the timer.
-- **Control buttons** — fixed bottom-right: Game Setup (W), Players, Settings, Fullscreen.
+- **Control buttons** — fixed bottom-right: Players, Settings, Fullscreen.
 
 ### Side Panels
 
-Three 510px-wide panels toggle from the control buttons. Clicking outside an open panel closes it.
+Two 510px-wide panels toggle from the control buttons. Clicking outside an open panel closes it.
 
 **Players panel:**
 - Management table with columns: Name, Team (select), Active (checkbox), Points (+/−), Remove (X)
@@ -375,13 +373,6 @@ Three 510px-wide panels toggle from the control buttons. Clicking outside an ope
 - Keep Screen On checkbox (Wake Lock API)
 - Group management section (join/create/share group link/share game results/leave)
 - Manage Default Players link
-
-**Game Setup (Weekly) panel:**
-- Date picker (defaults to next Friday)
-- Player roster with: availability checkbox, team pin select (—/Pin W/Pin B), team badge
-- Randomize Teams — Fisher-Yates shuffle respecting forced pins, distributes evenly
-- Publish — uploads week config to blob
-- Apply to Board — assigns teams, resets scores, closes panel
 
 ### Shareable Game Results
 
@@ -433,7 +424,6 @@ container/
 ├── _shares/{code}.json                 # Share code → game mapping (server-managed)
 ├── {groupId}/
 │   ├── roster.json                     # Player roster
-│   ├── week/{date}.json                # Weekly game config
 │   └── games/{gameId}.json             # Consolidated game state + events
 ```
 
@@ -564,7 +554,7 @@ On page load, the SPA checks for a group code in this order:
 2. URL hash `#XXX`
 3. localStorage `groupCode`
 
-If found, it automatically joins and loads group data (roster, weekly config, active game).
+If found, it automatically joins and loads group data (roster, active game).
 
 ### SAS Tokens
 
