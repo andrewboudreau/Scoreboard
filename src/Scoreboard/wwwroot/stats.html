@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game History — MDL Scoreboard</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f5f5;
+            color: #222;
+            line-height: 1.5;
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .header a {
+            color: #888;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .header a:hover { color: #555; }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: #555;
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 16px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            padding: 0;
+            font-family: inherit;
+        }
+
+        .back-btn:hover { color: #222; }
+
+        .loading, .error, .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            font-size: 16px;
+        }
+
+        .error { color: #c00; }
+
+        .connect-prompt {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .connect-prompt p {
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        .connect-prompt a {
+            color: #2b8a3e;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        /* Game list cards */
+        .game-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: box-shadow 0.2s;
+        }
+
+        .game-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .game-card .date {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .game-card .score-summary {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .game-card .team-name {
+            font-size: 13px;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .game-card .team-score {
+            font-size: 28px;
+            font-weight: 700;
+            color: #222;
+        }
+
+        .game-card .team-score.winner { color: #2b8a3e; }
+
+        .game-card .vs { color: #ccc; font-size: 14px; }
+
+        .game-card .team-block {
+            text-align: center;
+            min-width: 80px;
+        }
+
+        /* Detail view - reuses game.html styles */
+        .final-score {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+
+        .final-score .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+
+        .final-score .date {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+
+        .score-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .detail .team-block {
+            text-align: center;
+            min-width: 100px;
+        }
+
+        .detail .team-block .name {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .detail .team-block .score {
+            font-size: 48px;
+            font-weight: 700;
+            color: #111;
+            line-height: 1;
+        }
+
+        .detail .team-block .score.winner { color: #2b8a3e; }
+
+        .detail .vs {
+            font-size: 16px;
+            color: #aaa;
+            font-weight: 600;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+
+        .card h2 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            margin-bottom: 12px;
+        }
+
+        .periods-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .periods-table th, .periods-table td {
+            padding: 8px 12px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .periods-table th {
+            color: #999;
+            font-weight: 500;
+            border-bottom: 1px solid #eee;
+        }
+
+        .periods-table td {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .periods-table tr:not(:last-child) td {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .player-stats-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .player-stats-table th, .player-stats-table td {
+            padding: 8px 12px;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        .player-stats-table th {
+            color: #999;
+            font-weight: 500;
+            border-bottom: 1px solid #eee;
+        }
+
+        .player-stats-table td { color: #333; }
+
+        .player-stats-table td:last-child {
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .player-stats-table tr:not(:last-child) td {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .team-header {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            padding: 12px 12px 4px;
+        }
+
+        .timeline {
+            list-style: none;
+            padding: 0;
+        }
+
+        .timeline li {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding: 6px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .timeline li:last-child { border-bottom: none; }
+
+        .timeline .time {
+            color: #999;
+            font-size: 12px;
+            white-space: nowrap;
+            min-width: 50px;
+        }
+
+        .timeline .event-desc {
+            color: #444;
+            flex: 1;
+        }
+
+        .timeline .event-score {
+            color: #888;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .timeline .period-event {
+            font-weight: 600;
+            color: #2b8a3e;
+        }
+
+        .branding {
+            text-align: center;
+            margin-top: 24px;
+            padding: 16px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .branding a { color: #888; text-decoration: none; }
+        .branding a:hover { color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Game History</h1>
+            <a href="/Scoreboard/">Back to Scoreboard</a>
+        </div>
+        <div id="loading" class="loading">Loading games...</div>
+        <div id="error" class="error" style="display:none;"></div>
+        <div id="connect" class="connect-prompt" style="display:none;">
+            <p>Connect to a group to view game history.</p>
+            <a href="/Scoreboard/">Go to Scoreboard</a>
+        </div>
+        <div id="list-view" style="display:none;"></div>
+        <div id="detail-view" class="detail" style="display:none;"></div>
+    </div>
+
+    <script>
+        const loadingEl = document.getElementById('loading');
+        const errorEl = document.getElementById('error');
+        const connectEl = document.getElementById('connect');
+        const listViewEl = document.getElementById('list-view');
+        const detailViewEl = document.getElementById('detail-view');
+
+        let groupId = null;
+        let readUrl = null;
+        let games = [];
+
+        (async function init() {
+            const code = localStorage.getItem('groupCode');
+            if (!code) {
+                loadingEl.style.display = 'none';
+                connectEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/Scoreboard/api/groups/join?code=${encodeURIComponent(code)}`);
+                if (!res.ok) throw new Error('Failed to connect to group');
+                const data = await res.json();
+                groupId = data.groupId;
+                readUrl = data.sasUrls.readUrl;
+
+                await loadGames();
+            } catch (e) {
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'Failed to load games: ' + e.message;
+            }
+        })();
+
+        async function loadGames() {
+            const listUrl = new URL(readUrl);
+            listUrl.pathname += '/' + groupId;
+            // Azure Blob list API with prefix filter
+            listUrl.searchParams.set('restype', 'container');
+            listUrl.searchParams.set('comp', 'list');
+            listUrl.searchParams.set('prefix', groupId + '/games/');
+
+            // Build the list URL on the container (not sub-path)
+            const containerUrl = new URL(readUrl);
+            const params = containerUrl.search;
+            const listBase = containerUrl.origin + containerUrl.pathname;
+            const fullListUrl = `${listBase}?restype=container&comp=list&prefix=${encodeURIComponent(groupId + '/games/')}${params.replace('?', '&')}`;
+
+            try {
+                const res = await fetch(fullListUrl);
+                if (!res.ok) throw new Error(`Blob list failed: ${res.status}`);
+                const xml = await res.text();
+
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(xml, 'application/xml');
+                const blobs = doc.querySelectorAll('Blob > Name');
+
+                if (blobs.length === 0) {
+                    loadingEl.style.display = 'none';
+                    listViewEl.style.display = 'block';
+                    listViewEl.innerHTML = '<div class="empty">No games found yet.</div>';
+                    return;
+                }
+
+                // Download each game blob
+                const gamePromises = Array.from(blobs).map(async (blob) => {
+                    const blobName = blob.textContent;
+                    const blobUrl = `${listBase}/${blobName}${params}`;
+                    try {
+                        const r = await fetch(blobUrl);
+                        if (!r.ok) return null;
+                        return await r.json();
+                    } catch { return null; }
+                });
+
+                games = (await Promise.all(gamePromises)).filter(g => g !== null);
+
+                // Sort newest first by lastUpdated or weekDate
+                games.sort((a, b) => {
+                    const da = a.lastUpdated || a.weekDate || '';
+                    const db = b.lastUpdated || b.weekDate || '';
+                    return db.localeCompare(da);
+                });
+
+                loadingEl.style.display = 'none';
+                renderListView();
+            } catch (e) {
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'Failed to list games: ' + e.message;
+            }
+        }
+
+        function renderListView() {
+            listViewEl.style.display = 'block';
+            detailViewEl.style.display = 'none';
+
+            if (games.length === 0) {
+                listViewEl.innerHTML = '<div class="empty">No games found yet.</div>';
+                return;
+            }
+
+            let html = '';
+            games.forEach((game, index) => {
+                const t1 = game.team1 || { name: 'Team 1', score: 0 };
+                const t2 = game.team2 || { name: 'Team 2', score: 0 };
+                const t1Wins = t1.score > t2.score;
+                const t2Wins = t2.score > t1.score;
+                const dateStr = game.weekDate ? formatDate(game.weekDate) : 'Unknown date';
+
+                html += `
+                    <div class="game-card" onclick="showDetail(${index})">
+                        <div class="date">${esc(dateStr)}</div>
+                        <div class="score-summary">
+                            <div class="team-block">
+                                <div class="team-name">${esc(t1.name)}</div>
+                                <div class="team-score${t1Wins ? ' winner' : ''}">${t1.score}</div>
+                            </div>
+                            <div class="vs">&mdash;</div>
+                            <div class="team-block">
+                                <div class="team-name">${esc(t2.name)}</div>
+                                <div class="team-score${t2Wins ? ' winner' : ''}">${t2.score}</div>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+
+            listViewEl.innerHTML = html;
+        }
+
+        function showDetail(index) {
+            const game = games[index];
+            if (!game) return;
+
+            listViewEl.style.display = 'none';
+            detailViewEl.style.display = 'block';
+
+            const t1 = game.team1 || { name: 'Team 1', score: 0 };
+            const t2 = game.team2 || { name: 'Team 2', score: 0 };
+            const t1Wins = t1.score > t2.score;
+            const t2Wins = t2.score > t1.score;
+            const periods = game.periodScores || [];
+            const players = game.players || [];
+            const events = game.events || [];
+            const dateStr = game.weekDate || '';
+
+            let html = `<button class="back-btn" onclick="renderListView()">&larr; Back to games</button>`;
+
+            // Final Score
+            html += `
+                <div class="final-score">
+                    <div class="label">Final Score</div>
+                    ${dateStr ? `<div class="date">${formatDate(dateStr)}</div>` : ''}
+                    <div class="score-row">
+                        <div class="team-block">
+                            <div class="name">${esc(t1.name)}</div>
+                            <div class="score${t1Wins ? ' winner' : ''}">${t1.score}</div>
+                        </div>
+                        <div class="vs">&mdash;</div>
+                        <div class="team-block">
+                            <div class="name">${esc(t2.name)}</div>
+                            <div class="score${t2Wins ? ' winner' : ''}">${t2.score}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+            // Period Breakdown
+            if (periods.length > 0) {
+                html += `<div class="card"><h2>Periods</h2><table class="periods-table"><thead><tr><th></th><th>${esc(t1.name)}</th><th>${esc(t2.name)}</th></tr></thead><tbody>`;
+                periods.forEach((p, i) => {
+                    const parts = String(p).split('-').map(s => s.trim());
+                    html += `<tr><td style="color:#999">P${i + 1}</td><td>${esc(parts[0] || '\u2014')}</td><td>${esc(parts[1] || '\u2014')}</td></tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+
+            // Player Stats
+            const activePlayers = players.filter(p => p.active && p.points > 0);
+            if (activePlayers.length > 0) {
+                const team1Players = activePlayers.filter(p => p.team === '1').sort((a, b) => b.points - a.points);
+                const team2Players = activePlayers.filter(p => p.team === '2').sort((a, b) => b.points - a.points);
+
+                html += `<div class="card"><h2>Player Stats</h2><table class="player-stats-table"><tbody>`;
+
+                if (team1Players.length > 0) {
+                    html += `<tr><td colspan="2" class="team-header">${esc(t1.name)}</td></tr>`;
+                    team1Players.forEach(p => {
+                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
+                    });
+                }
+
+                if (team2Players.length > 0) {
+                    html += `<tr><td colspan="2" class="team-header">${esc(t2.name)}</td></tr>`;
+                    team2Players.forEach(p => {
+                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
+                    });
+                }
+
+                html += `</tbody></table></div>`;
+            }
+
+            // Event Timeline
+            if (events.length > 0) {
+                html += `<div class="card"><h2>Event Timeline</h2><ul class="timeline">`;
+                events.forEach(ev => {
+                    const time = ev.ts ? formatTime(ev.ts) : '';
+                    if (ev.type === 'period_end') {
+                        const scores = ev.scores || [];
+                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc period-event">Period ${ev.period || '?'} ended</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
+                    } else if (ev.type === 'score') {
+                        const who = ev.player ? esc(ev.player) : `Team ${ev.team}`;
+                        const action = ev.action === 'increment' ? '+1' : '-1';
+                        const scores = ev.scores || [];
+                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc">${who} ${action}</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
+                    }
+                });
+                html += `</ul></div>`;
+            }
+
+            html += `<div class="branding"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
+
+            detailViewEl.innerHTML = html;
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function formatDate(dateStr) {
+            try {
+                const d = new Date(dateStr + 'T00:00:00');
+                return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            } catch { return dateStr; }
+        }
+
+        function formatTime(ts) {
+            try {
+                const d = new Date(ts);
+                return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+            } catch { return ''; }
+        }
+    </script>
+</body>
+</html>

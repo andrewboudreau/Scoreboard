@@ -64,21 +64,26 @@ Key responsibilities:
 
 The module exposes RESTful endpoints:
 
-- **POST /Scoreboard/api/upload-history**
-  - Accepts game history JSON
-  - Stores in Azure Blob Storage
-  - Returns blob URL
+- **POST /Scoreboard/api/games/share**
+  - Creates a shareable link for a game
+  - Stores share mapping in blob storage
+  - Returns share code and URL
 
-- **GET /Scoreboard/api/test-blob-connection**
-  - Validates blob storage configuration
-  - Used for diagnostics
+- **GET /Scoreboard/api/shares/{code}**
+  - Retrieves shared game data (no auth required)
+  - Reads game blob via server's storage client
+
+- **Group management** endpoints for create, join, members, SAS refresh
+- **Player management** endpoints for default player CRUD
 
 ### Client-Side Architecture
 
 The frontend is a single-page application:
 
-- **index.html**: Main UI structure
-- **app.js**: Game logic and state management
+- **index.html**: Main scoreboard UI
+- **game.html**: Read-only shared game results page
+- **stats.html**: Self-contained game history page (list + detail views)
+- **app.js**: Game logic, state management, SyncManager, and consolidated blob sync
 - **styles.css**: Responsive design
 - **Audio feedback**: Buzzer sounds for events
 
@@ -134,8 +139,9 @@ Assets are embedded in the module assembly and served via:
 
 1. **Unit Tests**: Test API methods in isolation
 2. **Integration Tests**: Test module loading in host
-3. **Manual Testing**: Verify UI functionality
-4. **Performance Testing**: Validate rate limiting
+3. **Playwright Tests**: `tests/Scoreboard.Tests.Playwright/` — NUnit + Playwright end-to-end tests covering core scoreboard features (scoring, timer, players, periods, settings). Run with `dotnet test`. Set `SCOREBOARD_BASE_URL` env var to point at the running app.
+4. **Manual Testing**: Verify UI functionality
+5. **Performance Testing**: Validate rate limiting
 
 ### Debugging Tips
 

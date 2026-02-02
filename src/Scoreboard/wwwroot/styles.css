@@ -156,6 +156,12 @@ body {
     background-color: rgba(51, 51, 51, 0.7);
     border-radius: 5px;
     border: 1px solid gray;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.period-score:hover {
+    border-color: #69db7c;
 }
 
 .control-buttons {

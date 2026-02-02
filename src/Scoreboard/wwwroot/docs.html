@@ -165,7 +165,7 @@
     <script id="doc-source" type="text/template">
 # Scoreboard Documentation
 
-A basketball scoreboard single-page app packaged as a WebModule (`SharedTools.Scoreboard`). The frontend runs a **game instance** — a self-contained unit of scores, rosters, timers, and event logs. The backend's primary job is acting as a **key dispenser** for Azure Blob Storage; it stays out of the live data path.
+A basketball scoreboard single-page app packaged as a WebModule (`SharedTools.Scoreboard`). The frontend runs a **game instance** — a self-contained unit of scores, rosters, timers, and event logs stored in a single consolidated file. The backend's primary job is acting as a **key dispenser** for Azure Blob Storage and creating shareable game result links; it stays out of the live data path.
 
 ## System Overview
 
@@ -175,26 +175,26 @@ A basketball scoreboard single-page app packaged as a WebModule (`SharedTools.Sc
 graph LR
     Host["ASP.NET Host"] -->|loads| Module["Scoreboard Module"]
     Module -->|serves| SPA["SPA (app.js)"]
-    SPA -->|POST /api/upload-history| API["Server API"]
-    API -->|writes| Blob["Azure Blob Storage"]
-    SPA -->|GET /api/groups/join| API
+    SPA -->|GET /api/groups/join| API["Server API"]
     API -->|returns SAS URLs| SPA
-    SPA -->|direct PUT/GET via SAS| Blob
+    SPA -->|direct PUT/GET via SAS| Blob["Azure Blob Storage"]
+    SPA -->|POST /api/games/share| API
+    API -->|reads game blob| Blob
+    Viewer -->|GET /api/shares/CODE| API
 ```
 
-The host loads `SharedTools.Scoreboard` as a NuGet-packaged WebModule. The SPA is served as an embedded resource at `/Scoreboard/`. Game state flows through three paths:
+The host loads `SharedTools.Scoreboard` as a NuGet-packaged WebModule. The SPA is served as an embedded resource at `/Scoreboard/`. Game state flows through two paths:
 
-1. **localStorage** — immediate, every change
-2. **Direct-to-Blob** — SPA writes game state and event logs directly via SAS URLs (5s debounce)
-3. **Server POST** — score history uploaded to `/api/upload-history` (10s debounce), server writes blob
+1. **localStorage** — immediate, every change (offline-first source of truth)
+2. **Direct-to-Blob** — SPA writes a consolidated game file via SAS URLs (5s debounce, fire-and-forget)
 
-The server never sits in the hot path during a game. It creates groups, dispenses SAS tokens, and stores score-history snapshots.
+The server never sits in the hot path during a game. It creates groups, dispenses SAS tokens, and facilitates shareable game result links.
 
 ### Module Contract
 
 The module implements `IApplicationPartModule`:
 
-- **ConfigureServices** — registers `BlobContainerClient`, `IDefaultPlayersService`, `IGroupService`
+- **ConfigureServices** — registers `BlobContainerClient`, `IDefaultPlayersService`, `IGroupService`, `IGameShareService`
 - **Configure** — maps all routes under `/Scoreboard/` prefix
 - **Static assets** — embedded in the DLL under `wwwroot/`, served at `/_content/Scoreboard/`
 
@@ -210,7 +210,9 @@ graph TD
     App --> Settings
     App --> UI
     App --> BlobSync
+    App --> SyncManager
     App --> Weekly["WeeklySetup"]
+    SyncManager --> BlobSync
 ```
 
 `ScoreboardApp` is the central orchestrator. It owns the game instance and all component references. Components operate on the shared app state.
@@ -219,26 +221,30 @@ graph TD
 
 | Class | Role | Key State | Key Methods |
 |-------|------|-----------|-------------|
-| **ScoreboardApp** | Orchestrator, owns game instance | `periodScores[]`, `scoreHistory[]`, `playersList[]` | `recordScoreChange()`, `captureScore()`, `syncGameState()`, `syncEventLog()` |
+| **ScoreboardApp** | Orchestrator, owns game instance | `periodScores[]`, `events[]`, `playersList[]`, `currentShareCode` | `recordScoreChange()`, `captureScore()`, `syncGame()`, `shareGame()` |
 | **Timer** | Countdown clock | `timeLeft`, `isRunning`, `lastTap` | `startStop()`, `reset()`, `handleTimerTap()`, `playAlarm()` |
 | **Teams** | Score and name tracking | `team1Points`, `team2Points` | `incrementScore()`, `decrementScore()`, `setTeamNames()` |
 | **Players** | Roster management | (uses `app.playersList`) | `addPlayer()`, `incrementPlayerPoints()`, `updatePlayersDisplay()` |
 | **Settings** | Configuration panel | (DOM element refs) | `toggle()`, `updateGroupUI()`, `handleJoinGroup()`, `handleCreateGroup()` |
 | **UI** | Display updates | (DOM element refs) | `toggleFullscreen()`, `updateScoreHistory()`, `updateScoreFontSize()` |
 | **BlobSync** | Azure Blob I/O + group state | `groupId`, `readUrl`, `writeUrl`, `code` | `join()`, `upload()`, `download()`, `debouncedUpload()` |
+| **SyncManager** | Reliable online/offline sync | `dirty` | `shouldSync()`, `markDirty()`, `markClean()` |
 | **WeeklySetup** | Weekly game configuration | `available`, `teams`, `forced` | `randomizeTeams()`, `publish()`, `applyToScoreboard()` |
 
 ## Scoreboard Engine
 
 ### Game Instance
 
-A game instance is the core data unit. It contains:
+A game instance is the core data unit stored as a single consolidated JSON file. It contains:
 
 - Two teams with names and scores
 - A player roster with per-player points
 - Timer configuration (minutes per period)
 - Period scores array (captured on timer expiry)
-- An event log of every score change
+- An event log of every score change and period end
+- An optional share code for public result links
+
+Top-level fields are cached derived state (for fast load). The events array is the audit trail.
 
 The frontend runs whatever game instance it's given. When connected to a group, the instance syncs to Azure Blob Storage so multiple devices see the same state.
 
@@ -254,9 +260,10 @@ The timer counts down from a configurable duration (1–60 minutes, default 15).
 **On expiry (timeLeft reaches 0):**
 1. Stop the interval
 2. Capture the period score (`"team1Score - team2Score"` string pushed to `periodScores[]`)
-3. Play the buzzer audio
-4. Blink the timer background red 5 times at 250ms intervals
-5. Auto-reset to the configured duration
+3. Append a `period_end` event
+4. Play the buzzer audio
+5. Blink the timer background red 5 times at 250ms intervals
+6. Auto-reset to the configured duration
 
 ### Scoring
 
@@ -268,16 +275,19 @@ The timer counts down from a configurable duration (1–60 minutes, default 15).
 - Click a player name in the on-screen team list → increments both the player's individual points **and** their team's score
 - In the Players panel table: **+/−** buttons adjust player points and team score together
 
-Every score change calls `app.recordScoreChange(teamNumber, isIncrement, playerName)` which creates a history entry and triggers all three persistence paths.
+Every score change calls `app.recordScoreChange(teamNumber, isIncrement, playerName)` which appends a `score` event and triggers both persistence paths (localStorage + blob sync).
 
 ### Periods
 
 The `periodScores[]` array stores period-ending snapshots as strings like `"24 - 18"`.
 
 - Captured automatically when the timer expires
-- Displayed below the timer as `contentEditable` spans (allowing manual correction)
-- Included in the game state synced to blob
-- "Reset History" in Settings clears both `periodScores` and `scoreHistory`
+- A `period_end` event is appended to the events log
+- Displayed below the timer as clickable spans
+- **Click a period score** to replace it with the current team scores (calls `correctPeriodScore(index)`)
+- Period correction also updates the matching `period_end` event's scores and syncs to blob
+- Included in the consolidated game file synced to blob
+- "Reset History" in Settings clears both `periodScores` and `events`
 
 ## Events & Data Flow
 
@@ -290,44 +300,50 @@ sequenceDiagram
     participant App as ScoreboardApp
     participant LS as localStorage
     participant Blob as Azure Blob (direct)
-    participant Server as Server API
 
     User->>Teams/Players: Click score / player
     Teams/Players->>App: recordScoreChange()
-    App->>LS: Save scoreHistory (immediate)
-    App->>Blob: debouncedUpload game state (5s)
-    App->>Blob: debouncedUpload event log (5s)
-    App->>Server: POST /api/upload-history (10s debounce)
-    Server->>Blob: Write score-history-{timestamp}.json
+    App->>LS: Save gameEvents (immediate)
+    App->>Blob: debouncedUpload consolidated game (5s)
 ```
 
-### Three Upload Paths
+### Upload Paths
 
 | Path | Target | Trigger | Debounce |
 |------|--------|---------|----------|
-| **localStorage** | Browser | Every score change | None (immediate) |
-| **BlobSync (game state)** | `games/{gameId}.json` | Every score change | 5 seconds |
-| **BlobSync (event log)** | `games/{gameId}-events.json` | Every score change | 5 seconds |
-| **Server upload** | `score-history-{timestamp}.json` | Every score change | 10 seconds |
+| **localStorage** | Browser (`gameEvents`) | Every score/period event | None (immediate) |
+| **BlobSync** | `games/{gameId}.json` | Every score/period event | 5 seconds |
 
-### Score History Entry Shape
+One consolidated file per game — state + events together. No separate event log file, no server-side upload.
+
+### Event Shapes
+
+**Score event:**
 
 ```json
 {
-  "timestamp": "1/31/2026, 3:45:30 PM",
-  "timerCurrent": 450,
-  "timerStart": 900,
-  "teamNumber": 1,
+  "ts": "2026-02-01T15:45:30.000Z",
+  "type": "score",
+  "team": 1,
+  "player": "Alice",
   "action": "increment",
-  "playerName": "Alice",
-  "team1Score": 42,
-  "team2Score": 38,
-  "team1Name": "WHITE",
-  "team2Name": "BLACK"
+  "scores": [42, 38],
+  "timer": 450
 }
 ```
 
-`playerName` is `undefined` when the team score element is clicked directly (not via a player).
+`player` is `null` when the team score element is clicked directly (not via a player).
+
+**Period end event:**
+
+```json
+{
+  "ts": "2026-02-01T16:00:00.000Z",
+  "type": "period_end",
+  "scores": [24, 18],
+  "period": 1
+}
+```
 
 ## UI Features
 
@@ -357,9 +373,8 @@ Three 510px-wide panels toggle from the control buttons. Clicking outside an ope
 - Score font size slider (5–15 rem)
 - Timer font size slider (6–20 rem)
 - Keep Screen On checkbox (Wake Lock API)
-- Group management section (join/create/share/leave)
+- Group management section (join/create/share group link/share game results/leave)
 - Manage Default Players link
-- Blob Storage test connection button
 
 **Game Setup (Weekly) panel:**
 - Date picker (defaults to next Friday)
@@ -367,6 +382,27 @@ Three 510px-wide panels toggle from the control buttons. Clicking outside an ope
 - Randomize Teams — Fisher-Yates shuffle respecting forced pins, distributes evenly
 - Publish — uploads week config to blob
 - Apply to Board — assigns teams, resets scores, closes panel
+
+### Shareable Game Results
+
+When connected to a group, the "Share Game Results" button creates a public link via the server (`POST /api/games/share`). The server stores a mapping from an 8-character share code to the game blob path. The resulting URL points to a read-only results page at `/Scoreboard/game?s={code}`.
+
+The results page (`game.html`) is self-contained — no BlobSync, no localStorage, no authentication. It fetches game data from `/Scoreboard/api/shares/{code}` (which reads the blob server-side) and renders:
+- Final score with winner highlighting
+- Period breakdown table
+- Player stats sorted by points
+- Chronological event timeline
+
+### Stats / Game History Page
+
+A standalone page at \`/Scoreboard/stats\` that shows all past games for the connected group:
+
+- **Bootstrap** — reads \`groupCode\` from localStorage, calls \`/api/groups/join\` to get SAS URLs. If no code, shows a connect prompt.
+- **List games** — uses the Azure Blob List API via the read SAS URL to enumerate all game files under \`{groupId}/games/\`.
+- **List view** — cards for each game showing date, team names, and final score. Sorted newest first.
+- **Detail view** — click a game card to see final score, period breakdown, player stats, and event timeline. Uses the same rendering approach as \`game.html\`.
+
+The stats page is self-contained (no dependency on \`app.js\`). All CSS and JS are inline in \`stats.html\`.
 
 ### Fullscreen & Wake Lock
 
@@ -381,58 +417,56 @@ Three 510px-wide panels toggle from the control buttons. Clicking outside an ope
 | Key | Type | Description |
 |-----|------|-------------|
 | `groupCode` | string | Current group code for auto-rejoin |
-| `scoreHistory` | JSON array | Detailed score change event log |
+| `gameEvents` | JSON array | Score and period event log |
 | `scoreFontSize` | string | Score display font size in rem |
 | `timerFontSize` | string | Timer display font size in rem |
 | `keepScreenOn` | `"true"` / `"false"` | Wake lock preference |
-| `lastUploadAttempt` | JSON object | `{timestamp, success, error?, filename?}` |
 | `playersList` | JSON array | Current player roster |
+
+> **Migration:** On first load, the old `scoreHistory` key is automatically migrated to `gameEvents`. The legacy `lastUploadAttempt` key is removed.
 
 ### Azure Blob Layout
 
 ```text
 container/
 ├── _groups/{groupId}.json              # Group metadata (server-managed)
+├── _shares/{code}.json                 # Share code → game mapping (server-managed)
 ├── {groupId}/
 │   ├── roster.json                     # Player roster
 │   ├── week/{date}.json                # Weekly game config
-│   ├── games/{gameId}.json             # Live game state
-│   └── games/{gameId}-events.json      # Score event log
-└── score-history-{timestamp}.json      # Server-uploaded snapshots
+│   └── games/{gameId}.json             # Consolidated game state + events
 ```
 
-**Game state** (`games/{gameId}.json`):
+**Consolidated game file** (`games/{gameId}.json`):
 
 ```json
 {
-  "id": "game-2026-01-31",
-  "weekDate": "2026-01-31",
-  "team1": { "name": "WHITE", "score": 42 },
-  "team2": { "name": "BLACK", "score": 38 },
-  "period": 2,
-  "periodScores": ["24 - 18"],
+  "id": "game-2026-02-01",
+  "version": 1,
+  "weekDate": "2026-02-01",
+  "team1": { "name": "BLACK", "score": 42 },
+  "team2": { "name": "WHITE", "score": 38 },
+  "period": 3,
+  "periodScores": ["24 - 18", "18 - 20"],
   "timerMinutes": 15,
-  "players": []
+  "players": [{ "id": 1742075931014, "name": "Andrew", "team": "1", "active": true, "points": 7 }],
+  "events": [
+    { "ts": "2026-02-01T15:45:30.000Z", "type": "score", "team": 1, "player": "Andrew", "action": "increment", "scores": [42, 38], "timer": 450 },
+    { "ts": "2026-02-01T16:00:00.000Z", "type": "period_end", "scores": [24, 18], "period": 1 }
+  ],
+  "shareCode": null,
+  "lastUpdated": "2026-02-01T16:30:00.000Z"
 }
 ```
 
-**Event log** (`games/{gameId}-events.json`):
+**Share mapping** (`_shares/{code}.json`):
 
 ```json
 {
-  "events": [
-    {
-      "timestamp": "1/31/2026, 3:45:30 PM",
-      "type": "score",
-      "teamNumber": 1,
-      "playerName": "Alice",
-      "action": "increment",
-      "scores": { "team1": 42, "team2": 38 },
-      "team1Name": "WHITE",
-      "team2Name": "BLACK",
-      "timerCurrent": 450
-    }
-  ]
+  "code": "X7K2M9PQ",
+  "groupId": "uuid",
+  "gameId": "game-2026-02-01",
+  "createdAt": "2026-02-01T17:00:00Z"
 }
 ```
 
@@ -441,6 +475,20 @@ container/
 `BlobSync.debouncedUpload(path, data, delayMs)` uses path-keyed timeouts — each blob path gets its own debounce timer. If a new change arrives before the timer fires, it resets.
 
 On **403** responses (expired SAS), BlobSync automatically calls `_refreshSas()` to get new tokens from the server, then retries the original operation once.
+
+Blob sync is fire-and-forget — scoring and timer never depend on network connectivity. localStorage is always the source of truth.
+
+### SyncManager (Reliable Sync)
+
+`SyncManager` sits between `BlobSync` and `ScoreboardApp` to handle connectivity gracefully:
+
+- **Online/offline detection** — uses `navigator.onLine` and `online`/`offline` events
+- **Guard syncGame()** — checks `syncManager.shouldSync()` before blob upload; if offline, marks dirty and skips
+- **Periodic sync** — 2-minute interval calls `syncGame()` when online and connected
+- **Reconnect flush** — `online` event fires → immediately syncs if dirty
+- **Visibility flush** — tab becomes visible → syncs if dirty and online
+
+localStorage always saves immediately regardless of online state. The `dirty` flag tracks whether unsynced changes exist.
 
 ## Groups & Sharing
 
@@ -459,6 +507,7 @@ The code is your key. Enter it to get SAS tokens for direct blob access.
 |------|--------|------------|----------|
 | Admin | 8 | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` | I, O, 0, 1 |
 | Member | 6 | `abcdefghjkmnpqrstuvwxyz23456789` | i, l, o, 0, 1 |
+| Share | 8 | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` | I, O, 0, 1 |
 
 Ambiguous characters are excluded to prevent confusion when sharing codes verbally.
 
@@ -484,6 +533,28 @@ sequenceDiagram
     Member->>Server: GET /api/groups/join?code=membercode
     Server-->>Member: {groupId, sasUrls}
     Member->>Blob: Read/write game state directly
+```
+
+### Share Game Results Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Server
+    participant Blob as Azure Blob
+    participant Viewer
+
+    User->>Blob: Upload latest game state
+    User->>Server: POST /api/games/share {groupId, gameId}
+    Server->>Blob: Write _shares/{code}.json
+    Server-->>User: {shareCode, shareUrl}
+    User-->>Viewer: Share URL
+
+    Viewer->>Server: GET /api/shares/{code}
+    Server->>Blob: Read _shares/{code}.json
+    Server->>Blob: Read {groupId}/games/{gameId}.json
+    Server-->>Viewer: Game JSON
+    Viewer->>Viewer: Render read-only results page
 ```
 
 ### Auto-Join
@@ -595,31 +666,34 @@ Refresh SAS tokens. Works with both admin and member codes.
 
 ---
 
-### POST `/Scoreboard/api/upload-history`
+### POST `/Scoreboard/api/games/share`
 
-Upload score history snapshot. Server writes to blob as `score-history-{timestamp}.json`.
+Create a shareable link for a game. Stores a mapping blob at `_shares/{code}.json`.
 
-**Request body:** JSON array of score history entries (max 500 KB).
+**Request body:**
+```json
+{ "groupId": "uuid", "gameId": "game-2026-02-01" }
+```
 
 **Response (200):**
 ```json
-{ "filename": "score-history-2026-01-31-15-45-30.json" }
+{
+  "shareCode": "X7K2M9PQ",
+  "shareUrl": "/Scoreboard/game?s=X7K2M9PQ"
+}
 ```
 
-**Errors:** `400` — invalid/empty body or not valid JSON, `500` — upload failure
+**Errors:** `400` — groupId and gameId required
 
 ---
 
-### GET `/Scoreboard/api/test-blob-connection`
+### GET `/Scoreboard/api/shares/{code}`
 
-Test blob storage connectivity by writing a test file.
+Retrieve shared game data. No authentication required — reads the game blob via the server's storage client.
 
-**Response (200):**
-```json
-{ "message": "Connection to blob storage successful!" }
-```
+**Response (200):** Full consolidated game JSON (same shape as the blob file).
 
-**Errors:** `500` — connection failure
+**Errors:** `404` — share code not found or game data not found
 
 ---
 

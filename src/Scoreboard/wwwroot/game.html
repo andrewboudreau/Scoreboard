@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Results — MDL Scoreboard</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f5f5;
+            color: #222;
+            line-height: 1.5;
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .loading, .error {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            font-size: 18px;
+        }
+
+        .error { color: #c00; }
+
+        /* Final Score */
+        .final-score {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+
+        .final-score .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            margin-bottom: 4px;
+        }
+
+        .final-score .date {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 16px;
+        }
+
+        .score-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .team-block {
+            text-align: center;
+            min-width: 100px;
+        }
+
+        .team-block .name {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .team-block .score {
+            font-size: 48px;
+            font-weight: 700;
+            color: #111;
+            line-height: 1;
+        }
+
+        .team-block .score.winner { color: #2b8a3e; }
+
+        .vs {
+            font-size: 16px;
+            color: #aaa;
+            font-weight: 600;
+        }
+
+        /* Period Breakdown */
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+
+        .card h2 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            margin-bottom: 12px;
+        }
+
+        .periods-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .periods-table th, .periods-table td {
+            padding: 8px 12px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .periods-table th {
+            color: #999;
+            font-weight: 500;
+            border-bottom: 1px solid #eee;
+        }
+
+        .periods-table td {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .periods-table tr:not(:last-child) td {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        /* Player Stats */
+        .player-stats-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .player-stats-table th, .player-stats-table td {
+            padding: 8px 12px;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        .player-stats-table th {
+            color: #999;
+            font-weight: 500;
+            border-bottom: 1px solid #eee;
+        }
+
+        .player-stats-table td {
+            color: #333;
+        }
+
+        .player-stats-table td:last-child {
+            text-align: right;
+            font-weight: 600;
+        }
+
+        .player-stats-table tr:not(:last-child) td {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .team-header {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #999;
+            padding: 12px 12px 4px;
+        }
+
+        /* Event Timeline */
+        .timeline {
+            list-style: none;
+            padding: 0;
+        }
+
+        .timeline li {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding: 6px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .timeline li:last-child { border-bottom: none; }
+
+        .timeline .time {
+            color: #999;
+            font-size: 12px;
+            white-space: nowrap;
+            min-width: 50px;
+        }
+
+        .timeline .event-desc {
+            color: #444;
+            flex: 1;
+        }
+
+        .timeline .event-score {
+            color: #888;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .timeline .period-event {
+            font-weight: 600;
+            color: #2b8a3e;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #aaa;
+            padding: 16px;
+            font-size: 14px;
+        }
+
+        .branding {
+            text-align: center;
+            margin-top: 24px;
+            padding: 16px;
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .branding a { color: #888; text-decoration: none; }
+        .branding a:hover { color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="loading" class="loading">Loading game results...</div>
+        <div id="error" class="error" style="display:none;"></div>
+        <div id="results" style="display:none;"></div>
+    </div>
+
+    <script>
+        (async function () {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('s');
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const resultsEl = document.getElementById('results');
+
+            if (!code) {
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = 'No share code provided.';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/Scoreboard/api/shares/${encodeURIComponent(code)}`);
+                if (!res.ok) {
+                    throw new Error(res.status === 404 ? 'Game not found or link has expired.' : `Error ${res.status}`);
+                }
+                const game = await res.json();
+                loadingEl.style.display = 'none';
+                resultsEl.style.display = 'block';
+                render(game);
+            } catch (e) {
+                loadingEl.style.display = 'none';
+                errorEl.style.display = 'block';
+                errorEl.textContent = e.message;
+            }
+        })();
+
+        function render(game) {
+            const el = document.getElementById('results');
+            const t1 = game.team1 || { name: 'Team 1', score: 0 };
+            const t2 = game.team2 || { name: 'Team 2', score: 0 };
+            const t1Wins = t1.score > t2.score;
+            const t2Wins = t2.score > t1.score;
+            const periods = game.periodScores || [];
+            const players = game.players || [];
+            const events = game.events || [];
+            const dateStr = game.weekDate || '';
+
+            document.title = `${t1.name} ${t1.score} - ${t2.score} ${t2.name} — MDL Scoreboard`;
+
+            let html = '';
+
+            // Final Score
+            html += `
+                <div class="final-score">
+                    <div class="label">Final Score</div>
+                    ${dateStr ? `<div class="date">${formatDate(dateStr)}</div>` : ''}
+                    <div class="score-row">
+                        <div class="team-block">
+                            <div class="name">${esc(t1.name)}</div>
+                            <div class="score${t1Wins ? ' winner' : ''}">${t1.score}</div>
+                        </div>
+                        <div class="vs">—</div>
+                        <div class="team-block">
+                            <div class="name">${esc(t2.name)}</div>
+                            <div class="score${t2Wins ? ' winner' : ''}">${t2.score}</div>
+                        </div>
+                    </div>
+                </div>`;
+
+            // Period Breakdown
+            if (periods.length > 0) {
+                html += `<div class="card"><h2>Periods</h2><table class="periods-table"><thead><tr><th></th><th>${esc(t1.name)}</th><th>${esc(t2.name)}</th></tr></thead><tbody>`;
+                periods.forEach((p, i) => {
+                    const parts = String(p).split('-').map(s => s.trim());
+                    html += `<tr><td style="color:#999">P${i + 1}</td><td>${esc(parts[0] || '—')}</td><td>${esc(parts[1] || '—')}</td></tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+
+            // Player Stats
+            const activePlayers = players.filter(p => p.active && p.points > 0);
+            if (activePlayers.length > 0) {
+                const team1Players = activePlayers.filter(p => p.team === '1').sort((a, b) => b.points - a.points);
+                const team2Players = activePlayers.filter(p => p.team === '2').sort((a, b) => b.points - a.points);
+
+                html += `<div class="card"><h2>Player Stats</h2><table class="player-stats-table"><tbody>`;
+
+                if (team1Players.length > 0) {
+                    html += `<tr><td colspan="2" class="team-header">${esc(t1.name)}</td></tr>`;
+                    team1Players.forEach(p => {
+                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
+                    });
+                }
+
+                if (team2Players.length > 0) {
+                    html += `<tr><td colspan="2" class="team-header">${esc(t2.name)}</td></tr>`;
+                    team2Players.forEach(p => {
+                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
+                    });
+                }
+
+                html += `</tbody></table></div>`;
+            }
+
+            // Event Timeline
+            if (events.length > 0) {
+                html += `<div class="card"><h2>Event Timeline</h2><ul class="timeline">`;
+                // Show events in chronological order
+                events.forEach(ev => {
+                    const time = ev.ts ? formatTime(ev.ts) : '';
+                    if (ev.type === 'period_end') {
+                        const scores = ev.scores || [];
+                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc period-event">Period ${ev.period || '?'} ended</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
+                    } else if (ev.type === 'score') {
+                        const who = ev.player ? esc(ev.player) : `Team ${ev.team}`;
+                        const action = ev.action === 'increment' ? '+1' : '-1';
+                        const scores = ev.scores || [];
+                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc">${who} ${action}</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
+                    }
+                });
+                html += `</ul></div>`;
+            }
+
+            html += `<div class="branding"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
+
+            el.innerHTML = html;
+        }
+
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function formatDate(dateStr) {
+            try {
+                const d = new Date(dateStr + 'T00:00:00');
+                return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            } catch { return dateStr; }
+        }
+
+        function formatTime(ts) {
+            try {
+                const d = new Date(ts);
+                return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+            } catch { return ''; }
+        }
+    </script>
+</body>
+</html>

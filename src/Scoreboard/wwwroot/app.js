@@ -117,6 +117,42 @@ class BlobSync {
     }
 }
 
+class SyncManager {
+    constructor(app) {
+        this.app = app;
+        this.dirty = false;
+        this.periodicInterval = null;
+
+        window.addEventListener('online', () => {
+            if (this.dirty) this.app.syncGame();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.dirty && navigator.onLine) {
+                this.app.syncGame();
+            }
+        });
+
+        this.periodicInterval = setInterval(() => {
+            if (this.shouldSync() && this.dirty) {
+                this.app.syncGame();
+            }
+        }, 2 * 60 * 1000);
+    }
+
+    shouldSync() {
+        return navigator.onLine && this.app.blobSync.isConnected;
+    }
+
+    markDirty() {
+        this.dirty = true;
+    }
+
+    markClean() {
+        this.dirty = false;
+    }
+}
+
 class ScoreboardApp {
     constructor() {
         // Initialize components
@@ -126,17 +162,15 @@ class ScoreboardApp {
         this.settings = new Settings(this);
         this.ui = new UI(this);
         this.blobSync = new BlobSync(this);
+        this.syncManager = new SyncManager(this);
         this.weeklySetup = new WeeklySetup(this);
 
         // Global state
         this.periodScores = [];
-        this.scoreHistory = []; // Add this new array to store detailed history
+        this.events = [];
+        this.currentShareCode = null;
         this.wakeLock = null;
         this.playersList = [];
-        
-        // Upload configuration
-        this.uploadTimeout = null;
-        this.lastUploadAttempt = null;
 
         // Initialize app
         this.loadSavedSettings();
@@ -148,13 +182,24 @@ class ScoreboardApp {
         // Initialize playersList
         this.playersList = [];
 
-        // Load saved score history
-        if (localStorage.getItem('scoreHistory')) {
+        // Migrate old scoreHistory → gameEvents
+        if (localStorage.getItem('scoreHistory') && !localStorage.getItem('gameEvents')) {
+            localStorage.setItem('gameEvents', localStorage.getItem('scoreHistory'));
+            localStorage.removeItem('scoreHistory');
+        } else if (localStorage.getItem('scoreHistory')) {
+            localStorage.removeItem('scoreHistory');
+        }
+
+        // Clean up legacy keys
+        localStorage.removeItem('lastUploadAttempt');
+
+        // Load saved game events
+        if (localStorage.getItem('gameEvents')) {
             try {
-                this.scoreHistory = JSON.parse(localStorage.getItem('scoreHistory'));
+                this.events = JSON.parse(localStorage.getItem('gameEvents'));
             } catch (e) {
-                console.error('Error loading score history:', e);
-                this.scoreHistory = [];
+                console.error('Error loading game events:', e);
+                this.events = [];
             }
         }
 
@@ -175,22 +220,6 @@ class ScoreboardApp {
         if (localStorage.getItem('keepScreenOn') === 'true') {
             this.settings.keepScreenOnCheckbox.checked = true;
             this.requestWakeLock();
-        }
-
-        // Load last upload attempt info
-        if (localStorage.getItem('lastUploadAttempt')) {
-            try {
-                this.lastUploadAttempt = JSON.parse(localStorage.getItem('lastUploadAttempt'));
-                if (this.lastUploadAttempt) {
-                    const status = this.lastUploadAttempt.success ? 
-                        `Last upload: ${new Date(this.lastUploadAttempt.timestamp).toLocaleString()} (Success)` : 
-                        `Last upload: ${new Date(this.lastUploadAttempt.timestamp).toLocaleString()} (Failed: ${this.lastUploadAttempt.error})`;
-                    document.getElementById('upload-status').textContent = status;
-                }
-            } catch (e) {
-                console.error('Error loading last upload attempt:', e);
-                this.lastUploadAttempt = null;
-            }
         }
 
         // Load saved players
@@ -259,7 +288,7 @@ class ScoreboardApp {
             this.weeklySetup.dateInput.value = date;
         }
 
-        // Load active game state
+        // Load active game state (consolidated format with events)
         const gameId = `game-${date}`;
         const gameState = await this.blobSync.download(`games/${gameId}.json`);
         if (gameState) {
@@ -269,6 +298,9 @@ class ScoreboardApp {
             if (gameState.team1?.name) this.teams.team1NameElement.textContent = gameState.team1.name;
             if (gameState.team2?.name) this.teams.team2NameElement.textContent = gameState.team2.name;
             this.periodScores = gameState.periodScores || [];
+            this.events = gameState.events || [];
+            this.currentShareCode = gameState.shareCode || null;
+            localStorage.setItem('gameEvents', JSON.stringify(this.events));
             this.ui.updateScoreHistory();
         }
     }
@@ -279,12 +311,17 @@ class ScoreboardApp {
         return `game-${date}`;
     }
 
-    // Sync current game state to blob
-    syncGameState() {
+    // Sync consolidated game state + events to blob (fire-and-forget)
+    syncGame() {
         if (!this.blobSync.isConnected) return;
+        if (!this.syncManager.shouldSync()) {
+            this.syncManager.markDirty();
+            return;
+        }
 
         const state = {
             id: this.currentGameId,
+            version: 1,
             weekDate: this.weeklySetup.dateInput.value,
             team1: {
                 name: this.teams.team1NameElement.textContent,
@@ -297,39 +334,54 @@ class ScoreboardApp {
             period: this.periodScores.length + 1,
             periodScores: this.periodScores,
             timerMinutes: parseInt(this.settings.timerMinutesInput.value),
-            players: this.playersList
+            players: this.playersList,
+            events: this.events,
+            shareCode: this.currentShareCode,
+            lastUpdated: new Date().toISOString()
         };
 
         this.blobSync.debouncedUpload(`games/${this.currentGameId}.json`, state, 5000);
-    }
-
-    // Sync event log to blob
-    syncEventLog() {
-        if (!this.blobSync.isConnected || this.scoreHistory.length === 0) return;
-
-        const events = this.scoreHistory.map(entry => ({
-            timestamp: entry.timestamp,
-            type: 'score',
-            teamNumber: entry.teamNumber,
-            playerName: entry.playerName || null,
-            action: entry.action,
-            scores: {
-                team1: entry.team1Score,
-                team2: entry.team2Score
-            },
-            team1Name: entry.team1Name,
-            team2Name: entry.team2Name,
-            timerCurrent: entry.timerCurrent
-        }));
-
-        this.blobSync.debouncedUpload(`games/${this.currentGameId}-events.json`, { events }, 5000);
+        this.syncManager.markClean();
     }
 
     // Capture score at end of timer
     captureScore() {
+        const period = this.periodScores.length + 1;
         this.periodScores.push(`${this.teams.team1Points} - ${this.teams.team2Points}`);
+
+        this.events.push({
+            ts: new Date().toISOString(),
+            type: 'period_end',
+            scores: [this.teams.team1Points, this.teams.team2Points],
+            period: period
+        });
+        localStorage.setItem('gameEvents', JSON.stringify(this.events));
+
         this.ui.updateScoreHistory();
-        this.syncGameState();
+        this.syncManager.markDirty();
+        this.syncGame();
+    }
+
+    // Correct a period score to current team scores
+    correctPeriodScore(periodIndex) {
+        this.periodScores[periodIndex] = `${this.teams.team1Points} - ${this.teams.team2Points}`;
+
+        // Find the matching period_end event and update its scores
+        let periodCount = 0;
+        for (let i = 0; i < this.events.length; i++) {
+            if (this.events[i].type === 'period_end') {
+                if (periodCount === periodIndex) {
+                    this.events[i].scores = [this.teams.team1Points, this.teams.team2Points];
+                    break;
+                }
+                periodCount++;
+            }
+        }
+
+        localStorage.setItem('gameEvents', JSON.stringify(this.events));
+        this.ui.updateScoreHistory();
+        this.syncManager.markDirty();
+        this.syncGame();
     }
 
     // Reset score history
@@ -338,106 +390,77 @@ class ScoreboardApp {
         this.ui.updateScoreHistory();
     }
 
-    // Clear detailed score history
+    // Clear game events
     clearScoreHistory() {
-        this.scoreHistory = [];
-        localStorage.removeItem('scoreHistory');
+        this.events = [];
+        this.currentShareCode = null;
+        localStorage.removeItem('gameEvents');
     }
 
-    // Record score change in history
+    // Record score change as an event
     recordScoreChange(teamNumber, isIncrement, playerName = undefined) {
-        const now = new Date();
-        const historyEntry = {
-            timestamp: now.toLocaleString(),
-            timerCurrent: this.timer.timeLeft,
-            timerStart: parseInt(this.settings.timerMinutesInput.value) * 60,
-            teamNumber: teamNumber,
+        const event = {
+            ts: new Date().toISOString(),
+            type: 'score',
+            team: teamNumber,
+            player: playerName || null,
             action: isIncrement ? 'increment' : 'decrement',
-            playerName: playerName,
-            team1Score: this.teams.team1Points,
-            team2Score: this.teams.team2Points,
-            team1Name: this.teams.team1NameElement.textContent,
-            team2Name: this.teams.team2NameElement.textContent
+            scores: [this.teams.team1Points, this.teams.team2Points],
+            timer: this.timer.timeLeft
         };
-        
-        this.scoreHistory.push(historyEntry);
-        
-        // Save to localStorage
-        localStorage.setItem('scoreHistory', JSON.stringify(this.scoreHistory));
-        
-        // Log to console for debugging
-        console.log('Score change recorded:', historyEntry);
-        
-        // Schedule upload after 10 seconds of inactivity
-        this.uploadScoreHistory();
 
-        // Sync game state and events to blob
-        this.syncGameState();
-        this.syncEventLog();
-    }
-    
-    // Upload score history to blob storage
-    uploadScoreHistory() {
-        // Clear any existing timeout
-        if (this.uploadTimeout) {
-            clearTimeout(this.uploadTimeout);
-            this.uploadTimeout = null;
-        }
-        
-        // Set a new timeout to upload after 10 seconds of inactivity
-        this.uploadTimeout = setTimeout(() => {
-            this.performHistoryUpload();
-        }, 10000);
+        this.events.push(event);
+        localStorage.setItem('gameEvents', JSON.stringify(this.events));
+
+        // Sync consolidated game to blob
+        this.syncManager.markDirty();
+        this.syncGame();
     }
 
-    performHistoryUpload() {
-        // Don't upload if history is empty
-        if (this.scoreHistory.length === 0) {
-            console.log('No score history to upload');
+    // Share current game results — creates a share code via server
+    async shareGame() {
+        if (!this.blobSync.isConnected) {
+            alert('Join a group to share game results.');
             return;
         }
-        
-        const now = new Date();
-        
-        // Prepare the data
-        const historyData = JSON.stringify(this.scoreHistory);
-        
-        console.log('Uploading score history to server');
-        
-        // Upload the data to our API endpoint
-        fetch('/Scoreboard/api/upload-history', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: historyData
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('Score history uploaded successfully', data);
-            this.lastUploadAttempt = {
-                timestamp: now,
-                success: true,
-                filename: data.filename
-            };
-            localStorage.setItem('lastUploadAttempt', JSON.stringify(this.lastUploadAttempt));
-            document.getElementById('upload-status').textContent = `Last upload: ${now.toLocaleString()} (Success)`;
-        })
-        .catch(error => {
-            console.error('Error uploading score history:', error);
-            this.lastUploadAttempt = {
-                timestamp: now,
-                success: false,
-                error: error.message
-            };
-            localStorage.setItem('lastUploadAttempt', JSON.stringify(this.lastUploadAttempt));
-            document.getElementById('upload-status').textContent = `Last upload: ${now.toLocaleString()} (Failed: ${error.message})`;
+
+        // Ensure latest state is uploaded before sharing
+        await this.blobSync.upload(`games/${this.currentGameId}.json`, {
+            id: this.currentGameId,
+            version: 1,
+            weekDate: this.weeklySetup.dateInput.value,
+            team1: { name: this.teams.team1NameElement.textContent, score: this.teams.team1Points },
+            team2: { name: this.teams.team2NameElement.textContent, score: this.teams.team2Points },
+            period: this.periodScores.length + 1,
+            periodScores: this.periodScores,
+            timerMinutes: parseInt(this.settings.timerMinutesInput.value),
+            players: this.playersList,
+            events: this.events,
+            shareCode: this.currentShareCode,
+            lastUpdated: new Date().toISOString()
         });
+
+        try {
+            const res = await fetch('/Scoreboard/api/games/share', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: this.blobSync.groupId, gameId: this.currentGameId })
+            });
+            if (!res.ok) throw new Error('Failed to create share link');
+            const data = await res.json();
+
+            this.currentShareCode = data.shareCode;
+            this.syncGame();
+
+            const shareUrl = `${window.location.origin}${data.shareUrl}`;
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert('Share link copied to clipboard!');
+            }).catch(() => {
+                prompt('Copy this link:', shareUrl);
+            });
+        } catch (e) {
+            alert('Failed to share game: ' + e.message);
+        }
     }
 
     // Wake Lock API functions
@@ -736,7 +759,6 @@ class Settings {
         this.scoreFontSizeSlider = document.getElementById('score-font-size');
         this.timerFontSizeSlider = document.getElementById('timer-font-size');
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
-        this.testBlobStorageBtn = document.getElementById('test-blob-storage-btn');
 
         // Group elements
         this.groupInfoDiv = document.getElementById('group-info');
@@ -748,6 +770,7 @@ class Settings {
         this.joinGroupBtn = document.getElementById('join-group-btn');
         this.createGroupBtn = document.getElementById('create-group-btn');
         this.shareGroupBtn = document.getElementById('share-group-btn');
+        this.shareGameBtn = document.getElementById('share-game-btn');
         this.leaveGroupBtn = document.getElementById('leave-group-btn');
 
         // Initialize
@@ -829,11 +852,6 @@ class Settings {
         this.keepScreenOnCheckbox.addEventListener('change', () => {
             this.app.toggleWakeLock();
         });
-        
-        // Test blob storage connection
-        this.testBlobStorageBtn.addEventListener('click', () => {
-            this.testBlobStorageConnection();
-        });
 
         // Manage default players button
         const manageDefaultPlayersBtn = document.getElementById('manage-default-players-btn');
@@ -847,6 +865,7 @@ class Settings {
         this.joinGroupBtn.addEventListener('click', () => this.handleJoinGroup());
         this.createGroupBtn.addEventListener('click', () => this.handleCreateGroup());
         this.shareGroupBtn.addEventListener('click', () => this.handleShareGroup());
+        this.shareGameBtn.addEventListener('click', () => this.app.shareGame());
         this.leaveGroupBtn.addEventListener('click', () => this.handleLeaveGroup());
         this.groupCodeInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.handleJoinGroup();
@@ -856,26 +875,6 @@ class Settings {
     toggle() {
         this.settingsPanel.classList.toggle('active');
     }
-    
-    testBlobStorageConnection() {
-        console.log('Testing blob storage connection via server API');
-
-        // Test the connection using our API endpoint
-        fetch('/Scoreboard/api/test-blob-connection')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                alert(data.message || 'Connection to blob storage successful!');
-            })
-            .catch(error => {
-                console.error('Error testing blob storage connection:', error);
-                alert(`Connection test failed: ${error.message}`);
-            });
-    }
 
     updateGroupUI() {
         if (this.app.blobSync.isConnected) {
@@ -884,9 +883,11 @@ class Settings {
             this.groupNameDisplay.textContent = this.app.blobSync.groupName;
             this.groupCodeDisplay.textContent = this.app.blobSync.code;
             this.groupAdminBadge.style.display = this.app.blobSync.isAdmin ? 'inline' : 'none';
+            this.shareGameBtn.style.display = 'inline-block';
         } else {
             this.groupInfoDiv.style.display = 'none';
             this.groupJoinDiv.style.display = 'block';
+            this.shareGameBtn.style.display = 'none';
         }
     }
 
@@ -1549,11 +1550,14 @@ class UI {
         this.scoreHistoryElement.innerHTML = '';
 
         // Display each period score
-        this.app.periodScores.forEach((score) => {
+        this.app.periodScores.forEach((score, index) => {
             const periodElement = document.createElement('span');
             periodElement.className = 'period-score';
             periodElement.textContent = score;
-            periodElement.contentEditable = 'true';
+            periodElement.style.cursor = 'pointer';
+            periodElement.addEventListener('click', () => {
+                this.app.correctPeriodScore(index);
+            });
             this.scoreHistoryElement.appendChild(periodElement);
         });
     }

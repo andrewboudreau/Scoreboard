@@ -19,6 +19,8 @@ public class ScoreboardModule : IApplicationPartModule
     private static string htmlIndexContent = "";
     private static string htmlDocsContent = "";
     private static string htmlManagePlayersContent = "";
+    private static string htmlGameContent = "";
+    private static string htmlStatsContent = "";
 
     public void ConfigureServices(IServiceCollection services)
     {
@@ -50,6 +52,9 @@ public class ScoreboardModule : IApplicationPartModule
 
         // Register the group service for shared state management
         services.AddSingleton<IGroupService, GroupService>();
+
+        // Register the game share service
+        services.AddSingleton<IGameShareService, GameShareService>();
     }
 
     public void Configure(WebApplication app)
@@ -113,11 +118,51 @@ public class ScoreboardModule : IApplicationPartModule
             return Results.Content(htmlManagePlayersContent, "text/html");
         });
 
-        // Map API endpoints with module prefix
-        app.MapPost("/Scoreboard/api/upload-history", ScoreboardApiMethods.UploadHistory);
+        // Shared game results page
+        app.MapGet("/Scoreboard/game", () =>
+        {
+            if (string.IsNullOrEmpty(htmlGameContent))
+            {
+                var assembly = typeof(ScoreboardModule).Assembly;
+                var resourceName = "SharedTools.Scoreboard.wwwroot.game.html";
+                using var stream = assembly.GetManifestResourceStream(resourceName);
 
-        app.MapGet("/Scoreboard/api/test-blob-connection", ScoreboardApiMethods.TestBlobClient);
+                if (stream is null)
+                {
+                    return Results.Problem("Game results page not found.", statusCode: 404);
+                }
+                using var reader = new StreamReader(stream);
+                htmlGameContent = reader.ReadToEnd();
+            }
 
+            return Results.Content(htmlGameContent, "text/html");
+        });
+
+        // Stats / game history page
+        app.MapGet("/Scoreboard/stats", () =>
+        {
+            if (string.IsNullOrEmpty(htmlStatsContent))
+            {
+                var assembly = typeof(ScoreboardModule).Assembly;
+                var resourceName = "SharedTools.Scoreboard.wwwroot.stats.html";
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+
+                if (stream is null)
+                {
+                    return Results.Problem("Stats page not found.", statusCode: 404);
+                }
+                using var reader = new StreamReader(stream);
+                htmlStatsContent = reader.ReadToEnd();
+            }
+
+            return Results.Content(htmlStatsContent, "text/html");
+        });
+
+        // Game share endpoints
+        app.MapPost("/Scoreboard/api/games/share", GameShareApiMethods.CreateShare);
+        app.MapGet("/Scoreboard/api/shares/{code}", GameShareApiMethods.GetShare);
+
+        // Player management endpoints
         app.MapGet("/Scoreboard/api/default-players", ScoreboardApiMethods.GetDefaultPlayers);
 
         // Player management endpoints
