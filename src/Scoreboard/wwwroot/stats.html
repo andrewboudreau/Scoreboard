@@ -16,7 +16,7 @@
         }
 
         .container {
-            max-width: 600px;
+            max-width: 640px;
             margin: 0 auto;
         }
 
@@ -27,18 +27,8 @@
             margin-bottom: 16px;
         }
 
-        .header h1 {
-            font-size: 20px;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .header a {
-            color: #888;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
+        .header h1 { font-size: 20px; font-weight: 700; color: #333; }
+        .header a { color: #888; text-decoration: none; font-size: 14px; }
         .header a:hover { color: #555; }
 
         .back-btn {
@@ -55,7 +45,6 @@
             padding: 0;
             font-family: inherit;
         }
-
         .back-btn:hover { color: #222; }
 
         .loading, .error, .empty {
@@ -64,24 +53,11 @@
             color: #666;
             font-size: 16px;
         }
-
         .error { color: #c00; }
 
-        .connect-prompt {
-            text-align: center;
-            padding: 60px 20px;
-        }
-
-        .connect-prompt p {
-            color: #666;
-            margin-bottom: 12px;
-        }
-
-        .connect-prompt a {
-            color: #2b8a3e;
-            text-decoration: none;
-            font-weight: 600;
-        }
+        .connect-prompt { text-align: center; padding: 60px 20px; }
+        .connect-prompt p { color: #666; margin-bottom: 12px; }
+        .connect-prompt a { color: #2b8a3e; text-decoration: none; font-weight: 600; }
 
         /* Game list cards */
         .game-card {
@@ -93,49 +69,39 @@
             cursor: pointer;
             transition: box-shadow 0.2s;
         }
+        .game-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 
-        .game-card:hover {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        .game-card .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
         }
-
-        .game-card .date {
-            font-size: 12px;
-            color: #999;
-            margin-bottom: 8px;
-        }
+        .game-card .date { font-size: 13px; color: #555; font-weight: 600; }
+        .game-card .meta { font-size: 11px; color: #aaa; }
 
         .game-card .score-summary {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 16px;
-            font-size: 18px;
-            font-weight: 700;
         }
-
-        .game-card .team-name {
-            font-size: 13px;
-            color: #666;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-
-        .game-card .team-score {
-            font-size: 28px;
-            font-weight: 700;
-            color: #222;
-        }
-
+        .game-card .team-block { text-align: center; min-width: 80px; }
+        .game-card .team-name { font-size: 12px; color: #888; text-transform: uppercase; font-weight: 600; }
+        .game-card .team-score { font-size: 28px; font-weight: 700; color: #222; }
         .game-card .team-score.winner { color: #2b8a3e; }
-
         .game-card .vs { color: #ccc; font-size: 14px; }
 
-        .game-card .team-block {
-            text-align: center;
-            min-width: 80px;
+        .game-card .card-bottom {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #aaa;
         }
 
-        /* Detail view - reuses game.html styles */
+        /* Detail view */
         .final-score {
             background: #fff;
             border-radius: 12px;
@@ -144,55 +110,15 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             margin-bottom: 16px;
         }
+        .final-score .label { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 4px; }
+        .final-score .date { font-size: 14px; color: #666; margin-bottom: 16px; }
+        .score-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
 
-        .final-score .label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            margin-bottom: 4px;
-        }
-
-        .final-score .date {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 16px;
-        }
-
-        .score-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 20px;
-        }
-
-        .detail .team-block {
-            text-align: center;
-            min-width: 100px;
-        }
-
-        .detail .team-block .name {
-            font-size: 14px;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: #555;
-            margin-bottom: 4px;
-        }
-
-        .detail .team-block .score {
-            font-size: 48px;
-            font-weight: 700;
-            color: #111;
-            line-height: 1;
-        }
-
+        .detail .team-block { text-align: center; min-width: 100px; }
+        .detail .team-block .name { font-size: 14px; font-weight: 600; text-transform: uppercase; color: #555; margin-bottom: 4px; }
+        .detail .team-block .score { font-size: 48px; font-weight: 700; color: #111; line-height: 1; }
         .detail .team-block .score.winner { color: #2b8a3e; }
-
-        .detail .vs {
-            font-size: 16px;
-            color: #aaa;
-            font-weight: 600;
-        }
+        .detail .vs { font-size: 16px; color: #aaa; font-weight: 600; }
 
         .card {
             background: #fff;
@@ -201,114 +127,65 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             margin-bottom: 16px;
         }
+        .card h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 12px; }
 
-        .card h2 {
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            margin-bottom: 12px;
-        }
+        /* Score graph */
+        .score-graph { position: relative; height: 200px; margin: 8px 0; }
+        .score-graph canvas { width: 100%; height: 100%; }
 
-        .periods-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+        /* Periods table */
+        .periods-table { width: 100%; border-collapse: collapse; }
+        .periods-table th, .periods-table td { padding: 8px 12px; text-align: center; font-size: 14px; }
+        .periods-table th { color: #999; font-weight: 500; border-bottom: 1px solid #eee; }
+        .periods-table td { font-weight: 600; color: #333; }
+        .periods-table tr:not(:last-child) td { border-bottom: 1px solid #f0f0f0; }
 
-        .periods-table th, .periods-table td {
-            padding: 8px 12px;
-            text-align: center;
-            font-size: 14px;
-        }
-
-        .periods-table th {
-            color: #999;
-            font-weight: 500;
-            border-bottom: 1px solid #eee;
-        }
-
-        .periods-table td {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .periods-table tr:not(:last-child) td {
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .player-stats-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .player-stats-table th, .player-stats-table td {
-            padding: 8px 12px;
-            text-align: left;
-            font-size: 14px;
-        }
-
-        .player-stats-table th {
-            color: #999;
-            font-weight: 500;
-            border-bottom: 1px solid #eee;
-        }
-
+        /* Player stats */
+        .player-stats-table { width: 100%; border-collapse: collapse; }
+        .player-stats-table th, .player-stats-table td { padding: 8px 12px; text-align: left; font-size: 14px; }
+        .player-stats-table th { color: #999; font-weight: 500; border-bottom: 1px solid #eee; }
         .player-stats-table td { color: #333; }
+        .player-stats-table td:last-child { text-align: right; font-weight: 600; }
+        .player-stats-table tr:not(:last-child) td { border-bottom: 1px solid #f0f0f0; }
+        .team-header { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #999; padding: 12px 12px 4px; }
 
-        .player-stats-table td:last-child {
-            text-align: right;
-            font-weight: 600;
-        }
+        /* Points bar */
+        .points-bar-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+        .points-bar { height: 6px; border-radius: 3px; min-width: 4px; }
+        .points-bar.t1 { background: #228be6; }
+        .points-bar.t2 { background: #e64980; }
 
-        .player-stats-table tr:not(:last-child) td {
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .team-header {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            padding: 12px 12px 4px;
-        }
-
-        .timeline {
-            list-style: none;
-            padding: 0;
-        }
-
-        .timeline li {
+        /* Scoring timeline */
+        .scoring-timeline { list-style: none; padding: 0; }
+        .scoring-timeline li {
             display: flex;
-            align-items: baseline;
+            align-items: center;
             gap: 10px;
-            padding: 6px 0;
+            padding: 8px 0;
             font-size: 13px;
             border-bottom: 1px solid #f0f0f0;
         }
+        .scoring-timeline li:last-child { border-bottom: none; }
 
-        .timeline li:last-child { border-bottom: none; }
+        .st-time { color: #999; font-size: 12px; white-space: nowrap; min-width: 58px; }
+        .st-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .st-dot.t1 { background: #228be6; }
+        .st-dot.t2 { background: #e64980; }
+        .st-dot.period { background: #2b8a3e; }
+        .st-who { flex: 1; color: #333; }
+        .st-who.period-event { font-weight: 600; color: #2b8a3e; }
+        .st-score { color: #888; font-size: 12px; white-space: nowrap; font-weight: 600; }
 
-        .timeline .time {
-            color: #999;
+        .game-duration {
+            text-align: center;
             font-size: 12px;
-            white-space: nowrap;
-            min-width: 50px;
-        }
-
-        .timeline .event-desc {
-            color: #444;
-            flex: 1;
-        }
-
-        .timeline .event-score {
-            color: #888;
-            font-size: 12px;
-            white-space: nowrap;
-        }
-
-        .timeline .period-event {
-            font-weight: 600;
-            color: #2b8a3e;
+            color: #aaa;
+            margin-top: 4px;
         }
 
         .branding {
@@ -318,7 +195,6 @@
             font-size: 12px;
             color: #aaa;
         }
-
         .branding a { color: #888; text-decoration: none; }
         .branding a:hover { color: #555; }
     </style>
@@ -364,7 +240,6 @@
                 const data = await res.json();
                 groupId = data.groupId;
                 readUrl = data.sasUrls.readUrl;
-
                 await loadGames();
             } catch (e) {
                 loadingEl.style.display = 'none';
@@ -374,14 +249,6 @@
         })();
 
         async function loadGames() {
-            const listUrl = new URL(readUrl);
-            listUrl.pathname += '/' + groupId;
-            // Azure Blob list API with prefix filter
-            listUrl.searchParams.set('restype', 'container');
-            listUrl.searchParams.set('comp', 'list');
-            listUrl.searchParams.set('prefix', groupId + '/games/');
-
-            // Build the list URL on the container (not sub-path)
             const containerUrl = new URL(readUrl);
             const params = containerUrl.search;
             const listBase = containerUrl.origin + containerUrl.pathname;
@@ -391,7 +258,6 @@
                 const res = await fetch(fullListUrl);
                 if (!res.ok) throw new Error(`Blob list failed: ${res.status}`);
                 const xml = await res.text();
-
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(xml, 'application/xml');
                 const blobs = doc.querySelectorAll('Blob > Name');
@@ -403,7 +269,6 @@
                     return;
                 }
 
-                // Download each game blob
                 const gamePromises = Array.from(blobs).map(async (blob) => {
                     const blobName = blob.textContent;
                     const blobUrl = `${listBase}/${blobName}${params}`;
@@ -415,8 +280,6 @@
                 });
 
                 games = (await Promise.all(gamePromises)).filter(g => g !== null);
-
-                // Sort newest first by lastUpdated or weekDate
                 games.sort((a, b) => {
                     const da = a.lastUpdated || a.weekDate || '';
                     const db = b.lastUpdated || b.weekDate || '';
@@ -430,6 +293,20 @@
                 errorEl.style.display = 'block';
                 errorEl.textContent = 'Failed to list games: ' + e.message;
             }
+        }
+
+        function getGameMeta(game) {
+            const events = game.events || [];
+            const periods = game.periodScores || [];
+            const players = (game.players || []).filter(p => p.active && p.points > 0);
+            let duration = null;
+            if (events.length >= 2) {
+                const first = new Date(events[0].ts);
+                const last = new Date(events[events.length - 1].ts);
+                const mins = Math.round((last - first) / 60000);
+                if (mins > 0) duration = mins;
+            }
+            return { periods: periods.length, players: players.length, events: events.length, duration };
         }
 
         function renderListView() {
@@ -448,10 +325,14 @@
                 const t1Wins = t1.score > t2.score;
                 const t2Wins = t2.score > t1.score;
                 const dateStr = game.weekDate ? formatDate(game.weekDate) : 'Unknown date';
+                const meta = getGameMeta(game);
 
                 html += `
                     <div class="game-card" onclick="showDetail(${index})">
-                        <div class="date">${esc(dateStr)}</div>
+                        <div class="card-top">
+                            <div class="date">${esc(dateStr)}</div>
+                            <div class="meta">${meta.periods} period${meta.periods !== 1 ? 's' : ''}${meta.duration ? ' &middot; ' + meta.duration + ' min' : ''}</div>
+                        </div>
                         <div class="score-summary">
                             <div class="team-block">
                                 <div class="team-name">${esc(t1.name)}</div>
@@ -462,6 +343,10 @@
                                 <div class="team-name">${esc(t2.name)}</div>
                                 <div class="team-score${t2Wins ? ' winner' : ''}">${t2.score}</div>
                             </div>
+                        </div>
+                        <div class="card-bottom">
+                            <span>${meta.players} scorer${meta.players !== 1 ? 's' : ''}</span>
+                            <span>${meta.events} event${meta.events !== 1 ? 's' : ''}</span>
                         </div>
                     </div>`;
             });
@@ -475,6 +360,7 @@
 
             listViewEl.style.display = 'none';
             detailViewEl.style.display = 'block';
+            window.scrollTo(0, 0);
 
             const t1 = game.team1 || { name: 'Team 1', score: 0 };
             const t2 = game.team2 || { name: 'Team 2', score: 0 };
@@ -484,6 +370,7 @@
             const players = game.players || [];
             const events = game.events || [];
             const dateStr = game.weekDate || '';
+            const meta = getGameMeta(game);
 
             let html = `<button class="back-btn" onclick="renderListView()">&larr; Back to games</button>`;
 
@@ -503,7 +390,14 @@
                             <div class="score${t2Wins ? ' winner' : ''}">${t2.score}</div>
                         </div>
                     </div>
+                    ${meta.duration ? `<div class="game-duration">${meta.duration} minutes &middot; ${periods.length} period${periods.length !== 1 ? 's' : ''}</div>` : ''}
                 </div>`;
+
+            // Score Progression Graph
+            const scoreEvents = events.filter(e => e.type === 'score' && e.scores);
+            if (scoreEvents.length >= 2) {
+                html += `<div class="card"><h2>Score Progression</h2><div class="score-graph"><canvas id="score-canvas"></canvas></div></div>`;
+            }
 
             // Period Breakdown
             if (periods.length > 0) {
@@ -515,9 +409,10 @@
                 html += `</tbody></table></div>`;
             }
 
-            // Player Stats
+            // Player Stats with bars
             const activePlayers = players.filter(p => p.active && p.points > 0);
             if (activePlayers.length > 0) {
+                const maxPoints = Math.max(...activePlayers.map(p => p.points));
                 const team1Players = activePlayers.filter(p => p.team === '1').sort((a, b) => b.points - a.points);
                 const team2Players = activePlayers.filter(p => p.team === '2').sort((a, b) => b.points - a.points);
 
@@ -526,41 +421,120 @@
                 if (team1Players.length > 0) {
                     html += `<tr><td colspan="2" class="team-header">${esc(t1.name)}</td></tr>`;
                     team1Players.forEach(p => {
-                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
+                        const barW = Math.round((p.points / maxPoints) * 80);
+                        html += `<tr><td>${esc(p.name)}</td><td><div class="points-bar-cell"><div class="points-bar t1" style="width:${barW}px"></div> ${p.points}</div></td></tr>`;
                     });
                 }
-
                 if (team2Players.length > 0) {
                     html += `<tr><td colspan="2" class="team-header">${esc(t2.name)}</td></tr>`;
                     team2Players.forEach(p => {
-                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
+                        const barW = Math.round((p.points / maxPoints) * 80);
+                        html += `<tr><td>${esc(p.name)}</td><td><div class="points-bar-cell"><div class="points-bar t2" style="width:${barW}px"></div> ${p.points}</div></td></tr>`;
                     });
                 }
 
                 html += `</tbody></table></div>`;
             }
 
-            // Event Timeline
+            // Scoring Timeline (who scored when)
             if (events.length > 0) {
-                html += `<div class="card"><h2>Event Timeline</h2><ul class="timeline">`;
+                html += `<div class="card"><h2>Scoring Timeline</h2><ul class="scoring-timeline">`;
                 events.forEach(ev => {
                     const time = ev.ts ? formatTime(ev.ts) : '';
+                    const scores = ev.scores || [];
                     if (ev.type === 'period_end') {
-                        const scores = ev.scores || [];
-                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc period-event">Period ${ev.period || '?'} ended</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
+                        html += `<li><span class="st-time">${esc(time)}</span><span class="st-dot period"></span><span class="st-who period-event">Period ${ev.period || '?'} ended</span><span class="st-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
                     } else if (ev.type === 'score') {
-                        const who = ev.player ? esc(ev.player) : `Team ${ev.team}`;
+                        const team = ev.team === 1 ? 't1' : 't2';
+                        const who = ev.player || (ev.team === 1 ? t1.name : t2.name);
                         const action = ev.action === 'increment' ? '+1' : '-1';
-                        const scores = ev.scores || [];
-                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc">${who} ${action}</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
+                        html += `<li><span class="st-time">${esc(time)}</span><span class="st-dot ${team}"></span><span class="st-who">${esc(who)} <span style="color:#999">${action}</span></span><span class="st-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
                     }
                 });
                 html += `</ul></div>`;
             }
 
             html += `<div class="branding"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
-
             detailViewEl.innerHTML = html;
+
+            // Draw score progression canvas
+            if (scoreEvents.length >= 2) {
+                drawScoreGraph(scoreEvents, t1.name, t2.name);
+            }
+        }
+
+        function drawScoreGraph(scoreEvents, t1Name, t2Name) {
+            const canvas = document.getElementById('score-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            ctx.scale(dpr, dpr);
+
+            const w = rect.width;
+            const h = rect.height;
+            const pad = { top: 20, right: 16, bottom: 28, left: 32 };
+            const plotW = w - pad.left - pad.right;
+            const plotH = h - pad.top - pad.bottom;
+
+            // Build data points: [index, t1score, t2score]
+            const points = scoreEvents.map((ev, i) => [i, ev.scores[0], ev.scores[1]]);
+            const maxScore = Math.max(...points.map(p => Math.max(p[1], p[2])), 1);
+            const n = points.length;
+
+            function x(i) { return pad.left + (i / (n - 1)) * plotW; }
+            function y(val) { return pad.top + plotH - (val / maxScore) * plotH; }
+
+            // Grid lines
+            ctx.strokeStyle = '#eee';
+            ctx.lineWidth = 1;
+            const gridLines = Math.min(maxScore, 5);
+            for (let i = 0; i <= gridLines; i++) {
+                const val = Math.round((maxScore / gridLines) * i);
+                const yy = y(val);
+                ctx.beginPath();
+                ctx.moveTo(pad.left, yy);
+                ctx.lineTo(w - pad.right, yy);
+                ctx.stroke();
+                ctx.fillStyle = '#bbb';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText(val, pad.left - 6, yy + 3);
+            }
+
+            // Team 1 line
+            ctx.strokeStyle = '#228be6';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            points.forEach((p, i) => {
+                const px = x(i), py = y(p[1]);
+                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+            });
+            ctx.stroke();
+
+            // Team 2 line
+            ctx.strokeStyle = '#e64980';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            points.forEach((p, i) => {
+                const px = x(i), py = y(p[2]);
+                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+            });
+            ctx.stroke();
+
+            // Legend
+            ctx.font = '11px sans-serif';
+            const leg1W = ctx.measureText(t1Name).width;
+            ctx.fillStyle = '#228be6';
+            ctx.fillRect(pad.left, h - 12, 12, 3);
+            ctx.fillText(t1Name, pad.left + 16, h - 6);
+            ctx.fillStyle = '#e64980';
+            ctx.fillRect(pad.left + 24 + leg1W, h - 12, 12, 3);
+            ctx.fillText(t2Name, pad.left + 24 + leg1W + 16, h - 6);
         }
 
         function esc(s) {
@@ -579,7 +553,7 @@
         function formatTime(ts) {
             try {
                 const d = new Date(ts);
-                return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+                return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' });
             } catch { return ''; }
         }
     </script>
