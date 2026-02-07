@@ -1,4 +1,5 @@
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -40,6 +41,28 @@ public class ScoreboardModule : IApplicationPartModule
             }
 
             var blobServiceClient = new BlobServiceClient(connectionString);
+
+            // Configure CORS to allow the SPA to make direct blob requests
+            try
+            {
+                var properties = blobServiceClient.GetProperties().Value;
+                var hasWildcardCors = properties.Cors?.Any(r => r.AllowedOrigins == "*") ?? false;
+                if (!hasWildcardCors)
+                {
+                    properties.Cors ??= [];
+                    properties.Cors.Add(new BlobCorsRule
+                    {
+                        AllowedOrigins = "*",
+                        AllowedMethods = "GET,PUT,POST,DELETE,HEAD,OPTIONS",
+                        AllowedHeaders = "*",
+                        ExposedHeaders = "*",
+                        MaxAgeInSeconds = 3600
+                    });
+                    blobServiceClient.SetProperties(properties);
+                }
+            }
+            catch { /* Non-fatal: CORS setup may fail in some environments */ }
+
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
 
             // Create the container if it doesn't exist

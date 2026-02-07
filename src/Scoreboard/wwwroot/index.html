@@ -11,10 +11,13 @@
     <audio id="alarm" src="/_content/Scoreboard/audio/buzzer.mp3"></audio>
 
     <div class="scoreboard">
+        <div class="team-players-list" id="team1-players-display">
+            <!-- Team 1 players will be displayed here -->
+        </div>
+        <div class="team-players-list" id="team2-players-display">
+            <!-- Team 2 players will be displayed here -->
+        </div>
         <div class="scores-container">
-            <div class="team-players-list" id="team1-players-display">
-                <!-- Team 1 players will be displayed here -->
-            </div>
             <div class="scores">
                 <div class="team">
                     <div class="team-name" contenteditable="true">BLACK</div>
@@ -24,9 +27,6 @@
                     <div class="team-name" contenteditable="true">WHITE</div>
                     <div class="score" id="score-team2">0</div>
                 </div>
-            </div>
-            <div class="team-players-list" id="team2-players-display">
-                <!-- Team 2 players will be displayed here -->
             </div>
         </div>
         <div class="timer-container">
@@ -96,11 +96,15 @@
             </div>
             <div class="settings-group">
                 <label for="score-font-size">Score Font Size: <span id="score-font-size-value">10</span>rem</label>
-                <input type="range" id="score-font-size" min="5" max="15" value="10" step="0.5">
+                <input type="range" id="score-font-size" min="5" max="25" value="10" step="0.5">
             </div>
             <div class="settings-group">
                 <label for="timer-font-size">Timer Font Size: <span id="timer-font-size-value">14</span>rem</label>
-                <input type="range" id="timer-font-size" min="6" max="20" value="14" step="0.5">
+                <input type="range" id="timer-font-size" min="6" max="30" value="14" step="0.5">
+            </div>
+            <div class="settings-group">
+                <label for="player-button-size">Player Button Size: <span id="player-button-size-value">15</span>px</label>
+                <input type="range" id="player-button-size" min="10" max="50" value="15" step="1">
             </div>
             <div class="settings-group">
                 <label>

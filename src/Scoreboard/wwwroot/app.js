@@ -214,6 +214,12 @@ class ScoreboardApp {
             this.settings.timerFontSizeSlider.value = savedTimerFontSize;
         }
 
+        if (localStorage.getItem('playerButtonSize')) {
+            const savedPlayerButtonSize = localStorage.getItem('playerButtonSize');
+            this.ui.updatePlayerButtonSize(savedPlayerButtonSize);
+            this.settings.playerButtonSizeSlider.value = savedPlayerButtonSize;
+        }
+
         // Screen wake lock
         if (localStorage.getItem('keepScreenOn') === 'true') {
             this.settings.keepScreenOnCheckbox.checked = true;
@@ -746,6 +752,7 @@ class Settings {
         this.testBuzzerBtn = document.getElementById('test-buzzer-btn');
         this.scoreFontSizeSlider = document.getElementById('score-font-size');
         this.timerFontSizeSlider = document.getElementById('timer-font-size');
+        this.playerButtonSizeSlider = document.getElementById('player-button-size');
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
 
         // Group elements
@@ -838,6 +845,10 @@ class Settings {
 
         this.timerFontSizeSlider.addEventListener('input', (e) => {
             this.app.ui.updateTimerFontSize(e.target.value);
+        });
+
+        this.playerButtonSizeSlider.addEventListener('input', (e) => {
+            this.app.ui.updatePlayerButtonSize(e.target.value);
         });
 
         // Wake lock checkbox
@@ -1567,6 +1578,12 @@ class UI {
         this.app.timer.timerDisplay.style.fontSize = `${value}rem`;
         document.getElementById('timer-font-size-value').textContent = value;
         localStorage.setItem('timerFontSize', value);
+    }
+
+    updatePlayerButtonSize(value) {
+        document.documentElement.style.setProperty('--player-button-padding', `${value}px`);
+        document.getElementById('player-button-size-value').textContent = value;
+        localStorage.setItem('playerButtonSize', value);
     }
 }
 
