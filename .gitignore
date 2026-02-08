@@ -369,5 +369,6 @@ FodyWeavers.xsd
 /MODULE_PUBLISH.md
 /MODULE_README.md
 /.playwright-mcp
+.claude/settings.local.json
 /nul
 /*.png
