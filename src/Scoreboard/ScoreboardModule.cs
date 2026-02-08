@@ -194,6 +194,7 @@ public class ScoreboardModule : IApplicationPartModule
         app.MapPost("/Scoreboard/api/default-players/delete", ScoreboardApiMethods.DeletePlayer);
         app.MapPost("/Scoreboard/api/default-players/save", ScoreboardApiMethods.SaveDefaultPlayers);
         app.MapPost("/Scoreboard/api/default-players/{id}/image", ScoreboardApiMethods.UploadPlayerImage);
+        app.MapGet("/Scoreboard/api/default-players/{id}/image", ScoreboardApiMethods.GetPlayerImage);
 
         // Group management endpoints
         app.MapPost("/Scoreboard/api/groups", GroupApiMethods.CreateGroup);

@@ -87,13 +87,10 @@ public static class ScoreboardApiMethods
             // Upload to blob storage
             var blobName = $"_players/{id}.png";
             var blobClient = container.GetBlobClient(blobName);
-            await blobClient.UploadAsync(outputStream, new BlobUploadOptions
-            {
-                HttpHeaders = new BlobHttpHeaders { ContentType = "image/png" }
-            });
+            await blobClient.UploadAsync(outputStream, overwrite: true);
 
-            // Build the image URL
-            var imageUrl = blobClient.Uri.ToString();
+            // Use the API proxy URL so clients don't need SAS tokens
+            var imageUrl = $"/Scoreboard/api/default-players/{id}/image";
 
             // Update the player's ImageUrl
             await defaultPlayersService.UpdatePlayerImageAsync(id, imageUrl);
@@ -103,6 +100,22 @@ public static class ScoreboardApiMethods
         catch (Exception ex)
         {
             return Results.Problem($"Failed to process image: {ex.Message}");
+        }
+    }
+
+    public static async Task<IResult> GetPlayerImage(long id, BlobContainerClient container)
+    {
+        var blobName = $"_players/{id}.png";
+        var blobClient = container.GetBlobClient(blobName);
+
+        try
+        {
+            var response = await blobClient.DownloadContentAsync();
+            return Results.File(response.Value.Content.ToArray(), "image/png");
+        }
+        catch
+        {
+            return Results.NotFound();
         }
     }
 }
