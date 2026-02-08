@@ -392,12 +392,13 @@ class ScoreboardApp {
     }
 
     // Record score change as an event
-    recordScoreChange(teamNumber, isIncrement, playerName = undefined) {
+    recordScoreChange(teamNumber, isIncrement, playerName = undefined, playerId = undefined) {
         const event = {
             ts: new Date().toISOString(),
             type: 'score',
             team: teamNumber,
             player: playerName || null,
+            playerId: playerId || null,
             action: isIncrement ? 'increment' : 'decrement',
             scores: [this.teams.team1Points, this.teams.team2Points],
             timer: this.timer.timeLeft
@@ -514,8 +515,6 @@ class Timer {
         this.timeLeft = 15 * 60; // Default: 15 minutes in seconds
         this.isRunning = false;
         this.interval = null;
-        this.blinkInterval = null;
-        this.colonVisible = true;
         this.lastTap = 0;
 
         // Initialize
@@ -525,6 +524,16 @@ class Timer {
 
     setupEventListeners() {
         this.timerDisplay.addEventListener('click', this.handleTimerTap.bind(this));
+
+        // Immediate glow on press/touch for tactile feedback
+        const addGlow = () => this.timerDisplay.classList.add('timer-pressed');
+        const removeGlow = () => this.timerDisplay.classList.remove('timer-pressed');
+        this.timerDisplay.addEventListener('mousedown', addGlow);
+        this.timerDisplay.addEventListener('mouseup', removeGlow);
+        this.timerDisplay.addEventListener('mouseleave', removeGlow);
+        this.timerDisplay.addEventListener('touchstart', addGlow, { passive: true });
+        this.timerDisplay.addEventListener('touchend', removeGlow);
+        this.timerDisplay.addEventListener('touchcancel', removeGlow);
     }
 
     startStop() {
@@ -532,11 +541,11 @@ class Timer {
             // Stop timer
             clearInterval(this.interval);
             this.isRunning = false;
-            this.stopBlinking();
+
         } else {
             // Start timer
             this.isRunning = true;
-            this.startBlinking();
+
             this.interval = setInterval(() => {
                 this.timeLeft--;
                 this.updateDisplay();
@@ -544,7 +553,7 @@ class Timer {
                 if (this.timeLeft <= 0) {
                     clearInterval(this.interval);
                     this.isRunning = false;
-                    this.stopBlinking();
+        
 
                     // Capture score and play alarm
                     this.app.captureScore();
@@ -558,39 +567,23 @@ class Timer {
         }
     }
 
-    startBlinking() {
-        this.colonVisible = true;
-        this.blinkInterval = setInterval(() => {
-            this.colonVisible = !this.colonVisible;
-            this.updateDisplay();
-        }, 500);
-    }
-
-    stopBlinking() {
-        clearInterval(this.blinkInterval);
-        this.blinkInterval = null;
-        this.colonVisible = true;
-        this.updateDisplay();
-    }
-
     reset() {
         clearInterval(this.interval);
         this.isRunning = false;
-        this.stopBlinking();
+        this.timerDisplay.classList.remove('timer-running');
         this.timeLeft = parseInt(this.app.settings.timerMinutesInput.value) * 60;
         this.updateDisplay();
         this.timerDisplay.style.backgroundColor = '#333';
     }
 
     updateDisplay() {
-        const sep = this.colonVisible ? ':' : ' ';
-        this.timerDisplay.textContent = this.formatTime(this.timeLeft, sep);
+        this.timerDisplay.textContent = this.formatTime(this.timeLeft);
     }
 
-    formatTime(seconds, sep = ':') {
+    formatTime(seconds) {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
-        return `${minutes.toString().padStart(2, '0')}${sep}${remainingSeconds.toString().padStart(2, '0')}`;
+        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
     playAlarm() {
@@ -622,7 +615,7 @@ class Timer {
         if (this.isRunning) {
             clearInterval(this.interval);
             this.isRunning = false;
-            this.stopBlinking();
+
         }
 
         // Capture score and play alarm
@@ -653,7 +646,7 @@ class Timer {
         if (minutes > 0 && minutes <= 60) {
             clearInterval(this.interval);
             this.isRunning = false;
-            this.stopBlinking();
+
             this.timeLeft = minutes * 60;
             this.updateDisplay();
             this.timerDisplay.style.backgroundColor = '#333';
@@ -1141,8 +1134,8 @@ class Players {
             }
             this.app.teams.updateScoreDisplay();
             
-            // Record the score change with player name
-            this.app.recordScoreChange(parseInt(player.team), true, player.name);
+            // Record the score change with player name and ID
+            this.app.recordScoreChange(parseInt(player.team), true, player.name, player.id);
 
             // Save state (localStorage + blob sync)
             this.savePlayersState();
@@ -1457,8 +1450,8 @@ class Players {
                         }
                         this.app.teams.updateScoreDisplay();
                         
-                        // Record the score change with player name
-                        this.app.recordScoreChange(parseInt(player.team), false, player.name);
+                        // Record the score change with player name and ID
+                        this.app.recordScoreChange(parseInt(player.team), false, player.name, player.id);
 
                         // Save state (localStorage + blob sync)
                         this.savePlayersState();
@@ -1489,8 +1482,8 @@ class Players {
                     }
                     this.app.teams.updateScoreDisplay();
                     
-                    // Record the score change with player name
-                    this.app.recordScoreChange(parseInt(player.team), true, player.name);
+                    // Record the score change with player name and ID
+                    this.app.recordScoreChange(parseInt(player.team), true, player.name, player.id);
 
                     // Save state (localStorage + blob sync)
                     this.savePlayersState();

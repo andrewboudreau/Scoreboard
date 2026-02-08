@@ -193,6 +193,8 @@ public class ScoreboardModule : IApplicationPartModule
         app.MapPost("/Scoreboard/api/default-players/add", ScoreboardApiMethods.AddPlayer);
         app.MapPost("/Scoreboard/api/default-players/delete", ScoreboardApiMethods.DeletePlayer);
         app.MapPost("/Scoreboard/api/default-players/save", ScoreboardApiMethods.SaveDefaultPlayers);
+        app.MapPost("/Scoreboard/api/default-players/toggle-active", ScoreboardApiMethods.TogglePlayerActive);
+        app.MapPost("/Scoreboard/api/default-players/rename", ScoreboardApiMethods.RenamePlayer);
         app.MapPost("/Scoreboard/api/default-players/{id}/image", ScoreboardApiMethods.UploadPlayerImage);
         app.MapGet("/Scoreboard/api/default-players/{id}/image", ScoreboardApiMethods.GetPlayerImage);
 

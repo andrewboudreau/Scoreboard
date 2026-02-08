@@ -345,7 +345,8 @@
                         const scores = ev.scores || [];
                         html += `<li><span class="time">${esc(time)}</span><span class="event-desc period-event">Period ${ev.period || '?'} ended</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
                     } else if (ev.type === 'score') {
-                        const who = ev.player ? esc(ev.player) : `Team ${ev.team}`;
+                        const resolved = resolvePlayerName(ev, players);
+                        const who = resolved ? esc(resolved) : `Team ${ev.team}`;
                         const action = ev.action === 'increment' ? '+1' : '-1';
                         const scores = ev.scores || [];
                         html += `<li><span class="time">${esc(time)}</span><span class="event-desc">${who} ${action}</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
@@ -357,6 +358,14 @@
             html += `<div class="branding"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
 
             el.innerHTML = html;
+        }
+
+        function resolvePlayerName(ev, players) {
+            if (ev.playerId && players && players.length) {
+                const p = players.find(p => p.id === ev.playerId);
+                if (p) return p.name;
+            }
+            return ev.player || null;
         }
 
         function esc(s) {

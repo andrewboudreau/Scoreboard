@@ -39,3 +39,15 @@ public class PlayerDeleteRequest
 {
     public long Id { get; set; }
 }
+
+public class PlayerToggleActiveRequest
+{
+    public long Id { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class PlayerRenameRequest
+{
+    public long Id { get; set; }
+    public string NewName { get; set; } = string.Empty;
+}

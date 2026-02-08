@@ -465,7 +465,7 @@
                         html += `<li><span class="st-time">${esc(time)}</span><span class="st-dot period"></span><span class="st-who period-event">Period ${ev.period || '?'} ended</span><span class="st-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
                     } else if (ev.type === 'score') {
                         const team = ev.team === 1 ? 't1' : 't2';
-                        const who = ev.player || (ev.team === 1 ? t1.name : t2.name);
+                        const who = resolvePlayerName(ev, players) || (ev.team === 1 ? t1.name : t2.name);
                         const action = ev.action === 'increment' ? '+1' : '-1';
                         html += `<li><span class="st-time">${esc(time)}</span><span class="st-dot ${team}"></span><span class="st-who">${esc(who)} <span style="color:#999">${action}</span></span><span class="st-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
                     }
@@ -478,11 +478,11 @@
 
             // Draw score progression canvas
             if (scoreEvents.length >= 2) {
-                drawScoreGraph(scoreEvents, t1.name, t2.name);
+                drawScoreGraph(scoreEvents, t1.name, t2.name, players);
             }
         }
 
-        function drawScoreGraph(scoreEvents, t1Name, t2Name) {
+        function drawScoreGraph(scoreEvents, t1Name, t2Name, gamePlayers) {
             const canvas = document.getElementById('score-canvas');
             if (!canvas) return;
             const tooltip = document.getElementById('graph-tooltip');
@@ -610,7 +610,7 @@
                     if (closest >= 0) {
                         const pt = eventPoints[closest];
                         const ev = pt.event;
-                        const who = ev.player || (ev.team === 1 ? t1Name : t2Name);
+                        const who = resolvePlayerName(ev, gamePlayers) || (ev.team === 1 ? t1Name : t2Name);
                         const teamColor = pt.team === 1 ? '#228be6' : '#e64980';
                         const action = ev.action === 'increment' ? '+1' : '-1';
                         const timeStr = ev.ts ? formatTime(ev.ts) : '';
@@ -641,6 +641,14 @@
                 }
                 tooltip.style.display = 'none';
             });
+        }
+
+        function resolvePlayerName(ev, players) {
+            if (ev.playerId && players && players.length) {
+                const p = players.find(p => p.id === ev.playerId);
+                if (p) return p.name;
+            }
+            return ev.player || null;
         }
 
         function esc(s) {

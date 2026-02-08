@@ -38,6 +38,16 @@ public interface IDefaultPlayersService
     /// Updates a player's image URL.
     /// </summary>
     Task<bool> UpdatePlayerImageAsync(long id, string imageUrl);
+
+    /// <summary>
+    /// Toggles a player's active status.
+    /// </summary>
+    Task<bool> SetPlayerActiveAsync(long id, bool isActive);
+
+    /// <summary>
+    /// Renames a player.
+    /// </summary>
+    Task<bool> RenamePlayerAsync(long id, string newName);
 }
 
 /// <summary>
@@ -135,6 +145,34 @@ public class DefaultPlayersService : IDefaultPlayersService
             if (player != null)
             {
                 player.ImageUrl = imageUrl;
+                return Task.FromResult(true);
+            }
+        }
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> SetPlayerActiveAsync(long id, bool isActive)
+    {
+        using (@lock.EnterScope())
+        {
+            var player = defaultPlayers.FirstOrDefault(p => p.Id == id);
+            if (player != null)
+            {
+                player.Active = isActive;
+                return Task.FromResult(true);
+            }
+        }
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> RenamePlayerAsync(long id, string newName)
+    {
+        using (@lock.EnterScope())
+        {
+            var player = defaultPlayers.FirstOrDefault(p => p.Id == id);
+            if (player != null)
+            {
+                player.Name = newName;
                 return Task.FromResult(true);
             }
         }

@@ -103,6 +103,25 @@ public static class ScoreboardApiMethods
         }
     }
 
+    public static async Task<IResult> TogglePlayerActive(HttpContext httpContext, IDefaultPlayersService defaultPlayersService)
+    {
+        var request = await httpContext.Request.ReadFromJsonAsync<PlayerToggleActiveRequest>();
+        if (request is null) return Results.BadRequest(new { error = "Invalid request" });
+
+        var success = await defaultPlayersService.SetPlayerActiveAsync(request.Id, request.IsActive);
+        return success ? Results.Ok(new { success = true }) : Results.NotFound(new { error = "Player not found" });
+    }
+
+    public static async Task<IResult> RenamePlayer(HttpContext httpContext, IDefaultPlayersService defaultPlayersService)
+    {
+        var request = await httpContext.Request.ReadFromJsonAsync<PlayerRenameRequest>();
+        if (request is null || string.IsNullOrWhiteSpace(request.NewName))
+            return Results.BadRequest(new { error = "New name is required" });
+
+        var success = await defaultPlayersService.RenamePlayerAsync(request.Id, request.NewName.Trim());
+        return success ? Results.Ok(new { success = true }) : Results.NotFound(new { error = "Player not found" });
+    }
+
     public static async Task<IResult> GetPlayerImage(long id, BlobContainerClient container)
     {
         var blobName = $"_players/{id}.png";

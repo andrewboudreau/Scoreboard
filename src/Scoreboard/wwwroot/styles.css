@@ -117,11 +117,13 @@ body {
 }
 
 #team1-players-display .player-item-display {
-    border-left: 4px solid #1a1a1a;
+    border-left: 3px solid #555;
+    box-shadow: inset 3px 0 0 0 #1a1a1a;
 }
 
 #team2-players-display .player-item-display {
-    border-left: 4px solid #d4d4d4;
+    border-left: 3px solid #555;
+    box-shadow: inset 3px 0 0 0 #d4d4d4;
 }
 
 .team {
@@ -181,6 +183,11 @@ body {
         0 1px 3px rgba(0, 0, 0, 0.9);
     border: 1px solid rgba(255, 255, 255, 0.06);
     pointer-events: auto;
+    transition: box-shadow 0.15s;
+}
+
+.timer-pressed {
+    box-shadow: 0 0 40px rgba(255, 255, 255, 0.5), 0 0 80px rgba(255, 255, 255, 0.2);
 }
 
 .timer-status {

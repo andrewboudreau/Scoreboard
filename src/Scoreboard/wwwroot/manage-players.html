@@ -77,12 +77,42 @@
             background: #f8f9fa;
             border-style: dashed;
         }
-        .player-name {
-            font-weight: bold;
-        }
         .player-status {
             font-size: 0.8em;
+            cursor: pointer;
+            user-select: none;
+            padding: 2px 8px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+        .player-status.active {
+            color: #28a745;
+            background: #e6f9ed;
+        }
+        .player-status.inactive {
             color: #6c757d;
+            background: #e9ecef;
+        }
+        .player-status:hover {
+            opacity: 0.8;
+        }
+        .player-name {
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .player-name:hover {
+            text-decoration: underline;
+            text-decoration-style: dotted;
+        }
+        .player-name-input {
+            font-weight: bold;
+            font-size: inherit;
+            font-family: inherit;
+            border: 1px solid #007bff;
+            border-radius: 3px;
+            padding: 1px 4px;
+            outline: none;
+            width: 100%;
         }
         .player-avatar-manage {
             width: 40px;
@@ -184,6 +214,58 @@
             text-align: center;
             color: #6c757d;
         }
+        /* Crop modal */
+        .crop-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .crop-modal {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 320px;
+        }
+        .crop-modal h3 { margin: 0 0 12px; }
+        .crop-viewport {
+            width: 200px;
+            height: 200px;
+            overflow: hidden;
+            border-radius: 50%;
+            border: 3px solid #007bff;
+            margin: 0 auto 12px;
+            cursor: grab;
+            position: relative;
+            touch-action: none;
+        }
+        .crop-viewport:active { cursor: grabbing; }
+        .crop-viewport img {
+            position: absolute;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        .crop-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .crop-actions button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .crop-confirm { background: #28a745; color: white; }
+        .crop-confirm:hover { background: #1e7e34; }
+        .crop-cancel { background: #6c757d; color: white; }
+        .crop-cancel:hover { background: #5a6268; }
     </style>
 </head>
 <body>
@@ -278,6 +360,7 @@
             li.className = 'player-item' + (player.active ? '' : ' inactive');
             li.draggable = true;
             li.dataset.playerId = player.id;
+            li.title = `Player ID: ${player.id}`;
 
             const infoRow = document.createElement('div');
             infoRow.className = 'player-info-row';
@@ -295,20 +378,47 @@
             fileInput.addEventListener('change', async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-                const formData = new FormData();
-                formData.append('image', file);
-                try {
-                    const res = await fetch(`/Scoreboard/api/default-players/${player.id}/image`, { method: 'POST', body: formData });
-                    if (!res.ok) { alert('Failed to upload image'); return; }
-                    const data = await res.json();
-                    player.imageUrl = data.imageUrl;
-                    renderPlayers();
-                } catch (err) { console.error('Upload error:', err); alert('Error uploading image'); }
+                openCropModal(file, player);
+                fileInput.value = '';
             });
             avatarEl.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
 
             const textDiv = document.createElement('div');
-            textDiv.innerHTML = `<div class="player-name">${escapeHtml(player.name)}</div><div class="player-status">${player.active ? 'Active' : 'Inactive'}</div>`;
+
+            // Editable player name
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'player-name';
+            nameDiv.textContent = player.name;
+            nameDiv.addEventListener('click', (e) => {
+                e.stopPropagation();
+                startRename(nameDiv, player);
+            });
+
+            // Clickable active/inactive toggle
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'player-status ' + (player.active ? 'active' : 'inactive');
+            statusDiv.textContent = player.active ? 'Active' : 'Inactive';
+            statusDiv.title = 'Click to toggle';
+            statusDiv.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const newActive = !player.active;
+                try {
+                    const res = await fetch('/Scoreboard/api/default-players/toggle-active', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: player.id, isActive: newActive })
+                    });
+                    if (res.ok) {
+                        player.active = newActive;
+                        renderPlayers();
+                    } else {
+                        alert('Failed to toggle active status');
+                    }
+                } catch (err) { console.error('Toggle error:', err); alert('Error toggling status'); }
+            });
+
+            textDiv.appendChild(nameDiv);
+            textDiv.appendChild(statusDiv);
 
             infoRow.appendChild(avatarEl);
             infoRow.appendChild(fileInput);
@@ -327,6 +437,158 @@
             li.addEventListener('dragend', handleDragEnd);
 
             return li;
+        }
+
+        function startRename(nameDiv, player) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'player-name-input';
+            input.value = player.name;
+            nameDiv.replaceWith(input);
+            input.focus();
+            input.select();
+
+            const commit = async () => {
+                const newName = input.value.trim();
+                if (!newName || newName === player.name) {
+                    renderPlayers();
+                    return;
+                }
+                try {
+                    const res = await fetch('/Scoreboard/api/default-players/rename', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: player.id, newName })
+                    });
+                    if (res.ok) {
+                        player.name = newName;
+                    } else {
+                        alert('Failed to rename player');
+                    }
+                } catch (err) { console.error('Rename error:', err); alert('Error renaming player'); }
+                renderPlayers();
+            };
+
+            input.addEventListener('blur', commit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                if (e.key === 'Escape') { e.preventDefault(); renderPlayers(); }
+            });
+        }
+
+        function openCropModal(file, player) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imgSrc = e.target.result;
+                const overlay = document.createElement('div');
+                overlay.className = 'crop-overlay';
+
+                const modal = document.createElement('div');
+                modal.className = 'crop-modal';
+                modal.innerHTML = `<h3>Position Crop</h3>`;
+
+                const viewport = document.createElement('div');
+                viewport.className = 'crop-viewport';
+
+                const img = document.createElement('img');
+                img.src = imgSrc;
+
+                let imgW, imgH, scale, posX, posY, dragging = false, startX, startY;
+
+                img.onload = () => {
+                    imgW = img.naturalWidth;
+                    imgH = img.naturalHeight;
+                    // Scale so shorter side fills 200px viewport
+                    scale = 200 / Math.min(imgW, imgH);
+                    posX = -(imgW * scale - 200) / 2;
+                    posY = -(imgH * scale - 200) / 2;
+                    img.style.width = (imgW * scale) + 'px';
+                    img.style.height = (imgH * scale) + 'px';
+                    img.style.left = posX + 'px';
+                    img.style.top = posY + 'px';
+                };
+
+                const clampPos = () => {
+                    const sw = imgW * scale, sh = imgH * scale;
+                    posX = Math.min(0, Math.max(200 - sw, posX));
+                    posY = Math.min(0, Math.max(200 - sh, posY));
+                };
+
+                const onPointerDown = (e) => {
+                    dragging = true;
+                    startX = e.clientX - posX;
+                    startY = e.clientY - posY;
+                    viewport.setPointerCapture(e.pointerId);
+                };
+                const onPointerMove = (e) => {
+                    if (!dragging) return;
+                    posX = e.clientX - startX;
+                    posY = e.clientY - startY;
+                    clampPos();
+                    img.style.left = posX + 'px';
+                    img.style.top = posY + 'px';
+                };
+                const onPointerUp = () => { dragging = false; };
+
+                viewport.addEventListener('pointerdown', onPointerDown);
+                viewport.addEventListener('pointermove', onPointerMove);
+                viewport.addEventListener('pointerup', onPointerUp);
+
+                viewport.appendChild(img);
+                modal.appendChild(viewport);
+
+                const actions = document.createElement('div');
+                actions.className = 'crop-actions';
+
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = 'crop-confirm';
+                confirmBtn.textContent = 'Confirm';
+                confirmBtn.addEventListener('click', async () => {
+                    // Crop using canvas
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 200;
+                    canvas.height = 200;
+                    const ctx = canvas.getContext('2d');
+                    // Draw the image at the current position
+                    ctx.drawImage(img, posX / scale * (img.naturalWidth / imgW), posY / scale * (img.naturalHeight / imgH),
+                        200 / scale, 200 / scale, 0, 0, 200, 200);
+
+                    // Simpler approach: draw at scaled position
+                    ctx.clearRect(0, 0, 200, 200);
+                    const srcX = -posX / scale;
+                    const srcY = -posY / scale;
+                    const srcSize = 200 / scale;
+                    ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, 200, 200);
+
+                    canvas.toBlob(async (blob) => {
+                        const formData = new FormData();
+                        formData.append('image', blob, 'crop.png');
+                        try {
+                            const res = await fetch(`/Scoreboard/api/default-players/${player.id}/image`, { method: 'POST', body: formData });
+                            if (!res.ok) { alert('Failed to upload image'); overlay.remove(); return; }
+                            const data = await res.json();
+                            player.imageUrl = data.imageUrl;
+                            renderPlayers();
+                        } catch (err) { console.error('Upload error:', err); alert('Error uploading image'); }
+                        overlay.remove();
+                    }, 'image/png');
+                });
+
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'crop-cancel';
+                cancelBtn.textContent = 'Cancel';
+                cancelBtn.addEventListener('click', () => overlay.remove());
+
+                actions.appendChild(confirmBtn);
+                actions.appendChild(cancelBtn);
+                modal.appendChild(actions);
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+
+                // Close on overlay click (not modal)
+                overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+            };
+            reader.readAsDataURL(file);
         }
 
         function setupEventListeners() {
