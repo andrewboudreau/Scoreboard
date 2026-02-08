@@ -514,6 +514,8 @@ class Timer {
         this.timeLeft = 15 * 60; // Default: 15 minutes in seconds
         this.isRunning = false;
         this.interval = null;
+        this.blinkInterval = null;
+        this.colonVisible = true;
         this.lastTap = 0;
 
         // Initialize
@@ -530,9 +532,11 @@ class Timer {
             // Stop timer
             clearInterval(this.interval);
             this.isRunning = false;
+            this.stopBlinking();
         } else {
             // Start timer
             this.isRunning = true;
+            this.startBlinking();
             this.interval = setInterval(() => {
                 this.timeLeft--;
                 this.updateDisplay();
@@ -540,6 +544,7 @@ class Timer {
                 if (this.timeLeft <= 0) {
                     clearInterval(this.interval);
                     this.isRunning = false;
+                    this.stopBlinking();
 
                     // Capture score and play alarm
                     this.app.captureScore();
@@ -553,22 +558,39 @@ class Timer {
         }
     }
 
+    startBlinking() {
+        this.colonVisible = true;
+        this.blinkInterval = setInterval(() => {
+            this.colonVisible = !this.colonVisible;
+            this.updateDisplay();
+        }, 500);
+    }
+
+    stopBlinking() {
+        clearInterval(this.blinkInterval);
+        this.blinkInterval = null;
+        this.colonVisible = true;
+        this.updateDisplay();
+    }
+
     reset() {
         clearInterval(this.interval);
         this.isRunning = false;
+        this.stopBlinking();
         this.timeLeft = parseInt(this.app.settings.timerMinutesInput.value) * 60;
         this.updateDisplay();
         this.timerDisplay.style.backgroundColor = '#333';
     }
 
     updateDisplay() {
-        this.timerDisplay.textContent = this.formatTime(this.timeLeft);
+        const sep = this.colonVisible ? ':' : ' ';
+        this.timerDisplay.textContent = this.formatTime(this.timeLeft, sep);
     }
 
-    formatTime(seconds) {
+    formatTime(seconds, sep = ':') {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
-        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        return `${minutes.toString().padStart(2, '0')}${sep}${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
     playAlarm() {
@@ -600,6 +622,7 @@ class Timer {
         if (this.isRunning) {
             clearInterval(this.interval);
             this.isRunning = false;
+            this.stopBlinking();
         }
 
         // Capture score and play alarm
@@ -630,6 +653,7 @@ class Timer {
         if (minutes > 0 && minutes <= 60) {
             clearInterval(this.interval);
             this.isRunning = false;
+            this.stopBlinking();
             this.timeLeft = minutes * 60;
             this.updateDisplay();
             this.timerDisplay.style.backgroundColor = '#333';
