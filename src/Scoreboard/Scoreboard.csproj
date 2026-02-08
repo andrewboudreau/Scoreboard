@@ -21,12 +21,12 @@
 		<!-- Framework reference for ASP.NET Core -->
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 
-		<PackageReference Include="SharedTools.Web" Version="1.4.2">
+		<PackageReference Include="SharedTools.Web" Version="1.4.3">
 			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>
 
 		<!-- Your other dependencies (will be included in package) -->
-		<PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.28.0-beta.1" />
 		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 	</ItemGroup>
 

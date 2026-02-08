@@ -15,7 +15,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="SharedTools.Web" Version="1.4.2" />
+		<PackageReference Include="SharedTools.Web" Version="1.4.3" />
 	</ItemGroup>
 
 	<!-- Custom target to clean SharedTools.Scoreboard packages from local NuGet cache -->
@@ -36,17 +36,11 @@
 		<Delete Files="@(PackageFiles)" Condition="'@(PackageFiles)' != ''" />
 		
 		<!-- Log results -->
-		<Message Text="Cleaned @(PackageFiles->Count()) SharedTools.Scoreboard package(s) from local NuGet cache." 
-		         Condition="'@(PackageFiles)' != ''" 
-		         Importance="normal" />
+		<Message Text="Cleaned @(PackageFiles-&gt;Count()) SharedTools.Scoreboard package(s) from local NuGet cache." Condition="'@(PackageFiles)' != ''" Importance="normal" />
 		         
-		<Message Text="No SharedTools.Scoreboard packages found in local NuGet cache." 
-		         Condition="'@(PackageFiles)' == '' AND Exists('$(LocalNuGetPath)')" 
-		         Importance="normal" />
+		<Message Text="No SharedTools.Scoreboard packages found in local NuGet cache." Condition="'@(PackageFiles)' == '' AND Exists('$(LocalNuGetPath)')" Importance="normal" />
 		         
-		<Message Text="Local NuGet directory $(LocalNuGetPath) does not exist. Skipping cleanup." 
-		         Condition="!Exists('$(LocalNuGetPath)')" 
-		         Importance="normal" />
+		<Message Text="Local NuGet directory $(LocalNuGetPath) does not exist. Skipping cleanup." Condition="!Exists('$(LocalNuGetPath)')" Importance="normal" />
 	</Target>
 
 </Project>

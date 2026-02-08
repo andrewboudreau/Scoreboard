@@ -15,17 +15,7 @@
       "Bash(node:*)",
       "Bash(dotnet run)",
       "Bash(timeout:*)",
-      "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_click",
-      "mcp__playwright__browser_take_screenshot",
-      "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_press_key",
-      "mcp__playwright__browser_type",
-      "mcp__playwright__browser_snapshot",
-      "mcp__playwright__browser_select_option",
-      "mcp__playwright__browser_handle_dialog",
-      "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_evaluate",
+      "mcp__playwright*",
       "Bash(dotnet pack:*)",
       "Bash(dotnet build:*)",
       "Bash(netstat:*)",
@@ -37,12 +27,34 @@
       "Bash(git stash:*)",
       "Bash(gh run list:*)",
       "Bash(gh run watch:*)",
-      "Bash(gh workflow run:*)"
+      "Bash(gh workflow run:*)",
+      "Bash(xargs:*)",
+      "Bash(tree:*)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet run:*)",
+      "Bash(curl:*)",
+      "Bash(cmd /c \"set HEADED=1 && dotnet test C:\\\\Users\\\\andre\\\\source\\\\repos\\\\Scoreboard\\\\tests\\\\Scoreboard.Tests.Playwright\\\\Scoreboard.Tests.Playwright.csproj --no-build --verbosity normal 2>&1\")",
+      "Bash(HEADED=1 dotnet test:*)",
+      "Bash(git*)",
+      "Bash(git:*)",
+      "Bash(pwsh:*)",
+      "Bash(gh*)",
+      "mcp__plugin_playwright*",
+      "mcp__plugin_playwright_playwright__browser_close",
+      "Bash(dotnet nuget:*)",
+      "Bash(findstr:*)",
+      "Bash(dotnet add:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(python -m json.tool:*)"
     ],
     "deny": []
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "ssh-mcp"
-  ]
+  ],
+  "enabledPlugins": {
+    "playwright@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true
+  }
 }
