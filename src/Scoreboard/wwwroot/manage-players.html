@@ -266,6 +266,40 @@
         .crop-confirm:hover { background: #1e7e34; }
         .crop-cancel { background: #6c757d; color: white; }
         .crop-cancel:hover { background: #5a6268; }
+
+        /* Mobile team-move button: hidden by default, shown on touch/small screens */
+        .move-team-btn {
+            display: none;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.75em;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .move-team-btn:hover { background: #5a6268; }
+
+        @media (pointer: coarse) {
+            .move-team-btn { display: inline-block; }
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+            .header h1 { font-size: 1.3em; }
+            .header p { font-size: 0.85em; }
+            .players-container { flex-direction: column; gap: 12px; }
+            .team-section { min-width: 0; min-height: auto; }
+            .add-player-form { max-width: none; }
+            .actions { flex-direction: column; display: flex; gap: 8px; }
+            .actions .btn { margin: 0; width: 100%; text-align: center; }
+            .player-item { padding: 12px 10px; }
+            .delete-btn { padding: 8px 12px; font-size: 0.9em; }
+            .player-status { padding: 4px 12px; font-size: 0.9em; }
+            .move-team-btn { display: inline-block; }
+        }
     </style>
 </head>
 <body>
@@ -424,14 +458,28 @@
             infoRow.appendChild(fileInput);
             infoRow.appendChild(textDiv);
 
+            // Touch-friendly team move button (cycles 1 → 2 → noteam → 1)
+            const moveBtn = document.createElement('button');
+            moveBtn.className = 'move-team-btn';
+            const nextTeam = player.team === '1' ? '2' : player.team === '2' ? 'noteam' : '1';
+            const nextLabel = nextTeam === '1' ? 'T1' : nextTeam === '2' ? 'T2' : 'NT';
+            moveBtn.textContent = '\u2192 ' + nextLabel;
+            moveBtn.title = 'Move to ' + (nextTeam === '1' ? 'Team 1' : nextTeam === '2' ? 'Team 2' : 'No Team');
+            moveBtn.addEventListener('click', (e) => { e.stopPropagation(); movePlayer(player.id, nextTeam); });
+
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-btn';
             deleteBtn.title = 'Delete player';
             deleteBtn.textContent = 'X';
             deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deletePlayer(player.id); });
 
+            const btnGroup = document.createElement('div');
+            btnGroup.style.cssText = 'display:flex;gap:6px;align-items:center;flex-shrink:0;';
+            btnGroup.appendChild(moveBtn);
+            btnGroup.appendChild(deleteBtn);
+
             li.appendChild(infoRow);
-            li.appendChild(deleteBtn);
+            li.appendChild(btnGroup);
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);

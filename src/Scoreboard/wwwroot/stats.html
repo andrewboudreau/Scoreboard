@@ -216,6 +216,12 @@
         }
         .branding a { color: #888; text-decoration: none; }
         .branding a:hover { color: #555; }
+
+        @media (max-width: 600px) {
+            .detail .team-block .score { font-size: 36px; }
+            .game-card .team-score { font-size: 24px; }
+            .st-time { min-width: 48px; }
+        }
     </style>
 </head>
 <body>
@@ -639,6 +645,59 @@
                     lastHighlight = -1;
                     drawGraph(-1);
                 }
+                tooltip.style.display = 'none';
+            });
+
+            // Touch support for mobile graph tooltip
+            function handleTouch(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                if (!touch) return;
+                const canvasRect = canvas.getBoundingClientRect();
+                const mx = touch.clientX - canvasRect.left;
+                const my = touch.clientY - canvasRect.top;
+
+                let closest = -1;
+                let closestDist = Infinity;
+                eventPoints.forEach((pt, i) => {
+                    const d = Math.hypot(pt.x - mx, pt.y - my);
+                    if (d < closestDist) { closestDist = d; closest = i; }
+                });
+                if (closestDist > 30) closest = -1;
+
+                if (closest !== lastHighlight) {
+                    lastHighlight = closest;
+                    drawGraph(closest);
+
+                    if (closest >= 0) {
+                        const pt = eventPoints[closest];
+                        const ev = pt.event;
+                        const who = resolvePlayerName(ev, gamePlayers) || (ev.team === 1 ? t1Name : t2Name);
+                        const teamColor = pt.team === 1 ? '#228be6' : '#e64980';
+                        const action = ev.action === 'increment' ? '+1' : '-1';
+                        const timeStr = ev.ts ? formatTime(ev.ts) : '';
+
+                        tooltip.innerHTML = `<div><span class="tt-dot" style="background:${teamColor}"></span><span class="tt-player">${esc(who)}</span> <span style="color:#999">${action}</span></div><div class="tt-score">${pt.t1Score} - ${pt.t2Score}</div>${timeStr ? `<div class="tt-time">${esc(timeStr)}</div>` : ''}`;
+                        tooltip.style.display = 'block';
+                        const graphRect = canvas.parentElement.getBoundingClientRect();
+                        let tx = pt.x + 12;
+                        let ty = pt.y - 40;
+                        const tw = tooltip.offsetWidth;
+                        if (tx + tw > graphRect.width - 4) tx = pt.x - tw - 12;
+                        if (ty < 0) ty = pt.y + 12;
+                        tooltip.style.left = tx + 'px';
+                        tooltip.style.top = ty + 'px';
+                    } else {
+                        tooltip.style.display = 'none';
+                    }
+                }
+            }
+
+            canvas.addEventListener('touchstart', handleTouch, { passive: false });
+            canvas.addEventListener('touchmove', handleTouch, { passive: false });
+            canvas.addEventListener('touchend', () => {
+                lastHighlight = -1;
+                drawGraph(-1);
                 tooltip.style.display = 'none';
             });
         }
