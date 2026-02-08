@@ -33,6 +33,11 @@ public interface IDefaultPlayersService
     /// Deletes a player from the default players list.
     /// </summary>
     Task<bool> DeletePlayerAsync(long id);
+
+    /// <summary>
+    /// Updates a player's image URL.
+    /// </summary>
+    Task<bool> UpdatePlayerImageAsync(long id, string imageUrl);
 }
 
 /// <summary>
@@ -59,7 +64,8 @@ public class DefaultPlayersService : IDefaultPlayersService
                 Name = p.Name,
                 Team = p.Team,
                 Active = p.Active,
-                Points = p.Points
+                Points = p.Points,
+                ImageUrl = p.ImageUrl
             }).ToList());
         }
     }
@@ -115,6 +121,20 @@ public class DefaultPlayersService : IDefaultPlayersService
             if (player != null)
             {
                 defaultPlayers.Remove(player);
+                return Task.FromResult(true);
+            }
+        }
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> UpdatePlayerImageAsync(long id, string imageUrl)
+    {
+        using (@lock.EnterScope())
+        {
+            var player = defaultPlayers.FirstOrDefault(p => p.Id == id);
+            if (player != null)
+            {
+                player.ImageUrl = imageUrl;
                 return Task.FromResult(true);
             }
         }

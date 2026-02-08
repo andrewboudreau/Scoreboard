@@ -1144,11 +1144,24 @@ class Players {
                 .filter(player => player.team === '2' && player.active)
                 .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-            // Add team 1 players
-            team1Players.forEach(player => {
+            const createPlayerButton = (player, container) => {
                 const playerItem = document.createElement('div');
                 playerItem.className = 'player-item-display';
                 playerItem.dataset.playerId = player.id;
+
+                // Avatar
+                if (player.imageUrl) {
+                    const img = document.createElement('img');
+                    img.className = 'player-avatar';
+                    img.src = player.imageUrl;
+                    img.alt = player.name;
+                    playerItem.appendChild(img);
+                } else {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'player-avatar-placeholder';
+                    placeholder.textContent = player.name.charAt(0).toUpperCase();
+                    playerItem.appendChild(placeholder);
+                }
 
                 const playerName = document.createElement('div');
                 playerName.className = 'player-name-display';
@@ -1161,38 +1174,15 @@ class Players {
                 playerItem.appendChild(playerName);
                 playerItem.appendChild(playerPoints);
 
-                // Add click event to increment points
                 playerItem.addEventListener('click', () => {
                     this.incrementPlayerPoints(player.id);
                 });
 
-                this.team1PlayersDisplay.appendChild(playerItem);
-            });
+                container.appendChild(playerItem);
+            };
 
-            // Add team 2 players
-            team2Players.forEach(player => {
-                const playerItem = document.createElement('div');
-                playerItem.className = 'player-item-display';
-                playerItem.dataset.playerId = player.id;
-
-                const playerName = document.createElement('div');
-                playerName.className = 'player-name-display';
-                playerName.textContent = player.name;
-
-                const playerPoints = document.createElement('div');
-                playerPoints.className = 'player-points-display';
-                playerPoints.textContent = player.points;
-
-                playerItem.appendChild(playerName);
-                playerItem.appendChild(playerPoints);
-
-                // Add click event to increment points
-                playerItem.addEventListener('click', () => {
-                    this.incrementPlayerPoints(player.id);
-                });
-
-                this.team2PlayersDisplay.appendChild(playerItem);
-            });
+            team1Players.forEach(p => createPlayerButton(p, this.team1PlayersDisplay));
+            team2Players.forEach(p => createPlayerButton(p, this.team2PlayersDisplay));
         }
     }
 

@@ -18,6 +18,9 @@ public class Player
     
     [JsonPropertyName("points")]
     public int Points { get; set; } = 0;
+
+    [JsonPropertyName("imageUrl")]
+    public string? ImageUrl { get; set; }
 }
 
 public class PlayerMoveRequest

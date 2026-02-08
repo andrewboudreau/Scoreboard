@@ -1,4 +1,9 @@
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.AspNetCore.Http;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Png;
 
 using Scoreboard.Models;
 using Scoreboard.Services;
@@ -48,5 +53,56 @@ public static class ScoreboardApiMethods
 
         await defaultPlayersService.SaveDefaultPlayersAsync(players);
         return Results.Ok(new { success = true });
+    }
+
+    public static async Task<IResult> UploadPlayerImage(HttpContext httpContext, long id, IDefaultPlayersService defaultPlayersService, BlobContainerClient container)
+    {
+        if (!httpContext.Request.HasFormContentType)
+            return Results.BadRequest(new { error = "Expected multipart form data" });
+
+        var form = await httpContext.Request.ReadFormAsync();
+        var file = form.Files.GetFile("image");
+        if (file is null || file.Length == 0)
+            return Results.BadRequest(new { error = "No image file provided" });
+
+        if (file.Length > 10 * 1024 * 1024)
+            return Results.BadRequest(new { error = "File too large (max 10MB)" });
+
+        try
+        {
+            using var inputStream = file.OpenReadStream();
+            using var image = await Image.LoadAsync(inputStream);
+
+            // Crop to center square
+            var size = Math.Min(image.Width, image.Height);
+            var cropX = (image.Width - size) / 2;
+            var cropY = (image.Height - size) / 2;
+            image.Mutate(x => x.Crop(new Rectangle(cropX, cropY, size, size)).Resize(96, 96));
+
+            // Encode to PNG
+            using var outputStream = new MemoryStream();
+            await image.SaveAsPngAsync(outputStream);
+            outputStream.Position = 0;
+
+            // Upload to blob storage
+            var blobName = $"_players/{id}.png";
+            var blobClient = container.GetBlobClient(blobName);
+            await blobClient.UploadAsync(outputStream, new BlobUploadOptions
+            {
+                HttpHeaders = new BlobHttpHeaders { ContentType = "image/png" }
+            });
+
+            // Build the image URL
+            var imageUrl = blobClient.Uri.ToString();
+
+            // Update the player's ImageUrl
+            await defaultPlayersService.UpdatePlayerImageAsync(id, imageUrl);
+
+            return Results.Ok(new { imageUrl });
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Failed to process image: {ex.Message}");
+        }
     }
 }

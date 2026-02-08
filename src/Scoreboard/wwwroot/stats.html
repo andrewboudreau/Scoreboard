@@ -133,6 +133,25 @@
         .score-graph { position: relative; height: 200px; margin: 8px 0; }
         .score-graph canvas { width: 100%; height: 100%; }
 
+        .graph-tooltip {
+            display: none;
+            position: absolute;
+            background: rgba(0,0,0,0.85);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.5;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .graph-tooltip .tt-player { font-weight: 600; }
+        .graph-tooltip .tt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+        .graph-tooltip .tt-score { color: #ccc; }
+        .graph-tooltip .tt-time { color: #aaa; font-size: 11px; }
+
         /* Periods table */
         .periods-table { width: 100%; border-collapse: collapse; }
         .periods-table th, .periods-table td { padding: 8px 12px; text-align: center; font-size: 14px; }
@@ -396,7 +415,7 @@
             // Score Progression Graph
             const scoreEvents = events.filter(e => e.type === 'score' && e.scores);
             if (scoreEvents.length >= 2) {
-                html += `<div class="card"><h2>Score Progression</h2><div class="score-graph"><canvas id="score-canvas"></canvas></div></div>`;
+                html += `<div class="card"><h2>Score Progression</h2><div class="score-graph"><canvas id="score-canvas"></canvas><div id="graph-tooltip" class="graph-tooltip"></div></div></div>`;
             }
 
             // Period Breakdown
@@ -466,6 +485,7 @@
         function drawScoreGraph(scoreEvents, t1Name, t2Name) {
             const canvas = document.getElementById('score-canvas');
             if (!canvas) return;
+            const tooltip = document.getElementById('graph-tooltip');
             const ctx = canvas.getContext('2d');
             const dpr = window.devicePixelRatio || 1;
             const rect = canvas.parentElement.getBoundingClientRect();
@@ -486,55 +506,141 @@
             const maxScore = Math.max(...points.map(p => Math.max(p[1], p[2])), 1);
             const n = points.length;
 
-            function x(i) { return pad.left + (i / (n - 1)) * plotW; }
-            function y(val) { return pad.top + plotH - (val / maxScore) * plotH; }
+            function xPos(i) { return pad.left + (i / (n - 1)) * plotW; }
+            function yPos(val) { return pad.top + plotH - (val / maxScore) * plotH; }
 
-            // Grid lines
-            ctx.strokeStyle = '#eee';
-            ctx.lineWidth = 1;
-            const gridLines = Math.min(maxScore, 5);
-            for (let i = 0; i <= gridLines; i++) {
-                const val = Math.round((maxScore / gridLines) * i);
-                const yy = y(val);
+            // Store event point positions for hit-testing
+            const eventPoints = scoreEvents.map((ev, i) => {
+                const team = ev.team === 1 ? 1 : 2;
+                const cx = xPos(i);
+                const cy = team === 1 ? yPos(points[i][1]) : yPos(points[i][2]);
+                return { x: cx, y: cy, event: ev, index: i, team, t1Score: points[i][1], t2Score: points[i][2] };
+            });
+
+            function drawGraph(highlightIdx) {
+                ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+                // Grid lines
+                ctx.strokeStyle = '#eee';
+                ctx.lineWidth = 1;
+                const gridLines = Math.min(maxScore, 5);
+                for (let i = 0; i <= gridLines; i++) {
+                    const val = Math.round((maxScore / gridLines) * i);
+                    const yy = yPos(val);
+                    ctx.beginPath();
+                    ctx.moveTo(pad.left, yy);
+                    ctx.lineTo(w - pad.right, yy);
+                    ctx.stroke();
+                    ctx.fillStyle = '#bbb';
+                    ctx.font = '10px sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(val, pad.left - 6, yy + 3);
+                }
+
+                // Team 1 line
+                ctx.strokeStyle = '#228be6';
+                ctx.lineWidth = 2.5;
                 ctx.beginPath();
-                ctx.moveTo(pad.left, yy);
-                ctx.lineTo(w - pad.right, yy);
+                points.forEach((p, i) => {
+                    const px = xPos(i), py = yPos(p[1]);
+                    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                });
                 ctx.stroke();
-                ctx.fillStyle = '#bbb';
-                ctx.font = '10px sans-serif';
-                ctx.textAlign = 'right';
-                ctx.fillText(val, pad.left - 6, yy + 3);
+
+                // Team 2 line
+                ctx.strokeStyle = '#e64980';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                points.forEach((p, i) => {
+                    const px = xPos(i), py = yPos(p[2]);
+                    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                });
+                ctx.stroke();
+
+                // Draw event dot markers
+                eventPoints.forEach((pt, i) => {
+                    const isHighlighted = i === highlightIdx;
+                    const color = pt.team === 1 ? '#228be6' : '#e64980';
+                    const radius = isHighlighted ? 6 : 3.5;
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    if (isHighlighted) {
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                });
+
+                // Legend
+                ctx.font = '11px sans-serif';
+                const leg1W = ctx.measureText(t1Name).width;
+                ctx.fillStyle = '#228be6';
+                ctx.fillRect(pad.left, h - 12, 12, 3);
+                ctx.fillText(t1Name, pad.left + 16, h - 6);
+                ctx.fillStyle = '#e64980';
+                ctx.fillRect(pad.left + 24 + leg1W, h - 12, 12, 3);
+                ctx.fillText(t2Name, pad.left + 24 + leg1W + 16, h - 6);
             }
 
-            // Team 1 line
-            ctx.strokeStyle = '#228be6';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            points.forEach((p, i) => {
-                const px = x(i), py = y(p[1]);
-                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-            });
-            ctx.stroke();
+            // Initial draw
+            drawGraph(-1);
 
-            // Team 2 line
-            ctx.strokeStyle = '#e64980';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            points.forEach((p, i) => {
-                const px = x(i), py = y(p[2]);
-                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-            });
-            ctx.stroke();
+            // Mouse interaction
+            let lastHighlight = -1;
+            canvas.addEventListener('mousemove', (e) => {
+                const canvasRect = canvas.getBoundingClientRect();
+                const mx = e.clientX - canvasRect.left;
+                const my = e.clientY - canvasRect.top;
 
-            // Legend
-            ctx.font = '11px sans-serif';
-            const leg1W = ctx.measureText(t1Name).width;
-            ctx.fillStyle = '#228be6';
-            ctx.fillRect(pad.left, h - 12, 12, 3);
-            ctx.fillText(t1Name, pad.left + 16, h - 6);
-            ctx.fillStyle = '#e64980';
-            ctx.fillRect(pad.left + 24 + leg1W, h - 12, 12, 3);
-            ctx.fillText(t2Name, pad.left + 24 + leg1W + 16, h - 6);
+                let closest = -1;
+                let closestDist = Infinity;
+                eventPoints.forEach((pt, i) => {
+                    const d = Math.hypot(pt.x - mx, pt.y - my);
+                    if (d < closestDist) { closestDist = d; closest = i; }
+                });
+
+                if (closestDist > 20) closest = -1;
+
+                if (closest !== lastHighlight) {
+                    lastHighlight = closest;
+                    drawGraph(closest);
+
+                    if (closest >= 0) {
+                        const pt = eventPoints[closest];
+                        const ev = pt.event;
+                        const who = ev.player || (ev.team === 1 ? t1Name : t2Name);
+                        const teamColor = pt.team === 1 ? '#228be6' : '#e64980';
+                        const action = ev.action === 'increment' ? '+1' : '-1';
+                        const timeStr = ev.ts ? formatTime(ev.ts) : '';
+
+                        tooltip.innerHTML = `<div><span class="tt-dot" style="background:${teamColor}"></span><span class="tt-player">${esc(who)}</span> <span style="color:#999">${action}</span></div><div class="tt-score">${pt.t1Score} - ${pt.t2Score}</div>${timeStr ? `<div class="tt-time">${esc(timeStr)}</div>` : ''}`;
+                        tooltip.style.display = 'block';
+
+                        // Position tooltip
+                        const graphRect = canvas.parentElement.getBoundingClientRect();
+                        let tx = pt.x + 12;
+                        let ty = pt.y - 40;
+                        // Keep tooltip within graph bounds
+                        const tw = tooltip.offsetWidth;
+                        if (tx + tw > graphRect.width - 4) tx = pt.x - tw - 12;
+                        if (ty < 0) ty = pt.y + 12;
+                        tooltip.style.left = tx + 'px';
+                        tooltip.style.top = ty + 'px';
+                    } else {
+                        tooltip.style.display = 'none';
+                    }
+                }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                if (lastHighlight >= 0) {
+                    lastHighlight = -1;
+                    drawGraph(-1);
+                }
+                tooltip.style.display = 'none';
+            });
         }
 
         function esc(s) {

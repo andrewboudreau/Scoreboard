@@ -67,8 +67,8 @@ body {
 
 .player-item-display {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 8px;
     padding: var(--player-button-padding, 15px);
     margin-bottom: 5px;
     background-color: #444;
@@ -81,8 +81,31 @@ body {
         background-color: #555;
     }
 
+.player-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.player-avatar-placeholder {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
 .player-name-display {
     font-weight: bold;
+    flex: 1;
 }
 
 .player-points-display {
@@ -94,11 +117,11 @@ body {
 }
 
 #team1-players-display .player-item-display {
-    border-left: 4px solid #007bff;
+    border-left: 4px solid #1a1a1a;
 }
 
 #team2-players-display .player-item-display {
-    border-left: 4px solid #dc3545;
+    border-left: 4px solid #d4d4d4;
 }
 
 .team {

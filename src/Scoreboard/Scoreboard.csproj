@@ -27,6 +27,7 @@
 
 		<!-- Your other dependencies (will be included in package) -->
 		<PackageReference Include="Azure.Storage.Blobs" Version="12.27.0" />
+		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 	</ItemGroup>
 
 	<!-- Include static assets as embedded resources -->
