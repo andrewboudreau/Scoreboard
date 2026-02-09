@@ -1,0 +1,1251 @@
+{
+  "id": "game-2026-02-09-474e",
+  "version": 1,
+  "weekDate": "2026-02-09",
+  "team1": {
+    "name": "BLACK",
+    "score": 44
+  },
+  "team2": {
+    "name": "WHITE",
+    "score": 42
+  },
+  "period": 5,
+  "periodScores": [
+    "20 - 21",
+    "34 - 30",
+    "44 - 42",
+    "44 - 42"
+  ],
+  "timerMinutes": 5,
+  "players": [
+    {
+      "id": 1770622244639,
+      "name": "Adams",
+      "team": "1",
+      "active": true,
+      "points": 9
+    },
+    {
+      "id": 1770622244689,
+      "name": "Baker",
+      "team": "1",
+      "active": true,
+      "points": 9
+    },
+    {
+      "id": 1770622244737,
+      "name": "Clark",
+      "team": "1",
+      "active": true,
+      "points": 9
+    },
+    {
+      "id": 1770622244770,
+      "name": "Davis",
+      "team": "1",
+      "active": true,
+      "points": 9
+    },
+    {
+      "id": 1770622244804,
+      "name": "Evans",
+      "team": "1",
+      "active": true,
+      "points": 8
+    },
+    {
+      "id": 1770622244838,
+      "name": "Foster",
+      "team": "2",
+      "active": true,
+      "points": 9
+    },
+    {
+      "id": 1770622244870,
+      "name": "Garcia",
+      "team": "2",
+      "active": true,
+      "points": 9
+    },
+    {
+      "id": 1770622244904,
+      "name": "Harris",
+      "team": "2",
+      "active": true,
+      "points": 8
+    },
+    {
+      "id": 1770622244936,
+      "name": "Irving",
+      "team": "2",
+      "active": true,
+      "points": 8
+    },
+    {
+      "id": 1770622244970,
+      "name": "Jones",
+      "team": "2",
+      "active": true,
+      "points": 8
+    }
+  ],
+  "events": [
+    {
+      "ts": "2026-02-09T07:30:45.169Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        1,
+        0
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.203Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        1,
+        1
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.236Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        2,
+        1
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.270Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        2,
+        2
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.303Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        3,
+        2
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.337Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        3,
+        3
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.370Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        4,
+        3
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.403Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        4,
+        4
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.438Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        5,
+        4
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.470Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        5,
+        5
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.502Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        6,
+        5
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.537Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        6,
+        6
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.570Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        7,
+        6
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.603Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        7,
+        7
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.637Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        8,
+        7
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.670Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        8,
+        8
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.703Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        9,
+        8
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.735Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        9,
+        9
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.770Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        10,
+        9
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.804Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        10,
+        10
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.836Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        11,
+        10
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.871Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        12,
+        10
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:45.942Z",
+      "type": "period_end",
+      "scores": [
+        20,
+        21
+      ],
+      "period": 1
+    },
+    {
+      "ts": "2026-02-09T07:30:45.987Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        13,
+        10
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.022Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        13,
+        11
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.056Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        14,
+        11
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.087Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        14,
+        12
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.121Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        15,
+        12
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.155Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        15,
+        13
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.189Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        16,
+        13
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.221Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        16,
+        14
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.254Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        17,
+        14
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.286Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        17,
+        15
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.320Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        18,
+        15
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.353Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        18,
+        16
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.387Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        19,
+        16
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.420Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        19,
+        17
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.453Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        20,
+        17
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.486Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        20,
+        18
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.520Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        20,
+        19
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.554Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        20,
+        20
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.586Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        20,
+        21
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.653Z",
+      "type": "period_end",
+      "scores": [
+        34,
+        30
+      ],
+      "period": 2
+    },
+    {
+      "ts": "2026-02-09T07:30:46.704Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        21,
+        21
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.737Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        21,
+        22
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.769Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        22,
+        22
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.803Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        22,
+        23
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.835Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        23,
+        23
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.870Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        23,
+        24
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.903Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        24,
+        24
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.937Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        24,
+        25
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:46.970Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        25,
+        25
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.004Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        25,
+        26
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.037Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        26,
+        26
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.069Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        26,
+        27
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.104Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        27,
+        27
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.137Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        27,
+        28
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.171Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        28,
+        28
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.204Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        28,
+        29
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.237Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        29,
+        29
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.271Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        29,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.305Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        30,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.341Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        31,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.374Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        32,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.404Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        33,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.437Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        34,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.505Z",
+      "type": "period_end",
+      "scores": [
+        44,
+        42
+      ],
+      "period": 3
+    },
+    {
+      "ts": "2026-02-09T07:30:47.538Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        35,
+        30
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.572Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        35,
+        31
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.603Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        36,
+        31
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.637Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        36,
+        32
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.669Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        37,
+        32
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.704Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        37,
+        33
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.736Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        38,
+        33
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.770Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        38,
+        34
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.804Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        39,
+        34
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.836Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        39,
+        35
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.871Z",
+      "type": "score",
+      "team": 1,
+      "player": "Evans",
+      "playerId": 1770622244804,
+      "action": "increment",
+      "scores": [
+        40,
+        35
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.904Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        40,
+        36
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.936Z",
+      "type": "score",
+      "team": 1,
+      "player": "Adams",
+      "playerId": 1770622244639,
+      "action": "increment",
+      "scores": [
+        41,
+        36
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:47.969Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        41,
+        37
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.004Z",
+      "type": "score",
+      "team": 1,
+      "player": "Baker",
+      "playerId": 1770622244689,
+      "action": "increment",
+      "scores": [
+        42,
+        37
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.038Z",
+      "type": "score",
+      "team": 2,
+      "player": "Harris",
+      "playerId": 1770622244904,
+      "action": "increment",
+      "scores": [
+        42,
+        38
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.070Z",
+      "type": "score",
+      "team": 1,
+      "player": "Clark",
+      "playerId": 1770622244737,
+      "action": "increment",
+      "scores": [
+        43,
+        38
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.103Z",
+      "type": "score",
+      "team": 2,
+      "player": "Irving",
+      "playerId": 1770622244936,
+      "action": "increment",
+      "scores": [
+        43,
+        39
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.136Z",
+      "type": "score",
+      "team": 1,
+      "player": "Davis",
+      "playerId": 1770622244770,
+      "action": "increment",
+      "scores": [
+        44,
+        39
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.170Z",
+      "type": "score",
+      "team": 2,
+      "player": "Jones",
+      "playerId": 1770622244970,
+      "action": "increment",
+      "scores": [
+        44,
+        40
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.202Z",
+      "type": "score",
+      "team": 2,
+      "player": "Foster",
+      "playerId": 1770622244838,
+      "action": "increment",
+      "scores": [
+        44,
+        41
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.238Z",
+      "type": "score",
+      "team": 2,
+      "player": "Garcia",
+      "playerId": 1770622244870,
+      "action": "increment",
+      "scores": [
+        44,
+        42
+      ],
+      "timer": 300
+    },
+    {
+      "ts": "2026-02-09T07:30:48.303Z",
+      "type": "period_end",
+      "scores": [
+        44,
+        42
+      ],
+      "period": 4
+    }
+  ],
+  "shareCode": null,
+  "lastUpdated": "2026-02-09T07:30:48.312Z"
+}

@@ -249,6 +249,11 @@ body {
     border-color: #69db7c;
 }
 
+.period-score-active {
+    border-color: #69db7c;
+    box-shadow: 0 0 8px rgba(105, 219, 124, 0.5);
+}
+
 .control-buttons {
     position: absolute;
     bottom: 20px;

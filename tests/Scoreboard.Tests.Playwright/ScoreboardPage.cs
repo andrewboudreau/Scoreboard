@@ -204,6 +204,25 @@ public class ScoreboardPage
             .Locator(".player-points-display").TextContentAsync() ?? "0";
     }
 
+    public async Task ClickTeam2PlayerDisplay(int index)
+    {
+        await Team2PlayersDisplay.Locator(".player-item-display").Nth(index).ClickAsync();
+    }
+
+    public async Task<string> GetTeam2PlayerPoints(int index)
+    {
+        return await Team2PlayersDisplay.Locator(".player-item-display").Nth(index)
+            .Locator(".player-points-display").TextContentAsync() ?? "0";
+    }
+
+    public async Task<string> GetGameStateJson()
+    {
+        return await _page.EvaluateAsync<string>(@"() => {
+            const app = window.scoreboardApp;
+            return JSON.stringify(app._buildGameState());
+        }");
+    }
+
     public async Task<string> GetScoreFontSize()
     {
         return await _page.Locator(".score").First.EvaluateAsync<string>("el => el.style.fontSize") ?? "";

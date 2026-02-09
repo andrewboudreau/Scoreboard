@@ -15,4 +15,8 @@
     <PackageReference Include="NUnit3TestAdapter" Version="6.1.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

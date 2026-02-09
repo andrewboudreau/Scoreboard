@@ -347,12 +347,50 @@ One consolidated file per game — state + events together. No separate event lo
 
 ### Main View
 
-The scoreboard layout from top to bottom:
+The scoreboard is a full-viewport layout divided into three horizontal zones.
 
-- **Scores row** — large clickable score displays with team names (`contentEditable`) above them. Player lists flank the scores on each side.
-- **Timer** — large countdown display below the scores. Tap to start/stop, double-tap to reset.
-- **Period history** — row of editable period score spans below the timer.
-- **Control buttons** — fixed bottom-right: Players, Settings, Fullscreen.
+#### Layout
+
+| Left | Center | Right |
+|------|--------|-------|
+| Team 1 player roster | Scores + Timer | Team 2 player roster |
+
+- **Team 1 (left)** — avatar and name stacked vertically, points to the right of each player
+- **Team 2 (right)** — mirrored: points on the left, avatar and name on the right
+- **Avatars** — 96×96px circles loaded from the default-players API (or a generic initial)
+- **Team names** — `contentEditable` headers above each score; changes persist to the game instance
+
+#### Score Interaction
+
+- **Click** a team score → increment by 1
+- **Long-press** (800ms hold) a team score → decrement by 1, floored at 0
+- **Click a player name** in the roster → increments both the player's individual points and the team score
+- Every change records a `score` event and triggers both localStorage and blob sync
+
+#### Timer Visual Feedback
+
+| State | Visual |
+|-------|--------|
+| **Press** | Brief glow around the timer on tap |
+| **Start** | Green glow with 2-second fade-out |
+| **Running** | Countdown display, no extra decoration |
+| **Expiry sequence** | Stop → capture period → buzzer sound → blink red 5× at 250ms → auto-reset |
+
+#### Control Buttons
+
+Fixed at the bottom-right of the viewport:
+
+- **Players** — opens the Players side panel
+- **Settings** — opens the Settings side panel
+- **Fullscreen** — toggles browser fullscreen mode
+
+#### Font Size Customization
+
+Adjustable via sliders in the Settings panel, persisted to localStorage:
+
+- **Score font size** — 5 to 15 rem
+- **Timer font size** — 6 to 20 rem
+- **Player button padding** — controls roster button sizing
 
 ### Side Panels
 
@@ -400,6 +438,73 @@ The stats page is self-contained (no dependency on \`app.js\`). All CSS and JS a
 - **Fullscreen** — cross-browser toggle via `requestFullscreen` API
 - **Wake Lock** — prevents device sleep via `navigator.wakeLock`. Re-acquired on visibility change. Persisted to localStorage.
 - **Font sizes** — persisted to localStorage, applied on load
+
+## Manage Default Players
+
+The Manage Default Players page (`/Scoreboard/manage-players`) is a standalone page for building a reusable roster with team assignments and custom team names. Players configured here can be loaded into any scoreboard session via the "Load Default Players" button.
+
+### Team Name Headers
+
+Each team column has an editable `contentEditable` heading. Names are loaded from the API on page load and saved alongside the player list. Defaults are "BLACK" and "WHITE".
+
+### Player Cards
+
+Each player is displayed as a card with the following controls:
+
+| Control | Action |
+|---------|--------|
+| **Avatar** | Click to open a crop-and-upload modal. Images are center-cropped to a square and resized to 96×96 PNG server-side. |
+| **Name** | Click to rename inline. |
+| **In / Off** | Toggle active status. Active players are loaded into the scoreboard; inactive players are skipped. |
+| **Pin (📌)** | Lock the player to their current team during shuffle. Pinned players are excluded from redistribution. |
+| **Swap (⇄)** | Move the player to the other team. |
+
+### Shuffle Teams
+
+The "Shuffle" button uses a Fisher-Yates shuffle to randomly redistribute unpinned players between Team 1 and Team 2. The algorithm accounts for already-pinned players on each team to maintain balanced team sizes.
+
+### Drag and Drop
+
+Players can be dragged between the three sections — Team 1, Team 2, and No Team — to manually reassign them.
+
+### Save
+
+A single "Save" action persists both the player list and team names via two parallel API calls:
+- `POST /Scoreboard/api/default-players/save` — full player list
+- `POST /Scoreboard/api/default-players/team-names` — team name pair
+
+### Copy Teams
+
+The "Copy" button writes a formatted team list to the clipboard using the custom team names:
+
+```text
+EAGLES: Alice, Bob, Carol
+HAWKS: Dave, Eve, Frank
+```
+
+### Loading into the Scoreboard
+
+From the main scoreboard's Players panel, the **Load Default Players** button fetches both the player list and team names from the API and applies them to the current game session.
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant Manager as manage-players.html
+    participant API as Server API
+    participant Service as DefaultPlayersService
+    participant Scoreboard as Scoreboard SPA
+
+    Manager->>API: POST /api/default-players/save
+    Manager->>API: POST /api/default-players/team-names
+    API->>Service: Save to in-memory store
+
+    Scoreboard->>API: GET /api/default-players
+    Scoreboard->>API: GET /api/default-players/team-names
+    API->>Service: Read from in-memory store
+    Service-->>Scoreboard: Players + team names
+    Scoreboard->>Scoreboard: Apply roster and team names
+```
 
 ## Storage
 
@@ -694,9 +799,182 @@ Get the default player roster.
 **Response (200):** Array of player objects:
 ```json
 [
-  { "id": 1742075931014, "name": "Alice", "team": "1", "active": true, "points": 0 }
+  { "id": 1742075931014, "name": "Alice", "team": "1", "active": true, "points": 0, "imageUrl": "/Scoreboard/api/default-players/1742075931014/image" }
 ]
 ```
+
+---
+
+### POST `/Scoreboard/api/default-players/save`
+
+Bulk-save the entire player list, replacing all existing players.
+
+**Request body:**
+```json
+[
+  { "id": 1742075931014, "name": "Alice", "team": "1", "active": true, "points": 0, "imageUrl": null },
+  { "id": 1742075931015, "name": "Bob", "team": "2", "active": true, "points": 0, "imageUrl": null }
+]
+```
+
+**Response (200):**
+```json
+{ "success": true }
+```
+
+**Errors:** `400` — invalid request body
+
+---
+
+### POST `/Scoreboard/api/default-players/add`
+
+Add a single player. The server assigns the player's `id`.
+
+**Request body:**
+```json
+{ "name": "Carol", "team": "noteam" }
+```
+
+`team` is optional — defaults to `"noteam"`. Valid values: `"1"`, `"2"`, `"noteam"`.
+
+**Response (200):** The created player object:
+```json
+{ "id": 1742075931016, "name": "Carol", "team": "noteam", "active": true, "points": 0, "imageUrl": null }
+```
+
+**Errors:** `400` — name is required
+
+---
+
+### POST `/Scoreboard/api/default-players/move`
+
+Move a player to a different team.
+
+**Request body:**
+```json
+{ "id": 1742075931014, "team": "2" }
+```
+
+**Response (200):**
+```json
+{ "success": true }
+```
+
+**Errors:** `400` — invalid request, `404` — player not found
+
+---
+
+### POST `/Scoreboard/api/default-players/delete`
+
+Delete a player by ID.
+
+**Request body:**
+```json
+{ "id": 1742075931014 }
+```
+
+**Response (200):**
+```json
+{ "success": true }
+```
+
+**Errors:** `400` — invalid request, `404` — player not found
+
+---
+
+### POST `/Scoreboard/api/default-players/toggle-active`
+
+Toggle a player's active status. Active players are included when loading defaults into the scoreboard.
+
+**Request body:**
+```json
+{ "id": 1742075931014, "isActive": false }
+```
+
+**Response (200):**
+```json
+{ "success": true }
+```
+
+**Errors:** `400` — invalid request, `404` — player not found
+
+---
+
+### POST `/Scoreboard/api/default-players/rename`
+
+Rename a player.
+
+**Request body:**
+```json
+{ "id": 1742075931014, "newName": "Alicia" }
+```
+
+**Response (200):**
+```json
+{ "success": true }
+```
+
+**Errors:** `400` — new name is required, `404` — player not found
+
+---
+
+### GET `/Scoreboard/api/default-players/team-names`
+
+Get the custom team names.
+
+**Response (200):**
+```json
+{ "team1Name": "EAGLES", "team2Name": "HAWKS" }
+```
+
+Defaults to `"BLACK"` / `"WHITE"` if not set.
+
+---
+
+### POST `/Scoreboard/api/default-players/team-names`
+
+Save custom team names.
+
+**Request body:**
+```json
+{ "team1Name": "EAGLES", "team2Name": "HAWKS" }
+```
+
+Blank names default to `"BLACK"` / `"WHITE"`.
+
+**Response (200):**
+```json
+{ "success": true }
+```
+
+**Errors:** `400` — invalid request
+
+---
+
+### POST `/Scoreboard/api/default-players/{id}/image`
+
+Upload a player avatar image. The server center-crops to a square and resizes to 96×96 PNG.
+
+**Request:** `multipart/form-data` with a field named `image`.
+
+**Constraints:** Max file size 10 MB.
+
+**Response (200):**
+```json
+{ "imageUrl": "/Scoreboard/api/default-players/1742075931014/image" }
+```
+
+**Errors:** `400` — no image file or file too large, `500` — image processing failure
+
+---
+
+### GET `/Scoreboard/api/default-players/{id}/image`
+
+Get a player's avatar image. Returns the PNG directly (no authentication required).
+
+**Response (200):** `image/png` binary
+
+**Errors:** `404` — no image for this player
     </script>
 
     <script>
