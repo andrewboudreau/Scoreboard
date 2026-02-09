@@ -286,7 +286,9 @@
 
         /* Shuffle bar */
         .shuffle-bar {
-            text-align: center;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
             margin-bottom: 16px;
         }
         .btn-shuffle {
@@ -327,7 +329,8 @@
             .player-item { padding: 12px 10px; }
             .player-status { padding: 4px 12px; font-size: 0.9em; }
             .move-team-btn { display: inline-block; }
-            .btn-shuffle { width: 100%; }
+            .shuffle-bar { flex-direction: column; }
+            .shuffle-bar .btn { width: 100%; }
         }
     </style>
 </head>
@@ -339,6 +342,7 @@
 
     <div class="shuffle-bar">
         <button id="shuffle-btn" class="btn btn-shuffle">Shuffle Teams</button>
+        <button id="save-btn" class="btn btn-success">Save Players</button>
     </div>
 
     <div class="players-container">
@@ -381,7 +385,6 @@
     </div>
 
     <div class="actions">
-        <button id="save-btn" class="btn btn-success">Save Default Players</button>
         <button id="export-btn" class="btn">Export as JSON</button>
         <a href="/Scoreboard/" class="btn">Back to Scoreboard</a>
     </div>
