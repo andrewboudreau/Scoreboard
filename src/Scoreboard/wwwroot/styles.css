@@ -190,6 +190,15 @@ body {
     box-shadow: 0 0 40px rgba(255, 255, 255, 0.5), 0 0 80px rgba(255, 255, 255, 0.2);
 }
 
+.timer-start-glow {
+    box-shadow: 0 0 40px rgba(255, 255, 255, 0.5), 0 0 80px rgba(255, 255, 255, 0.2);
+    transition: box-shadow 1s ease-out !important;
+}
+
+.timer-start-glow.fading {
+    box-shadow: none;
+}
+
 .timer-status {
     margin-top: 15px;
     font-size: 1.5rem;

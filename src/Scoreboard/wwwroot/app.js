@@ -546,6 +546,18 @@ class Timer {
             // Start timer
             this.isRunning = true;
 
+            // Glow on start, fade out over 1 second
+            this.timerDisplay.classList.remove('timer-start-glow', 'fading');
+            // Force reflow so the glow is applied before we trigger the fade
+            void this.timerDisplay.offsetWidth;
+            this.timerDisplay.classList.add('timer-start-glow');
+            requestAnimationFrame(() => {
+                this.timerDisplay.classList.add('fading');
+            });
+            setTimeout(() => {
+                this.timerDisplay.classList.remove('timer-start-glow', 'fading');
+            }, 1050);
+
             this.interval = setInterval(() => {
                 this.timeLeft--;
                 this.updateDisplay();
@@ -570,7 +582,7 @@ class Timer {
     reset() {
         clearInterval(this.interval);
         this.isRunning = false;
-        this.timerDisplay.classList.remove('timer-running');
+        this.timerDisplay.classList.remove('timer-running', 'timer-start-glow', 'fading');
         this.timeLeft = parseInt(this.app.settings.timerMinutesInput.value) * 60;
         this.updateDisplay();
         this.timerDisplay.style.backgroundColor = '#333';
