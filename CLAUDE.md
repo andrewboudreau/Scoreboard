@@ -85,6 +85,14 @@ Assets embedded in module assembly, served from `/_content/Scoreboard/*` via `St
 - **ci.yml**: Auto-bumps patch version on push to master
 - **tag-and-publish.yml**: Manual workflow to tag and publish to NuGet.org
 
+### Releasing
+
+When the user says "release", "tag", or "tag and release", run the **Tag and Publish** GitHub Actions workflow:
+
+```bash
+gh workflow run "Tag and Publish"
+```
+
 ## Troubleshooting
 
 **Module not loading (404 on /Scoreboard/)**: Clear NuGet cache with `dotnet nuget locals all --clear`, verify package exists in C:\LocalNuGet

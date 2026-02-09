@@ -1,4 +1,5 @@
 name: Tag and Publish
+run-name: "Release v${{ github.ref_name }} — Tag, pack, and publish to NuGet.org"
 
 on:
   workflow_dispatch:
