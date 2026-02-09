@@ -265,6 +265,37 @@
         .crop-cancel { background: #6c757d; color: white; }
         .crop-cancel:hover { background: #5a6268; }
 
+        /* Pin button */
+        .pin-btn {
+            background: none;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 0.85em;
+            color: #aaa;
+            flex-shrink: 0;
+            transition: all 0.15s;
+        }
+        .pin-btn:hover { border-color: #999; color: #666; }
+        .pin-btn.pinned {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+
+        /* Shuffle bar */
+        .shuffle-bar {
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .btn-shuffle {
+            background: #6f42c1;
+            font-size: 1.1em;
+            padding: 12px 32px;
+        }
+        .btn-shuffle:hover { background: #5a32a3; }
+
         /* Mobile team-move button: hidden by default, shown on touch/small screens */
         .move-team-btn {
             display: none;
@@ -296,13 +327,18 @@
             .player-item { padding: 12px 10px; }
             .player-status { padding: 4px 12px; font-size: 0.9em; }
             .move-team-btn { display: inline-block; }
+            .btn-shuffle { width: 100%; }
         }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Manage Default Players</h1>
-        <p>Drag and drop players between teams. Add new players or delete existing ones.</p>
+        <p>Pin players to lock them, then shuffle to randomize teams.</p>
+    </div>
+
+    <div class="shuffle-bar">
+        <button id="shuffle-btn" class="btn btn-shuffle">Shuffle Teams</button>
     </div>
 
     <div class="players-container">
@@ -353,6 +389,7 @@
     <script>
         let players = [];
         let draggedPlayerId = null;
+        const pinnedIds = new Set();
 
         document.addEventListener('DOMContentLoaded', async function() {
             try {
@@ -460,6 +497,18 @@
             infoRow.appendChild(fileInput);
             infoRow.appendChild(textDiv);
 
+            // Pin button
+            const pinBtn = document.createElement('button');
+            pinBtn.className = 'pin-btn' + (pinnedIds.has(player.id) ? ' pinned' : '');
+            pinBtn.textContent = pinnedIds.has(player.id) ? '\uD83D\uDCCC' : '\u2022';
+            pinBtn.title = pinnedIds.has(player.id) ? 'Unpin player' : 'Pin player to team';
+            pinBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (pinnedIds.has(player.id)) pinnedIds.delete(player.id);
+                else pinnedIds.add(player.id);
+                renderPlayers();
+            });
+
             // Touch-friendly team move button (cycles 1 → 2 → noteam → 1)
             const moveBtn = document.createElement('button');
             moveBtn.className = 'move-team-btn';
@@ -469,8 +518,13 @@
             moveBtn.title = 'Move to ' + (nextTeam === '1' ? 'Team 1' : nextTeam === '2' ? 'Team 2' : 'No Team');
             moveBtn.addEventListener('click', (e) => { e.stopPropagation(); movePlayer(player.id, nextTeam); });
 
+            const btnGroup = document.createElement('div');
+            btnGroup.style.cssText = 'display:flex;gap:6px;align-items:center;flex-shrink:0;';
+            btnGroup.appendChild(pinBtn);
+            btnGroup.appendChild(moveBtn);
+
             li.appendChild(infoRow);
-            li.appendChild(moveBtn);
+            li.appendChild(btnGroup);
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
@@ -641,6 +695,7 @@
             document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
             document.getElementById('save-btn').addEventListener('click', saveDefaultPlayers);
             document.getElementById('export-btn').addEventListener('click', exportPlayers);
+            document.getElementById('shuffle-btn').addEventListener('click', shuffleTeams);
             document.getElementById('player-name').addEventListener('input', updateDeleteButton);
             document.getElementById('delete-player-btn').addEventListener('click', () => {
                 const name = document.getElementById('player-name').value.trim();
@@ -653,6 +708,41 @@
             const name = document.getElementById('player-name').value.trim();
             const match = players.find(p => p.name.toLowerCase() === name.toLowerCase());
             document.getElementById('delete-player-btn').disabled = !match;
+        }
+
+        function shuffleTeams() {
+            // Move inactive players to No Team
+            players.forEach(p => {
+                if (!p.active) p.team = 'noteam';
+            });
+
+            // Collect unpinned active players
+            const unpinned = players.filter(p => p.active && !pinnedIds.has(p.id));
+
+            // Count pinned players already on each team
+            const pinnedT1 = players.filter(p => p.active && pinnedIds.has(p.id) && p.team === '1').length;
+            const pinnedT2 = players.filter(p => p.active && pinnedIds.has(p.id) && p.team === '2').length;
+
+            // Fisher-Yates shuffle
+            for (let i = unpinned.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [unpinned[i], unpinned[j]] = [unpinned[j], unpinned[i]];
+            }
+
+            // Deal alternating to balance teams, accounting for pinned counts
+            let t1Count = pinnedT1;
+            let t2Count = pinnedT2;
+            unpinned.forEach(p => {
+                if (t1Count <= t2Count) {
+                    p.team = '1';
+                    t1Count++;
+                } else {
+                    p.team = '2';
+                    t2Count++;
+                }
+            });
+
+            renderPlayers();
         }
 
         function handleDragStart(e) {
