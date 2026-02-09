@@ -165,6 +165,7 @@ class ScoreboardApp {
         this.syncManager = new SyncManager(this);
         // Global state
         this.periodScores = [];
+        this.postPeriod = false;
         this.events = [];
         this.currentShareCode = null;
         this.wakeLock = null;
@@ -179,6 +180,12 @@ class ScoreboardApp {
     loadSavedSettings() {
         // Initialize playersList
         this.playersList = [];
+
+        // Restore current game ID from localStorage
+        const savedGameId = localStorage.getItem('currentGameId');
+        if (savedGameId) {
+            this._currentGameId = savedGameId;
+        }
 
         // Migrate old scoreHistory → gameEvents
         if (localStorage.getItem('scoreHistory') && !localStorage.getItem('gameEvents')) {
@@ -282,9 +289,10 @@ class ScoreboardApp {
             }
         }
 
-        // Load active game state (consolidated format with events)
-        const date = new Date().toISOString().split('T')[0];
-        const gameId = `game-${date}`;
+        // Load active game: read pointer first, fallback to date-based ID
+        const pointer = await this.blobSync.download('active-game.json');
+        const gameId = (pointer && pointer.gameId) || `game-${new Date().toISOString().split('T')[0]}`;
+        this.currentGameId = gameId;
         const gameState = await this.blobSync.download(`games/${gameId}.json`);
         if (gameState) {
             this.teams.team1Points = gameState.team1?.score || 0;
@@ -300,20 +308,31 @@ class ScoreboardApp {
         }
     }
 
-    // Get the current game ID based on today's date
-    get currentGameId() {
-        return `game-${new Date().toISOString().split('T')[0]}`;
+    // Generate a unique game ID: date + random hex suffix
+    generateGameId() {
+        const date = new Date().toISOString().split('T')[0];
+        const rand = Math.random().toString(16).slice(2, 6);
+        return `game-${date}-${rand}`;
     }
 
-    // Sync consolidated game state + events to blob (fire-and-forget)
-    syncGame() {
-        if (!this.blobSync.isConnected) return;
-        if (!this.syncManager.shouldSync()) {
-            this.syncManager.markDirty();
-            return;
+    // Get/set current game ID, persisted to localStorage
+    get currentGameId() {
+        if (!this._currentGameId) {
+            this._currentGameId = this.generateGameId();
+            localStorage.setItem('currentGameId', this._currentGameId);
         }
+        return this._currentGameId;
+    }
 
-        const state = {
+    set currentGameId(value) {
+        this._currentGameId = value;
+        if (value) localStorage.setItem('currentGameId', value);
+        else localStorage.removeItem('currentGameId');
+    }
+
+    // Build the game state object used for sync and share
+    _buildGameState() {
+        return {
             id: this.currentGameId,
             version: 1,
             weekDate: new Date().toISOString().split('T')[0],
@@ -333,8 +352,49 @@ class ScoreboardApp {
             shareCode: this.currentShareCode,
             lastUpdated: new Date().toISOString()
         };
+    }
 
-        this.blobSync.debouncedUpload(`games/${this.currentGameId}.json`, state, 5000);
+    // Start a new game: save current game state, generate new ID, reset scores
+    startNewGame() {
+        // Sync final state of old game to blob
+        if (this.blobSync.isConnected && this._currentGameId) {
+            this.blobSync.upload(`games/${this._currentGameId}.json`, this._buildGameState());
+        }
+
+        // Generate new ID
+        this.currentGameId = this.generateGameId();
+
+        // Reset all state
+        this.teams.reset();
+        this.playersList.forEach(p => p.points = 0);
+        this.periodScores = [];
+        this.postPeriod = false;
+        this.events = [];
+        this.currentShareCode = null;
+        localStorage.removeItem('gameEvents');
+
+        // Update UI
+        this.players.savePlayersState();
+        this.players.updatePlayersList();
+        this.players.updatePlayersDisplay();
+        this.ui.updateScoreHistory();
+
+        // Upload active-game pointer
+        if (this.blobSync.isConnected) {
+            this.blobSync.upload('active-game.json', { gameId: this.currentGameId });
+        }
+    }
+
+    // Sync consolidated game state + events to blob (fire-and-forget)
+    syncGame() {
+        if (!this.blobSync.isConnected) return;
+        if (!this.syncManager.shouldSync()) {
+            this.syncManager.markDirty();
+            return;
+        }
+
+        this.blobSync.debouncedUpload(`games/${this.currentGameId}.json`, this._buildGameState(), 5000);
+        this.blobSync.debouncedUpload('active-game.json', { gameId: this.currentGameId }, 10000);
         this.syncManager.markClean();
     }
 
@@ -351,6 +411,7 @@ class ScoreboardApp {
         });
         localStorage.setItem('gameEvents', JSON.stringify(this.events));
 
+        this.postPeriod = true;
         this.ui.updateScoreHistory();
         this.syncManager.markDirty();
         this.syncGame();
@@ -381,6 +442,7 @@ class ScoreboardApp {
     // Reset score history
     resetScoreHistory() {
         this.periodScores = [];
+        this.postPeriod = false;
         this.ui.updateScoreHistory();
     }
 
@@ -388,6 +450,7 @@ class ScoreboardApp {
     clearScoreHistory() {
         this.events = [];
         this.currentShareCode = null;
+        this.postPeriod = false;
         localStorage.removeItem('gameEvents');
     }
 
@@ -407,6 +470,11 @@ class ScoreboardApp {
         this.events.push(event);
         localStorage.setItem('gameEvents', JSON.stringify(this.events));
 
+        // Auto-update last period score during post-period
+        if (this.postPeriod && this.periodScores.length > 0) {
+            this.correctPeriodScore(this.periodScores.length - 1);
+        }
+
         // Sync consolidated game to blob
         this.syncManager.markDirty();
         this.syncGame();
@@ -420,20 +488,7 @@ class ScoreboardApp {
         }
 
         // Ensure latest state is uploaded before sharing
-        await this.blobSync.upload(`games/${this.currentGameId}.json`, {
-            id: this.currentGameId,
-            version: 1,
-            weekDate: new Date().toISOString().split('T')[0],
-            team1: { name: this.teams.team1NameElement.textContent, score: this.teams.team1Points },
-            team2: { name: this.teams.team2NameElement.textContent, score: this.teams.team2Points },
-            period: this.periodScores.length + 1,
-            periodScores: this.periodScores,
-            timerMinutes: parseInt(this.settings.timerMinutesInput.value),
-            players: this.playersList,
-            events: this.events,
-            shareCode: this.currentShareCode,
-            lastUpdated: new Date().toISOString()
-        });
+        await this.blobSync.upload(`games/${this.currentGameId}.json`, this._buildGameState());
 
         try {
             const res = await fetch('/Scoreboard/api/games/share', {
@@ -545,6 +600,8 @@ class Timer {
         } else {
             // Start timer
             this.isRunning = true;
+            this.app.postPeriod = false;
+            this.app.ui.updateScoreHistory();
 
             // Glow on start, fade out over 2 seconds
             this.timerDisplay.classList.remove('timer-start-glow', 'fading');
@@ -846,11 +903,7 @@ class Settings {
         });
 
         this.resetScoresBtn.addEventListener('click', () => {
-            this.app.teams.reset();
-            this.app.playersList.forEach(p => p.points = 0);
-            this.app.players.savePlayersState();
-            this.app.players.updatePlayersList();
-            this.app.players.updatePlayersDisplay();
+            this.app.startNewGame();
         });
 
         this.resetHistoryBtn.addEventListener('click', () => {
@@ -1588,6 +1641,9 @@ class UI {
         this.app.periodScores.forEach((score, index) => {
             const periodElement = document.createElement('span');
             periodElement.className = 'period-score';
+            if (this.app.postPeriod && index === this.app.periodScores.length - 1) {
+                periodElement.classList.add('period-score-active');
+            }
             periodElement.textContent = score;
             periodElement.style.cursor = 'pointer';
             periodElement.addEventListener('click', () => {
