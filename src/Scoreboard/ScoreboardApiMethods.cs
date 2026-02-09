@@ -122,6 +122,23 @@ public static class ScoreboardApiMethods
         return success ? Results.Ok(new { success = true }) : Results.NotFound(new { error = "Player not found" });
     }
 
+    public static async Task<IResult> GetTeamNames(IDefaultPlayersService defaultPlayersService)
+    {
+        var (team1Name, team2Name) = await defaultPlayersService.GetTeamNamesAsync();
+        return Results.Json(new { team1Name, team2Name });
+    }
+
+    public static async Task<IResult> SaveTeamNames(HttpContext httpContext, IDefaultPlayersService defaultPlayersService)
+    {
+        var request = await httpContext.Request.ReadFromJsonAsync<TeamNamesRequest>();
+        if (request is null) return Results.BadRequest(new { error = "Invalid request" });
+
+        await defaultPlayersService.SaveTeamNamesAsync(
+            string.IsNullOrWhiteSpace(request.Team1Name) ? "BLACK" : request.Team1Name.Trim(),
+            string.IsNullOrWhiteSpace(request.Team2Name) ? "WHITE" : request.Team2Name.Trim());
+        return Results.Ok(new { success = true });
+    }
+
     public static async Task<IResult> GetPlayerImage(long id, BlobContainerClient container)
     {
         var blobName = $"_players/{id}.png";

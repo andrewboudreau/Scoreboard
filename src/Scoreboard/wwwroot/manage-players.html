@@ -41,6 +41,12 @@
             text-align: center;
             border-radius: 4px;
             color: white;
+            cursor: text;
+            outline: none;
+            min-height: 1.2em;
+        }
+        .team-section h3:focus {
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.5);
         }
         .team1-header { background-color: #dc3545; }
         .team2-header { background-color: #007bff; }
@@ -77,24 +83,54 @@
             background: #f8f9fa;
             border-style: dashed;
         }
-        .player-status {
-            font-size: 0.8em;
+        .player-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        .player-actions button {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            background: #f8f9fa;
             cursor: pointer;
-            user-select: none;
-            padding: 2px 8px;
-            border-radius: 3px;
-            display: inline-block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            transition: all 0.15s;
+            padding: 0;
         }
-        .player-status.active {
-            color: #28a745;
-            background: #e6f9ed;
+        .player-actions button:hover:not(:disabled) {
+            border-color: #999;
         }
-        .player-status.inactive {
-            color: #6c757d;
+        .player-actions button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+        .player-actions .active-btn.on {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .player-actions .active-btn.off {
             background: #e9ecef;
+            border-color: #dee2e6;
+            color: #6c757d;
         }
-        .player-status:hover {
-            opacity: 0.8;
+        .player-actions .pin-btn.pinned {
+            color: #dc3545;
+        }
+        .player-actions .pin-btn:not(.pinned) {
+            color: #aaa;
+        }
+        .player-actions .pin-btn:not(.pinned) .pin-icon {
+            display: inline-block;
+            transform: rotate(45deg);
+        }
+        .player-actions .team-btn {
+            font-weight: 600;
         }
         .player-name {
             font-weight: bold;
@@ -265,31 +301,16 @@
         .crop-cancel { background: #6c757d; color: white; }
         .crop-cancel:hover { background: #5a6268; }
 
-        /* Pin button */
-        .pin-btn {
-            background: none;
-            border: 1px solid #dee2e6;
-            border-radius: 3px;
-            padding: 4px 8px;
-            cursor: pointer;
-            font-size: 0.85em;
-            color: #aaa;
-            flex-shrink: 0;
-            transition: all 0.15s;
-        }
-        .pin-btn:hover { border-color: #999; color: #666; }
-        .pin-btn.pinned {
-            background: #fff3cd;
-            border-color: #ffc107;
-            color: #856404;
-        }
-
         /* Shuffle bar */
+
         .shuffle-bar {
             display: flex;
-            justify-content: center;
+            flex-direction: row;
             gap: 12px;
             margin-bottom: 16px;
+        }
+        .shuffle-bar .btn {
+            flex: 1;
         }
         .btn-shuffle {
             background: #6f42c1;
@@ -297,40 +318,21 @@
             padding: 12px 32px;
         }
         .btn-shuffle:hover { background: #5a32a3; }
-
-        /* Mobile team-move button: hidden by default, shown on touch/small screens */
-        .move-team-btn {
-            display: none;
-            background: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            padding: 4px 8px;
-            cursor: pointer;
-            font-size: 0.75em;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        .move-team-btn:hover { background: #5a6268; }
-
-        @media (pointer: coarse) {
-            .move-team-btn { display: inline-block; }
-        }
+        .btn-copy { background: #17a2b8; }
+        .btn-copy:hover { background: #138496; }
 
         @media (max-width: 600px) {
             body { padding: 12px; }
             .header h1 { font-size: 1.3em; }
             .header p { font-size: 0.85em; }
+            .shuffle-bar .btn { font-size: 0.85em; padding: 10px 6px; }
             .players-container { flex-direction: column; gap: 12px; }
             .team-section { min-width: 0; min-height: auto; }
             .add-player-form { max-width: none; }
             .actions { flex-direction: column; display: flex; gap: 8px; }
             .actions .btn { margin: 0; width: 100%; text-align: center; }
-            .player-item { padding: 12px 10px; }
-            .player-status { padding: 4px 12px; font-size: 0.9em; }
-            .move-team-btn { display: inline-block; }
-            .shuffle-bar { flex-direction: column; }
-            .shuffle-bar .btn { width: 100%; }
+            .player-item { padding: 8px; }
+            .player-actions button { width: 32px; height: 32px; }
         }
     </style>
 </head>
@@ -343,16 +345,17 @@
     <div class="shuffle-bar">
         <button id="shuffle-btn" class="btn btn-shuffle">Shuffle Teams</button>
         <button id="save-btn" class="btn btn-success">Save Players</button>
+        <button id="copy-teams-btn" class="btn btn-copy">Copy Teams</button>
     </div>
 
     <div class="players-container">
         <div class="team-section" id="team1-section" data-team="1">
-            <h3 class="team1-header">Team 1</h3>
+            <h3 id="team1-name" class="team1-header" contenteditable="true">BLACK</h3>
             <ul id="team1-list" class="player-list"></ul>
         </div>
 
         <div class="team-section" id="team2-section" data-team="2">
-            <h3 class="team2-header">Team 2</h3>
+            <h3 id="team2-name" class="team2-header" contenteditable="true">WHITE</h3>
             <ul id="team2-list" class="player-list"></ul>
         </div>
 
@@ -396,8 +399,16 @@
 
         document.addEventListener('DOMContentLoaded', async function() {
             try {
-                const res = await fetch('/Scoreboard/api/default-players');
-                if (res.ok) players = await res.json();
+                const [playersRes, namesRes] = await Promise.all([
+                    fetch('/Scoreboard/api/default-players'),
+                    fetch('/Scoreboard/api/default-players/team-names')
+                ]);
+                if (playersRes.ok) players = await playersRes.json();
+                if (namesRes.ok) {
+                    const names = await namesRes.json();
+                    document.getElementById('team1-name').textContent = names.team1Name;
+                    document.getElementById('team2-name').textContent = names.team2Name;
+                }
             } catch (e) {
                 console.error('Failed to load players:', e);
             }
@@ -440,6 +451,8 @@
 
             const infoRow = document.createElement('div');
             infoRow.className = 'player-info-row';
+            infoRow.style.flex = '1';
+            infoRow.style.minWidth = '0';
 
             // Avatar
             const avatarEl = player.imageUrl
@@ -459,23 +472,32 @@
             });
             avatarEl.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
 
-            const textDiv = document.createElement('div');
-
             // Editable player name
             const nameDiv = document.createElement('div');
             nameDiv.className = 'player-name';
             nameDiv.textContent = player.name;
+            nameDiv.style.overflow = 'hidden';
+            nameDiv.style.textOverflow = 'ellipsis';
+            nameDiv.style.whiteSpace = 'nowrap';
             nameDiv.addEventListener('click', (e) => {
                 e.stopPropagation();
                 startRename(nameDiv, player);
             });
 
-            // Clickable active/inactive toggle
-            const statusDiv = document.createElement('div');
-            statusDiv.className = 'player-status ' + (player.active ? 'active' : 'inactive');
-            statusDiv.textContent = player.active ? 'Active' : 'Inactive';
-            statusDiv.title = 'Click to toggle';
-            statusDiv.addEventListener('click', async (e) => {
+            infoRow.appendChild(avatarEl);
+            infoRow.appendChild(fileInput);
+            infoRow.appendChild(nameDiv);
+
+            // 3 action buttons
+            const actions = document.createElement('div');
+            actions.className = 'player-actions';
+
+            // Button 1: Active toggle
+            const activeBtn = document.createElement('button');
+            activeBtn.className = 'active-btn ' + (player.active ? 'on' : 'off');
+            activeBtn.textContent = player.active ? '\u2713' : 'Off';
+            activeBtn.title = player.active ? 'Deactivate player' : 'Activate player';
+            activeBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const newActive = !player.active;
                 try {
@@ -484,27 +506,35 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ id: player.id, isActive: newActive })
                     });
-                    if (res.ok) {
-                        player.active = newActive;
-                        renderPlayers();
-                    } else {
-                        alert('Failed to toggle active status');
+                    if (!res.ok) { alert('Failed to toggle active status'); return; }
+                    player.active = newActive;
+                    // Auto team management
+                    if (!newActive) {
+                        // Deactivate: move to No Team
+                        await movePlayerSilent(player.id, 'noteam');
+                        player.team = 'noteam';
+                    } else if (player.team === 'noteam') {
+                        // Activate from No Team: move to Team 1
+                        await movePlayerSilent(player.id, '1');
+                        player.team = '1';
                     }
+                    renderPlayers();
                 } catch (err) { console.error('Toggle error:', err); alert('Error toggling status'); }
             });
 
-            textDiv.appendChild(nameDiv);
-            textDiv.appendChild(statusDiv);
-
-            infoRow.appendChild(avatarEl);
-            infoRow.appendChild(fileInput);
-            infoRow.appendChild(textDiv);
-
-            // Pin button
+            // Button 2: Pin toggle
             const pinBtn = document.createElement('button');
-            pinBtn.className = 'pin-btn' + (pinnedIds.has(player.id) ? ' pinned' : '');
-            pinBtn.textContent = pinnedIds.has(player.id) ? '\uD83D\uDCCC' : '\u2022';
-            pinBtn.title = pinnedIds.has(player.id) ? 'Unpin player' : 'Pin player to team';
+            const isPinned = pinnedIds.has(player.id);
+            pinBtn.className = 'pin-btn' + (isPinned ? ' pinned' : '');
+            if (isPinned) {
+                pinBtn.textContent = '\uD83D\uDCCC';
+            } else {
+                const pinIcon = document.createElement('span');
+                pinIcon.className = 'pin-icon';
+                pinIcon.textContent = '\uD83D\uDCCC';
+                pinBtn.appendChild(pinIcon);
+            }
+            pinBtn.title = isPinned ? 'Unpin player' : 'Pin player to team';
             pinBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (pinnedIds.has(player.id)) pinnedIds.delete(player.id);
@@ -512,22 +542,21 @@
                 renderPlayers();
             });
 
-            // Touch-friendly team move button (cycles 1 → 2 → noteam → 1)
-            const moveBtn = document.createElement('button');
-            moveBtn.className = 'move-team-btn';
-            const nextTeam = player.team === '1' ? '2' : player.team === '2' ? 'noteam' : '1';
-            const nextLabel = nextTeam === '1' ? 'T1' : nextTeam === '2' ? 'T2' : 'NT';
-            moveBtn.textContent = '\u2192 ' + nextLabel;
-            moveBtn.title = 'Move to ' + (nextTeam === '1' ? 'Team 1' : nextTeam === '2' ? 'Team 2' : 'No Team');
-            moveBtn.addEventListener('click', (e) => { e.stopPropagation(); movePlayer(player.id, nextTeam); });
+            // Button 3: Team switch (T1↔T2)
+            const teamBtn = document.createElement('button');
+            teamBtn.className = 'team-btn';
+            const destTeam = player.team === '1' ? '2' : '1';
+            teamBtn.textContent = player.team === '1' ? 'T2' : 'T1';
+            teamBtn.title = player.team === '1' ? 'Move to Team 2' : 'Move to Team 1';
+            teamBtn.disabled = !player.active;
+            teamBtn.addEventListener('click', (e) => { e.stopPropagation(); movePlayer(player.id, destTeam); });
 
-            const btnGroup = document.createElement('div');
-            btnGroup.style.cssText = 'display:flex;gap:6px;align-items:center;flex-shrink:0;';
-            btnGroup.appendChild(pinBtn);
-            btnGroup.appendChild(moveBtn);
+            actions.appendChild(activeBtn);
+            actions.appendChild(pinBtn);
+            actions.appendChild(teamBtn);
 
             li.appendChild(infoRow);
-            li.appendChild(btnGroup);
+            li.appendChild(actions);
 
             li.addEventListener('dragstart', handleDragStart);
             li.addEventListener('dragend', handleDragEnd);
@@ -695,10 +724,23 @@
                 section.addEventListener('dragleave', handleDragLeave);
             });
 
+            // Prevent newlines in team name headers
+            document.querySelectorAll('#team1-name, #team2-name').forEach(el => {
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+                });
+                el.addEventListener('paste', (e) => {
+                    e.preventDefault();
+                    const text = (e.clipboardData || window.clipboardData).getData('text/plain').replace(/\n/g, '');
+                    document.execCommand('insertText', false, text);
+                });
+            });
+
             document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
             document.getElementById('save-btn').addEventListener('click', saveDefaultPlayers);
             document.getElementById('export-btn').addEventListener('click', exportPlayers);
             document.getElementById('shuffle-btn').addEventListener('click', shuffleTeams);
+            document.getElementById('copy-teams-btn').addEventListener('click', copyTeams);
             document.getElementById('player-name').addEventListener('input', updateDeleteButton);
             document.getElementById('delete-player-btn').addEventListener('click', () => {
                 const name = document.getElementById('player-name').value.trim();
@@ -748,6 +790,19 @@
             renderPlayers();
         }
 
+        function copyTeams() {
+            const t1Name = document.getElementById('team1-name').textContent.trim();
+            const t2Name = document.getElementById('team2-name').textContent.trim();
+            const team1 = players.filter(p => p.team === '1' && p.active).map(p => p.name).sort();
+            const team2 = players.filter(p => p.team === '2' && p.active).map(p => p.name).sort();
+            const text = `${t1Name}: ${team1.join(', ')}\n${t2Name}: ${team2.join(', ')}`;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('copy-teams-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy Teams'; }, 1500);
+            });
+        }
+
         function handleDragStart(e) {
             draggedPlayerId = parseInt(e.target.dataset.playerId);
             e.target.classList.add('dragging');
@@ -782,6 +837,15 @@
                 const newTeam = section.dataset.team;
                 movePlayer(draggedPlayerId, newTeam);
             }
+        }
+
+        async function movePlayerSilent(playerId, newTeam) {
+            const response = await fetch('/Scoreboard/api/default-players/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: playerId, team: newTeam })
+            });
+            if (!response.ok) throw new Error('Failed to move player');
         }
 
         async function movePlayer(playerId, newTeam) {
@@ -864,13 +928,23 @@
 
         async function saveDefaultPlayers() {
             try {
-                const response = await fetch('/Scoreboard/api/default-players/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(players)
-                });
+                const [playersRes, namesRes] = await Promise.all([
+                    fetch('/Scoreboard/api/default-players/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(players)
+                    }),
+                    fetch('/Scoreboard/api/default-players/team-names', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            team1Name: document.getElementById('team1-name').textContent.trim(),
+                            team2Name: document.getElementById('team2-name').textContent.trim()
+                        })
+                    })
+                ]);
 
-                if (response.ok) {
+                if (playersRes.ok && namesRes.ok) {
                     alert('Default players saved successfully!');
                 } else {
                     alert('Failed to save default players');

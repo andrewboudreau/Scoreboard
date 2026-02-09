@@ -48,6 +48,16 @@ public interface IDefaultPlayersService
     /// Renames a player.
     /// </summary>
     Task<bool> RenamePlayerAsync(long id, string newName);
+
+    /// <summary>
+    /// Gets the current team names.
+    /// </summary>
+    Task<(string Team1Name, string Team2Name)> GetTeamNamesAsync();
+
+    /// <summary>
+    /// Saves the team names.
+    /// </summary>
+    Task SaveTeamNamesAsync(string team1Name, string team2Name);
 }
 
 /// <summary>
@@ -57,6 +67,8 @@ public class DefaultPlayersService : IDefaultPlayersService
 {
     private readonly List<Player> defaultPlayers;
     private readonly Lock @lock = new(); // IDE0090: Simplified 'new' expression and IDE0330: Use 'System.Threading.Lock'
+    private string team1Name = "BLACK";
+    private string team2Name = "WHITE";
 
     public DefaultPlayersService()
     {
@@ -177,6 +189,24 @@ public class DefaultPlayersService : IDefaultPlayersService
             }
         }
         return Task.FromResult(false);
+    }
+
+    public Task<(string Team1Name, string Team2Name)> GetTeamNamesAsync()
+    {
+        using (@lock.EnterScope())
+        {
+            return Task.FromResult((team1Name, team2Name));
+        }
+    }
+
+    public Task SaveTeamNamesAsync(string t1, string t2)
+    {
+        using (@lock.EnterScope())
+        {
+            team1Name = t1;
+            team2Name = t2;
+        }
+        return Task.CompletedTask;
     }
 
     private static List<Player> GetInitialDefaultPlayers()

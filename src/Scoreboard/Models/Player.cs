@@ -51,3 +51,9 @@ public class PlayerRenameRequest
     public long Id { get; set; }
     public string NewName { get; set; } = string.Empty;
 }
+
+public class TeamNamesRequest
+{
+    public string Team1Name { get; set; } = string.Empty;
+    public string Team2Name { get; set; } = string.Empty;
+}

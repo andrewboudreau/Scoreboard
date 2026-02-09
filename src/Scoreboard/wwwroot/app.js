@@ -1285,16 +1285,17 @@ class Players {
                 return; // User cancelled
             }
 
-            // Fetch the default players from JSON file
-            fetch('/Scoreboard/api/default-players')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
+            // Fetch the default players and team names
+            Promise.all([
+                fetch('/Scoreboard/api/default-players').then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
+                fetch('/Scoreboard/api/default-players/team-names').then(r => r.ok ? r.json() : null)
+            ])
+                .then(([defaultPlayers, teamNames]) => {
+                    if (teamNames) {
+                        this.app.teams.setTeamNames(teamNames.team1Name, teamNames.team2Name);
+                        this.app.settings.team1NameInput.value = teamNames.team1Name;
+                        this.app.settings.team2NameInput.value = teamNames.team2Name;
                     }
-                    return response.json();
-                })
-                .then(defaultPlayers => {
-                    // Process the imported players
                     this.processImportedPlayers(defaultPlayers, `${defaultPlayers.length} default players loaded successfully!`);
                 })
                 .catch(error => {
