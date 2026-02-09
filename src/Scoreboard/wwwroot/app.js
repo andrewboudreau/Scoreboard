@@ -546,7 +546,7 @@ class Timer {
             // Start timer
             this.isRunning = true;
 
-            // Glow on start, fade out over 1 second
+            // Glow on start, fade out over 2 seconds
             this.timerDisplay.classList.remove('timer-start-glow', 'fading');
             // Force reflow so the glow is applied before we trigger the fade
             void this.timerDisplay.offsetWidth;
@@ -556,7 +556,7 @@ class Timer {
             });
             setTimeout(() => {
                 this.timerDisplay.classList.remove('timer-start-glow', 'fading');
-            }, 1050);
+            }, 2050);
 
             this.interval = setInterval(() => {
                 this.timeLeft--;
@@ -1173,35 +1173,47 @@ class Players {
                 .filter(player => player.team === '2' && player.active)
                 .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-            const createPlayerButton = (player, container) => {
+            const createPlayerButton = (player, container, isTeam2) => {
                 const playerItem = document.createElement('div');
                 playerItem.className = 'player-item-display';
                 playerItem.dataset.playerId = player.id;
 
                 // Avatar
+                let avatarEl;
                 if (player.imageUrl) {
-                    const img = document.createElement('img');
-                    img.className = 'player-avatar';
-                    img.src = player.imageUrl;
-                    img.alt = player.name;
-                    playerItem.appendChild(img);
+                    avatarEl = document.createElement('img');
+                    avatarEl.className = 'player-avatar';
+                    avatarEl.src = player.imageUrl;
+                    avatarEl.alt = player.name;
                 } else {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'player-avatar-placeholder';
-                    placeholder.textContent = player.name.charAt(0).toUpperCase();
-                    playerItem.appendChild(placeholder);
+                    avatarEl = document.createElement('div');
+                    avatarEl.className = 'player-avatar-placeholder';
+                    avatarEl.textContent = player.name.charAt(0).toUpperCase();
                 }
 
                 const playerName = document.createElement('div');
                 playerName.className = 'player-name-display';
                 playerName.textContent = player.name;
 
+                // Stack avatar above name
+                const identity = document.createElement('div');
+                identity.className = 'player-identity';
+                identity.appendChild(avatarEl);
+                identity.appendChild(playerName);
+
                 const playerPoints = document.createElement('div');
                 playerPoints.className = 'player-points-display';
                 playerPoints.textContent = player.points;
 
-                playerItem.appendChild(playerName);
-                playerItem.appendChild(playerPoints);
+                if (isTeam2) {
+                    // Team 2 (right side): points | [avatar/name]
+                    playerItem.appendChild(playerPoints);
+                    playerItem.appendChild(identity);
+                } else {
+                    // Team 1 (left side): [avatar/name] | points
+                    playerItem.appendChild(identity);
+                    playerItem.appendChild(playerPoints);
+                }
 
                 playerItem.addEventListener('click', () => {
                     this.incrementPlayerPoints(player.id);
@@ -1210,8 +1222,8 @@ class Players {
                 container.appendChild(playerItem);
             };
 
-            team1Players.forEach(p => createPlayerButton(p, this.team1PlayersDisplay));
-            team2Players.forEach(p => createPlayerButton(p, this.team2PlayersDisplay));
+            team1Players.forEach(p => createPlayerButton(p, this.team1PlayersDisplay, false));
+            team2Players.forEach(p => createPlayerButton(p, this.team2PlayersDisplay, true));
         }
     }
 
