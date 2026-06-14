@@ -17,11 +17,9 @@ public class ScoreboardModule : IApplicationPartModule
 {
     public string Name => "Scoreboard";
 
-    private static string htmlIndexContent = "";
-    private static string htmlDocsContent = "";
-    private static string htmlManagePlayersContent = "";
-    private static string htmlGameContent = "";
-    private static string htmlStatsContent = "";
+    // The module's wwwroot is embedded in this assembly; HTML pages are served from here.
+    private static readonly string PagePrefix =
+        $"{typeof(ScoreboardModule).Assembly.GetName().Name}.wwwroot.";
 
     public void ConfigureServices(IServiceCollection services)
     {
@@ -82,104 +80,12 @@ public class ScoreboardModule : IApplicationPartModule
 
     public void Configure(WebApplication app)
     {
-        // Map the module's home page
-        // map to the embedded resource directly as content
-        app.MapGet("/Scoreboard/", () =>
-        {
-            if (string.IsNullOrEmpty(htmlIndexContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.index.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Scoreboard home page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlIndexContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlIndexContent, "text/html");
-        });
-
-        app.MapGet("/Scoreboard/docs", () =>
-        {
-            if (string.IsNullOrEmpty(htmlDocsContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.docs.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Scoreboard docs page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlDocsContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlDocsContent, "text/html");
-        });
-
-        app.MapGet("/Scoreboard/ManagePlayers", () =>
-        {
-            if (string.IsNullOrEmpty(htmlManagePlayersContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.manage-players.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Manage Players page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlManagePlayersContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlManagePlayersContent, "text/html");
-        });
-
-        // Shared game results page
-        app.MapGet("/Scoreboard/game", () =>
-        {
-            if (string.IsNullOrEmpty(htmlGameContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.game.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Game results page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlGameContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlGameContent, "text/html");
-        });
-
-        // Stats / game history page
-        app.MapGet("/Scoreboard/stats", () =>
-        {
-            if (string.IsNullOrEmpty(htmlStatsContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.stats.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Stats page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlStatsContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlStatsContent, "text/html");
-        });
+        // Serve the module's HTML pages from the embedded wwwroot.
+        app.MapGet("/Scoreboard/", () => Page("index.html"));
+        app.MapGet("/Scoreboard/docs", () => Page("docs.html"));
+        app.MapGet("/Scoreboard/ManagePlayers", () => Page("manage-players.html"));
+        app.MapGet("/Scoreboard/game", () => Page("game.html"));
+        app.MapGet("/Scoreboard/stats", () => Page("stats.html"));
 
         // Game share endpoints
         app.MapPost("/Scoreboard/api/games/share", GameShareApiMethods.CreateShare);
@@ -211,5 +117,14 @@ public class ScoreboardModule : IApplicationPartModule
     public void ConfigureApplicationParts(ApplicationPartManager partManager)
     {
         // Usually empty - the framework handles this
+    }
+
+    // Serves an embedded HTML page from the module's wwwroot, or 404 if it is missing.
+    private static IResult Page(string fileName)
+    {
+        var stream = typeof(ScoreboardModule).Assembly.GetManifestResourceStream(PagePrefix + fileName);
+        return stream is not null
+            ? Results.Stream(stream, "text/html; charset=utf-8")
+            : Results.NotFound();
     }
 }
