@@ -6,6 +6,7 @@
     <title>Game — MDL Scoreboard</title>
     <link rel="stylesheet" href="/_content/Scoreboard/stats.css?v={{v}}">
     <script src="/_content/Scoreboard/stats-core.js?v={{v}}"></script>
+    <script src="/_content/Scoreboard/insights.js?v={{v}}"></script>
 </head>
 <body>
     <div class="container">
@@ -119,6 +120,7 @@
             if (!svg) return '';
             const f = Stats.flow(g);
             const lead = t => f.biggest[t] ? `${f.biggest[t]}` : '0';
+            const run = Insights.runs(g);
             return `
                 <div class="card">
                     <h2>Score</h2>
@@ -129,6 +131,7 @@
                         <div><div class="value">${lead(0)}</div><div class="label">${esc(g.names[0])} biggest lead</div></div>
                         <div><div class="value">${lead(1)}</div><div class="label">${esc(g.names[1])} biggest lead</div></div>
                     </div>
+                    ${run && run.n >= 4 ? `<div class="note">Longest run: ${teamChip(run.team, g.names[run.team - 1])} scored ${run.n} straight, reaching ${run.at[0]}–${run.at[1]}.</div>` : ''}
                     ${g.scoreEvents.length < 2 ? '<div class="note">Team scores at the end of each quarter.</div>' : ''}
                 </div>`;
         }

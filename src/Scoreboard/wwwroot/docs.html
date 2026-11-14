@@ -165,816 +165,257 @@
     <script id="doc-source" type="text/template">
 # Scoreboard Documentation
 
-A basketball scoreboard single-page app packaged as a WebModule (`SharedTools.Scoreboard`). The frontend runs a **game instance** — a self-contained unit of scores, rosters, timers, and event logs stored in a single consolidated file. The backend's primary job is acting as a **key dispenser** for Azure Blob Storage and creating shareable game result links; it stays out of the live data path.
+A basketball scoreboard for the weekly pickup game. Every phone, tablet or laptop that opens it shows the same teams, score and history: the server keeps one shared copy of everything, and each device saves its changes there automatically.
 
-## System Overview
+There is no login. Anyone with the URL can view and edit, so share it only with the group.
+
+## How It Works
 
 ### Architecture
 
 ```mermaid
 graph LR
     Host["ASP.NET Host"] -->|loads| Module["Scoreboard Module"]
-    Module -->|serves| SPA["SPA (app.js)"]
-    SPA -->|GET /api/groups/join| API["Server API"]
-    API -->|returns SAS URLs| SPA
-    SPA -->|direct PUT/GET via SAS| Blob["Azure Blob Storage"]
-    SPA -->|POST /api/games/share| API
-    API -->|reads game blob| Blob
-    Viewer -->|GET /api/shares/CODE| API
+    Module -->|serves pages| Browser["Scoreboard / Stats / Game pages"]
+    Browser -->|GET / PUT JSON| API["Server API"]
+    API -->|ScoreboardStore| Blob["Azure Blob Storage"]
 ```
 
-The host loads `SharedTools.Scoreboard` as a NuGet-packaged WebModule. The SPA is served as an embedded resource at `/Scoreboard/`. Game state flows through two paths:
+The scoreboard runs in the browser. The server is a small JSON store: the browser sends the roster and each game as whole documents, and every other device picks them up on its next refresh.
 
-1. **localStorage** — immediate, every change (offline-first source of truth)
-2. **Direct-to-Blob** — SPA writes a consolidated game file via SAS URLs (5s debounce, fire-and-forget)
+- **Saving** — changes are sent within a few seconds. If a save fails (no signal at the gym), a **"Not saved yet, retrying…"** badge appears at the top and the save is retried when the connection comes back.
+- **Refreshing** — each device pulls the latest roster and game every 15 seconds, and whenever the app comes back to the foreground.
+- **Device settings** — only font sizes and *Keep screen on* are stored on the device.
 
-The server never sits in the hot path during a game. It creates groups, dispenses SAS tokens, and facilitates shareable game result links.
-
-### Module Contract
-
-The module implements `IApplicationPartModule`:
-
-- **ConfigureServices** — registers `BlobContainerClient`, `IDefaultPlayersService`, `IGroupService`, `IGameShareService`
-- **Configure** — maps all routes under `/Scoreboard/` prefix
-- **Static assets** — embedded in the DLL under `wwwroot/`, served at `/_content/Scoreboard/`
-
-## Components
-
-### Class Diagram
+### Save and refresh
 
 ```mermaid
-graph TD
-    App["ScoreboardApp"] --> Timer
-    App --> Teams
-    App --> Players
-    App --> Settings
-    App --> UI
-    App --> BlobSync
-    App --> SyncManager
-    SyncManager --> BlobSync
+sequenceDiagram
+    participant A as Device A
+    participant S as Server
+    participant B as Device B
+
+    A->>A: Tap score
+    A->>S: PUT /api/games/{id} (after ~3s)
+    A->>S: PUT /api/current-game {gameId}
+    B->>S: GET /api/current-game (every 15s)
+    S-->>B: Current game
+    B->>B: Show new score
 ```
 
-`ScoreboardApp` is the central orchestrator. It owns the game instance and all component references. Components operate on the shared app state.
-
-### Component Reference
-
-| Class | Role | Key State | Key Methods |
-|-------|------|-----------|-------------|
-| **ScoreboardApp** | Orchestrator, owns game instance | `periodScores[]`, `events[]`, `playersList[]`, `currentShareCode` | `recordScoreChange()`, `captureScore()`, `syncGame()`, `shareGame()` |
-| **Timer** | Countdown clock | `timeLeft`, `isRunning`, `lastTap` | `startStop()`, `reset()`, `handleTimerTap()`, `playAlarm()` |
-| **Teams** | Score and name tracking | `team1Points`, `team2Points` | `incrementScore()`, `decrementScore()`, `setTeamNames()` |
-| **Players** | Roster management | (uses `app.playersList`) | `addPlayer()`, `incrementPlayerPoints()`, `updatePlayersDisplay()` |
-| **Settings** | Configuration panel | (DOM element refs) | `toggle()`, `updateGroupUI()`, `handleJoinGroup()`, `handleCreateGroup()` |
-| **UI** | Display updates | (DOM element refs) | `toggleFullscreen()`, `updateScoreHistory()`, `updateScoreFontSize()` |
-| **BlobSync** | Azure Blob I/O + group state | `groupId`, `readUrl`, `writeUrl`, `code` | `join()`, `upload()`, `download()`, `debouncedUpload()` |
-| **SyncManager** | Reliable online/offline sync | `dirty` | `shouldSync()`, `markDirty()`, `markClean()` |
-
-## Scoreboard Engine
-
-### Game Instance
-
-A game instance is the core data unit stored as a single consolidated JSON file. It contains:
-
-- Two teams with names and scores
-- A player roster with per-player points
-- Timer configuration (minutes per period)
-- Period scores array (captured on timer expiry)
-- An event log of every score change and period end
-- An optional share code for public result links
-
-Top-level fields are cached derived state (for fast load). The events array is the audit trail.
-
-The frontend runs whatever game instance it's given. When connected to a group, the instance syncs to Azure Blob Storage so multiple devices see the same state.
-
-### Timer
-
-The timer counts down from a configurable duration (1–60 minutes, default 15).
-
-**Interaction:**
-- **Tap** — start or stop the countdown
-- **Double-tap** (within 300ms) — reset to configured duration
-- Detection via timestamp comparison in `handleTimerTap()`
-
-**On expiry (timeLeft reaches 0):**
-1. Stop the interval
-2. Capture the period score (`"team1Score - team2Score"` string pushed to `periodScores[]`)
-3. Append a `period_end` event
-4. Play the buzzer audio
-5. Blink the timer background red 5 times at 250ms intervals
-6. Auto-reset to the configured duration
+## Scoreboard
 
 ### Scoring
 
-**Team scores:**
-- **Click** the score display → increment by 1
-- **Long-press** (800ms touch) → decrement by 1 (floor at 0)
+- **Tap a team score** — +1
+- **Long-press a team score** (touch, 0.8s) — −1, never below 0
+- **Tap a player** on the left (BLACK) or right (WHITE) — +1 for that player and their team
+- **−1 buttons** in Settings — take a point off a team
 
-**Player scoring:**
-- Click a player name in the on-screen team list → increments both the player's individual points **and** their team's score
-- In the Players panel table: **+/−** buttons adjust player points and team score together
+Every change is recorded in the game's play-by-play.
 
-Every score change calls `app.recordScoreChange(teamNumber, isIncrement, playerName)` which appends a `score` event and triggers both persistence paths (localStorage + blob sync).
+### Timer
 
-### Periods
+- **Tap** — start or stop
+- **Double-tap** — reset to the configured minutes
+- **At zero** — the quarter's score is recorded, the buzzer sounds, the timer blinks red and resets
 
-The `periodScores[]` array stores period-ending snapshots as strings like `"24 - 18"`.
+Set the length in Settings (1–60 minutes).
 
-- Captured automatically when the timer expires
-- A `period_end` event is appended to the events log
-- Displayed below the timer as clickable spans
-- **Click a period score** to replace it with the current team scores (calls `correctPeriodScore(index)`)
-- Period correction also updates the matching `period_end` event's scores and syncs to blob
-- Included in the consolidated game file synced to blob
-- "Reset History" in Settings clears both `periodScores` and `events`
+### Quarters
 
-## Events & Data Flow
+Each recorded quarter shows as a chip under the timer, e.g. `20 - 21` (the running score at the end of the quarter).
 
-### Score Change Sequence
+- Right after a quarter ends, its chip is highlighted: points added before the timer is started again still count toward that quarter (handy for a last-second basket).
+- **Tap a chip** to set that quarter to the current score.
+- **Clear Periods** in Settings removes all quarters and the play-by-play (the score stays).
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Teams/Players
-    participant App as ScoreboardApp
-    participant LS as localStorage
-    participant Blob as Azure Blob (direct)
+### Games without player tracking
 
-    User->>Teams/Players: Click score / player
-    Teams/Players->>App: recordScoreChange()
-    App->>LS: Save gameEvents (immediate)
-    App->>Blob: debouncedUpload consolidated game (5s)
-```
+If nobody is tapping baskets, just keep the team score. At the top of Settings, under **Quarter score**:
 
-### Upload Paths
+- **End Q*n* at this score** — type both teams' scores and end the quarter
+- **Just set the score** — fix the score without ending a quarter
 
-| Path | Target | Trigger | Debounce |
-|------|--------|---------|----------|
-| **localStorage** | Browser (`gameEvents`) | Every score/period event | None (immediate) |
-| **BlobSync** | `games/{gameId}.json` | Every score/period event | 5 seconds |
+These games still count for team records and for each player's games played, wins and +/-.
 
-One consolidated file per game — state + events together. No separate event log file, no server-side upload.
+### New game
 
-### Event Shapes
+**New Game** in Settings keeps the current game in history and starts a fresh one at 0–0. Points and quarters reset; the teams stay.
 
-**Score event:**
+### Results link
 
-```json
-{
-  "ts": "2026-02-01T15:45:30.000Z",
-  "type": "score",
-  "team": 1,
-  "player": "Alice",
-  "action": "increment",
-  "scores": [42, 38],
-  "timer": 450
-}
-```
+**Copy Results Link** copies a link to this game's page (`/Scoreboard/game?id=…`) to paste in the group chat.
 
-`player` is `null` when the team score element is clicked directly (not via a player).
+### Display
 
-**Period end event:**
+- **Fullscreen** button (bottom right)
+- **Score / Timer / Player button size** sliders in Settings
+- **Keep screen on** stops the device from sleeping (if the browser supports it)
 
-```json
-{
-  "ts": "2026-02-01T16:00:00.000Z",
-  "type": "period_end",
-  "scores": [24, 18],
-  "period": 1
-}
-```
+## Teams
 
-## UI Features
+Open the teams panel with the people icon. It fills the screen on phones.
 
-### Main View
+### Picking teams
 
-The scoreboard is a full-viewport layout divided into three horizontal zones.
+Each player row has a **BLACK / Out / WHITE** toggle. The chips at the top count each team and get an orange outline when the teams differ by more than one.
 
-#### Layout
+- **All out** — mark everyone out at the start of the week, then tap in whoever shows up
+- **Balance** — split everyone who's in into the most even teams, based on how past games went (see *Player impact* below). It leaves the teams alone if they're already within half a point.
+- **Shuffle** — randomly split everyone who's in into even teams
+- **📌 Pin** — keep a player on their team when balancing or shuffling (pins are only on this device)
+- **Add a player** — type a name at the bottom; they join the smaller team
 
-| Left | Center | Right |
-|------|--------|-------|
-| Team 1 player roster | Scores + Timer | Team 2 player roster |
+Under the counts, **Prediction** shows the favourite and their win chance for the current teams.
 
-- **Team 1 (left)** — avatar and name stacked vertically, points to the right of each player
-- **Team 2 (right)** — mirrored: points on the left, avatar and name on the right
-- **Avatars** — 96×96px circles loaded from the default-players API (or a generic initial)
-- **Team names** — `contentEditable` headers above each score; changes persist to the game instance
+While the game is on, the **−/+** next to each player who's in adjusts their points (and their team's score).
 
-#### Score Interaction
+### Sharing the teams
 
-- **Click** a team score → increment by 1
-- **Long-press** (800ms hold) a team score → decrement by 1, floored at 0
-- **Click a player name** in the roster → increments both the player's individual points and the team score
-- Every change records a `score` event and triggers both localStorage and blob sync
-
-#### Timer Visual Feedback
-
-| State | Visual |
-|-------|--------|
-| **Press** | Brief glow around the timer on tap |
-| **Start** | Green glow with 2-second fade-out |
-| **Running** | Countdown display, no extra decoration |
-| **Expiry sequence** | Stop → capture period → buzzer sound → blink red 5× at 250ms → auto-reset |
-
-#### Control Buttons
-
-Fixed at the bottom-right of the viewport:
-
-- **Players** — opens the Players side panel
-- **Settings** — opens the Settings side panel
-- **Fullscreen** — toggles browser fullscreen mode
-
-#### Font Size Customization
-
-Adjustable via sliders in the Settings panel, persisted to localStorage:
-
-- **Score font size** — 5 to 15 rem
-- **Timer font size** — 6 to 20 rem
-- **Player button padding** — controls roster button sizing
-
-### Side Panels
-
-Two 510px-wide panels toggle from the control buttons. Clicking outside an open panel closes it.
-
-**Players panel:**
-- Management table with columns: Name, Team (select), Active (checkbox), Points (+/−), Remove (X)
-- Add player input with Enter key support
-- Export (clipboard), Import (paste JSON), Load Defaults buttons
-
-**Settings panel:**
-- Timer duration input (1–60 minutes) with Set Timer button
-- Team name inputs (synced bidirectionally with main display)
-- Score decrement (−1) buttons per team
-- Reset Scores, Reset History, Test Buzzer, Test Timer End buttons
-- Score font size slider (5–15 rem)
-- Timer font size slider (6–20 rem)
-- Keep Screen On checkbox (Wake Lock API)
-- Group management section (join/create/share group link/share game results/leave)
-- Manage Default Players link
-
-### Shareable Game Results
-
-When connected to a group, the "Share Game Results" button creates a public link via the server (`POST /api/games/share`). The server stores a mapping from an 8-character share code to the game blob path. The resulting URL points to a read-only results page at `/Scoreboard/game?s={code}`.
-
-The results page (`game.html`) is self-contained — no BlobSync, no localStorage, no authentication. It fetches game data from `/Scoreboard/api/shares/{code}` (which reads the blob server-side) and renders:
-- Final score with winner highlighting
-- Period breakdown table
-- Player stats sorted by points
-- Chronological event timeline
-
-### Stats / Game History Page
-
-A standalone page at \`/Scoreboard/stats\` that shows all past games for the connected group:
-
-- **Bootstrap** — reads \`groupCode\` from localStorage, calls \`/api/groups/join\` to get SAS URLs. If no code, shows a connect prompt.
-- **List games** — uses the Azure Blob List API via the read SAS URL to enumerate all game files under \`{groupId}/games/\`.
-- **List view** — cards for each game showing date, team names, and final score. Sorted newest first.
-- **Detail view** — click a game card to see final score, period breakdown, player stats, and event timeline. Uses the same rendering approach as \`game.html\`.
-
-The stats page is self-contained (no dependency on \`app.js\`). All CSS and JS are inline in \`stats.html\`.
-
-### Fullscreen & Wake Lock
-
-- **Fullscreen** — cross-browser toggle via `requestFullscreen` API
-- **Wake Lock** — prevents device sleep via `navigator.wakeLock`. Re-acquired on visibility change. Persisted to localStorage.
-- **Font sizes** — persisted to localStorage, applied on load
-
-## Manage Default Players
-
-The Manage Default Players page (`/Scoreboard/manage-players`) is a standalone page for building a reusable roster with team assignments and custom team names. Players configured here can be loaded into any scoreboard session via the "Load Default Players" button.
-
-### Team Name Headers
-
-Each team column has an editable `contentEditable` heading. Names are loaded from the API on page load and saved alongside the player list. Defaults are "BLACK" and "WHITE".
-
-### Player Cards
-
-Each player is displayed as a card with the following controls:
-
-| Control | Action |
-|---------|--------|
-| **Avatar** | Click to open a crop-and-upload modal. Images are center-cropped to a square and resized to 96×96 PNG server-side. |
-| **Name** | Click to rename inline. |
-| **In / Off** | Toggle active status. Active players are loaded into the scoreboard; inactive players are skipped. |
-| **Pin (📌)** | Lock the player to their current team during shuffle. Pinned players are excluded from redistribution. |
-| **Swap (⇄)** | Move the player to the other team. |
-
-### Shuffle Teams
-
-The "Shuffle" button uses a Fisher-Yates shuffle to randomly redistribute unpinned players between Team 1 and Team 2. The algorithm accounts for already-pinned players on each team to maintain balanced team sizes.
-
-### Drag and Drop
-
-Players can be dragged between the three sections — Team 1, Team 2, and No Team — to manually reassign them.
-
-### Save
-
-A single "Save" action persists both the player list and team names via two parallel API calls:
-- `POST /Scoreboard/api/default-players/save` — full player list
-- `POST /Scoreboard/api/default-players/team-names` — team name pair
-
-### Copy Teams
-
-The "Copy" button writes a formatted team list to the clipboard using the custom team names:
+**Share** sends the teams to the group chat (share sheet on phones, clipboard on computers):
 
 ```text
-EAGLES: Alice, Bob, Carol
-HAWKS: Dave, Eve, Frank
+🏀 Teams for Sat, Nov 14
+
+⚫ BLACK (5)
+Adams
+Baker
+...
+
+⚪ WHITE (5)
+Foster
+Garcia
+...
 ```
 
-### Loading into the Scoreboard
+### Editing players
 
-From the main scoreboard's Players panel, the **Load Default Players** button fetches both the player list and team names from the API and applies them to the current game session.
+Tap **Edit** to switch each row to:
 
-### Data Flow
+- **Photo** — pick a picture; it's cropped to a square avatar
+- **Rename**
+- **Delete**
 
-```mermaid
-sequenceDiagram
-    participant Manager as manage-players.html
-    participant API as Server API
-    participant Service as DefaultPlayersService
-    participant Scoreboard as Scoreboard SPA
+Tap **Done** when finished. Team names can be edited by tapping them on the scoreboard or in Settings.
 
-    Manager->>API: POST /api/default-players/save
-    Manager->>API: POST /api/default-players/team-names
-    API->>Service: Save to in-memory store
+## Stats
 
-    Scoreboard->>API: GET /api/default-players
-    Scoreboard->>API: GET /api/default-players/team-names
-    API->>Service: Read from in-memory store
-    Service-->>Scoreboard: Players + team names
-    Scoreboard->>Scoreboard: Apply roster and team names
-```
+Open **Stats & History** from Settings, or go to `/Scoreboard/stats`. It has four tabs (**Overview**, **Players**, **Insights**, **Games**); the range filter applies to all of them except the impact model, which always uses every game.
 
-## Storage
+- **Range** — Last 10, This year, All time
+- **Head to head** — wins for each team, ties, and the current streak
+- **Tiles** — average score, average margin, closest game, biggest win
+- **Comebacks** — games won after trailing at half
+- **By quarter** — average points per quarter and quarters won
+- **Players** — games played, W-L, win %, +/- (the team's average margin), points per game and high. Tap a column to sort; tap a player for their game log.
+- **Games** — every game by month, marked *Player stats* or *Team scores*
 
-### localStorage Keys
+Team results, records and +/- use every game. Points per game and high only use games where baskets were credited to players.
 
-| Key | Type | Description |
-|-----|------|-------------|
-| `groupCode` | string | Current group code for auto-rejoin |
-| `gameEvents` | JSON array | Score and period event log |
-| `scoreFontSize` | string | Score display font size in rem |
-| `timerFontSize` | string | Timer display font size in rem |
-| `keepScreenOn` | `"true"` / `"false"` | Wake lock preference |
-| `playersList` | JSON array | Current player roster |
+### Insights
 
-> **Migration:** On first load, the old `scoreHistory` key is automatically migrated to `gameEvents`. The legacy `lastUploadAttempt` key is removed.
+- **Player impact** — a ridge regression on final margins ("adjusted plus-minus"): every game says *BLACK margin = sum of BLACK players' impact − sum of WHITE players' impact*. Solving across all games gives each player's points added per game versus an average player, separating them from who they happened to play with. It only needs who played and the final score, so team-score-only games count fully. Recent games weigh more (half-life 25 games), players with few games are shrunk toward 0, and margins are capped at 15.
+- **Back-test** — each past game is predicted using only the games before it; the page reports how often it picked the winner and the typical miss, so you can judge how much to trust it.
+- **Next game** (Overview) — win chances for the teams currently set on the scoreboard.
+- **Best duos / Rivalries** — average margin as teammates, and the most one-sided records as opponents (3+ games).
+- **Scoring** (tracked games) — share of team points, game-to-game swing, share scored in Q4, longest run of team baskets.
+- **Points per game** trend and **How close are the games** distribution.
+- **Showing up** (Players tab) — attendance and current streak.
 
-### Azure Blob Layout
+The player sheet adds impact rank, points by quarter, best teammates and toughest opponents.
 
-```text
-container/
-├── _groups/{groupId}.json              # Group metadata (server-managed)
-├── _shares/{code}.json                 # Share code → game mapping (server-managed)
-├── {groupId}/
-│   ├── roster.json                     # Player roster
-│   └── games/{gameId}.json             # Consolidated game state + events
-```
+### Game page
 
-**Consolidated game file** (`games/{gameId}.json`):
+Each game has its own page (`/Scoreboard/game?id=…`):
+
+- Final score and **Share result** (a text summary with quarters and top scorers)
+- Quarter-by-quarter table
+- Score chart with lead changes and biggest leads
+- **Box score**, or **Who played** for games with only team scores. Points not credited to anyone show as *Not credited*.
+- Play-by-play
+
+While a game is being played the page shows **LIVE** and updates every 15 seconds.
+
+## Data
+
+### Game document
+
+Each game is one JSON document:
 
 ```json
 {
-  "id": "game-2026-02-01",
+  "id": "game-2026-11-14-970d",
   "version": 1,
-  "weekDate": "2026-02-01",
-  "team1": { "name": "BLACK", "score": 42 },
-  "team2": { "name": "WHITE", "score": 38 },
-  "period": 3,
-  "periodScores": ["24 - 18", "18 - 20"],
-  "timerMinutes": 15,
-  "players": [{ "id": 1742075931014, "name": "Andrew", "team": "1", "active": true, "points": 7 }],
-  "events": [
-    { "ts": "2026-02-01T15:45:30.000Z", "type": "score", "team": 1, "player": "Andrew", "action": "increment", "scores": [42, 38], "timer": 450 },
-    { "ts": "2026-02-01T16:00:00.000Z", "type": "period_end", "scores": [24, 18], "period": 1 }
+  "weekDate": "2026-11-14",
+  "team1": { "name": "BLACK", "score": 44 },
+  "team2": { "name": "WHITE", "score": 42 },
+  "period": 4,
+  "periodScores": ["20 - 21", "34 - 30", "44 - 42"],
+  "timerMinutes": 5,
+  "players": [
+    { "id": 1794637552563, "name": "Adams", "team": "1", "active": true, "points": 9 }
   ],
-  "shareCode": null,
-  "lastUpdated": "2026-02-01T16:30:00.000Z"
+  "events": [
+    { "ts": "2026-11-14T19:05:53Z", "type": "score", "team": 1, "player": "Adams",
+      "playerId": 1794637552563, "action": "increment", "scores": [1, 0], "timer": 300 },
+    { "ts": "2026-11-14T19:20:00Z", "type": "period_end", "scores": [20, 21], "period": 1 }
+  ],
+  "lastUpdated": "2026-11-14T20:30:00Z"
 }
 ```
 
-**Share mapping** (`_shares/{code}.json`):
+- Teams are **BLACK** (`team1`, players with `"team": "1"`) and **WHITE** (`team2`, `"team": "2"`). Players with `"active": false` are out.
+- `periodScores` are running totals at the end of each quarter.
+- Event types: `score` (a tap; `player` is null for a team-score tap), `score_set` (score typed in), `period_end`.
+
+### Roster
 
 ```json
 {
-  "code": "X7K2M9PQ",
-  "groupId": "uuid",
-  "gameId": "game-2026-02-01",
-  "createdAt": "2026-02-01T17:00:00Z"
+  "team1Name": "BLACK",
+  "team2Name": "WHITE",
+  "players": [
+    { "id": 1742075931014, "name": "Andrew", "team": "2", "active": true,
+      "imageUrl": "/Scoreboard/api/players/1742075931014/image?v=1731600000" }
+  ]
 }
 ```
 
-### Sync Behavior
+### Storage
 
-`BlobSync.debouncedUpload(path, data, delayMs)` uses path-keyed timeouts — each blob path gets its own debounce timer. If a new change arrives before the timer fires, it resets.
-
-On **403** responses (expired SAS), BlobSync automatically calls `_refreshSas()` to get new tokens from the server, then retries the original operation once.
-
-Blob sync is fire-and-forget — scoring and timer never depend on network connectivity. localStorage is always the source of truth.
-
-### SyncManager (Reliable Sync)
-
-`SyncManager` sits between `BlobSync` and `ScoreboardApp` to handle connectivity gracefully:
-
-- **Online/offline detection** — uses `navigator.onLine` and `online`/`offline` events
-- **Guard syncGame()** — checks `syncManager.shouldSync()` before blob upload; if offline, marks dirty and skips
-- **Periodic sync** — 2-minute interval calls `syncGame()` when online and connected
-- **Reconnect flush** — `online` event fires → immediately syncs if dirty
-- **Visibility flush** — tab becomes visible → syncs if dirty and online
-
-localStorage always saves immediately regardless of online state. The `dirty` flag tracks whether unsynced changes exist.
-
-## Groups & Sharing
-
-### Concept
-
-Groups are access containers for shared scoreboard state. A group has:
-
-- One **admin code** (8-char uppercase) — full control
-- Multiple **member codes** (6-char lowercase) — read/write game data
-
-The code is your key. Enter it to get SAS tokens for direct blob access.
-
-### Code Charsets
-
-| Type | Length | Characters | Excluded |
-|------|--------|------------|----------|
-| Admin | 8 | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` | I, O, 0, 1 |
-| Member | 6 | `abcdefghjkmnpqrstuvwxyz23456789` | i, l, o, 0, 1 |
-| Share | 8 | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` | I, O, 0, 1 |
-
-Ambiguous characters are excluded to prevent confusion when sharing codes verbally.
-
-### Flow
-
-```mermaid
-sequenceDiagram
-    participant Admin
-    participant Server
-    participant Blob as Azure Blob
-    participant Member
-
-    Admin->>Server: POST /api/groups {name}
-    Server-->>Admin: {groupId, adminCode}
-    Admin->>Server: GET /api/groups/join?code=ADMINCODE
-    Server-->>Admin: {groupId, sasUrls}
-    Admin->>Blob: Upload roster, game state
-
-    Admin->>Server: POST /api/groups/{id}/members {label}
-    Server-->>Admin: {memberCode}
-    Admin-->>Member: Share link with code
-
-    Member->>Server: GET /api/groups/join?code=membercode
-    Server-->>Member: {groupId, sasUrls}
-    Member->>Blob: Read/write game state directly
+```text
+{container}/{dataFolder}/
+├── roster.json
+├── current-game.json      # { "gameId": "..." }
+├── games/{gameId}.json
+└── players/{id}.png       # 96×96 avatars
 ```
 
-### Share Game Results Flow
+`dataFolder` is `BlobStorage:DataFolder` if configured. Otherwise it's the folder of the old group with the most games (so history from earlier versions carries over), or `main` on a fresh install.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Server
-    participant Blob as Azure Blob
-    participant Viewer
+### Upgrading from older versions
 
-    User->>Blob: Upload latest game state
-    User->>Server: POST /api/games/share {groupId, gameId}
-    Server->>Blob: Write _shares/{code}.json
-    Server-->>User: {shareCode, shareUrl}
-    User-->>Viewer: Share URL
-
-    Viewer->>Server: GET /api/shares/{code}
-    Server->>Blob: Read _shares/{code}.json
-    Server->>Blob: Read {groupId}/games/{gameId}.json
-    Server-->>Viewer: Game JSON
-    Viewer->>Viewer: Render read-only results page
-```
-
-### Auto-Join
-
-On page load, the SPA checks for a group code in this order:
-1. URL query parameter `?code=XXX`
-2. URL hash `#XXX`
-3. localStorage `groupCode`
-
-If found, it automatically joins and loads group data (roster, active game).
-
-### SAS Tokens
-
-- **Expiry**: 3 hours from generation
-- **Permissions**: Read + List always; Write + Create for all members (admin and member codes both get write access)
-- **Refresh**: Transparent — on 403, BlobSync calls `/api/groups/{id}/sas/refresh?code=X` and retries
-
-### Permissions
-
-- **Admin**: create group, add/revoke members, read/write all data
-- **Members**: read/write game data, cannot manage membership
+Older versions kept the roster and current game in each browser. The first time an old device opens this version, it uploads what it has — the roster only if the server has none yet, the game only if the server doesn't already have it — and then clears the old browser data.
 
 ## API Reference
 
-### POST `/Scoreboard/api/groups`
-
-Create a new group.
-
-**Request body:**
-```json
-{ "name": "Friday Hoops" }
-```
-
-**Response (201):**
-```json
-{
-  "groupId": "uuid",
-  "name": "Friday Hoops",
-  "adminCode": "ABC2DEFG"
-}
-```
-
-**Errors:** `400` — name is required
-
----
-
-### GET `/Scoreboard/api/groups/join?code=X`
-
-Join a group using an admin or member code. Returns SAS URLs for direct blob access.
-
-**Response (200):**
-```json
-{
-  "groupId": "uuid",
-  "groupName": "Friday Hoops",
-  "isAdmin": true,
-  "sasUrls": {
-    "readUrl": "https://...?sv=...&sig=...",
-    "writeUrl": "https://...?sv=...&sig=..."
-  }
-}
-```
-
-**Errors:** `400` — code required, `404` — invalid code
-
----
-
-### POST `/Scoreboard/api/groups/{id}/members?adminCode=X`
-
-Add a member to a group (admin only).
-
-**Request body:**
-```json
-{ "label": "Player 1" }
-```
-
-**Response (201):**
-```json
-{ "code": "abc2de", "label": "Player 1" }
-```
-
-**Errors:** `400` — admin code or label required, `403` — invalid admin code, `404` — group not found
-
----
-
-### DELETE `/Scoreboard/api/groups/{id}/members/{code}?adminCode=X`
-
-Revoke a member's access (admin only).
-
-**Response:** `204` No Content
-
-**Errors:** `400` — admin code required, `403` — invalid admin code, `404` — group or member not found
-
----
-
-### GET `/Scoreboard/api/groups/{id}/sas/refresh?code=X`
-
-Refresh SAS tokens. Works with both admin and member codes.
-
-**Response (200):**
-```json
-{
-  "readUrl": "https://...?sv=...&sig=...",
-  "writeUrl": "https://...?sv=...&sig=..."
-}
-```
-
-**Errors:** `400` — code required, `403` — invalid code, `404` — group not found
-
----
-
-### POST `/Scoreboard/api/games/share`
-
-Create a shareable link for a game. Stores a mapping blob at `_shares/{code}.json`.
-
-**Request body:**
-```json
-{ "groupId": "uuid", "gameId": "game-2026-02-01" }
-```
-
-**Response (200):**
-```json
-{
-  "shareCode": "X7K2M9PQ",
-  "shareUrl": "/Scoreboard/game?s=X7K2M9PQ"
-}
-```
-
-**Errors:** `400` — groupId and gameId required
-
----
-
-### GET `/Scoreboard/api/shares/{code}`
-
-Retrieve shared game data. No authentication required — reads the game blob via the server's storage client.
-
-**Response (200):** Full consolidated game JSON (same shape as the blob file).
-
-**Errors:** `404` — share code not found or game data not found
-
----
-
-### GET `/Scoreboard/api/default-players`
-
-Get the default player roster.
-
-**Response (200):** Array of player objects:
-```json
-[
-  { "id": 1742075931014, "name": "Alice", "team": "1", "active": true, "points": 0, "imageUrl": "/Scoreboard/api/default-players/1742075931014/image" }
-]
-```
-
----
-
-### POST `/Scoreboard/api/default-players/save`
-
-Bulk-save the entire player list, replacing all existing players.
-
-**Request body:**
-```json
-[
-  { "id": 1742075931014, "name": "Alice", "team": "1", "active": true, "points": 0, "imageUrl": null },
-  { "id": 1742075931015, "name": "Bob", "team": "2", "active": true, "points": 0, "imageUrl": null }
-]
-```
-
-**Response (200):**
-```json
-{ "success": true }
-```
-
-**Errors:** `400` — invalid request body
-
----
-
-### POST `/Scoreboard/api/default-players/add`
-
-Add a single player. The server assigns the player's `id`.
-
-**Request body:**
-```json
-{ "name": "Carol", "team": "noteam" }
-```
-
-`team` is optional — defaults to `"noteam"`. Valid values: `"1"`, `"2"`, `"noteam"`.
-
-**Response (200):** The created player object:
-```json
-{ "id": 1742075931016, "name": "Carol", "team": "noteam", "active": true, "points": 0, "imageUrl": null }
-```
-
-**Errors:** `400` — name is required
-
----
-
-### POST `/Scoreboard/api/default-players/move`
-
-Move a player to a different team.
-
-**Request body:**
-```json
-{ "id": 1742075931014, "team": "2" }
-```
-
-**Response (200):**
-```json
-{ "success": true }
-```
-
-**Errors:** `400` — invalid request, `404` — player not found
-
----
-
-### POST `/Scoreboard/api/default-players/delete`
-
-Delete a player by ID.
-
-**Request body:**
-```json
-{ "id": 1742075931014 }
-```
-
-**Response (200):**
-```json
-{ "success": true }
-```
-
-**Errors:** `400` — invalid request, `404` — player not found
-
----
-
-### POST `/Scoreboard/api/default-players/toggle-active`
-
-Toggle a player's active status. Active players are included when loading defaults into the scoreboard.
-
-**Request body:**
-```json
-{ "id": 1742075931014, "isActive": false }
-```
-
-**Response (200):**
-```json
-{ "success": true }
-```
-
-**Errors:** `400` — invalid request, `404` — player not found
-
----
-
-### POST `/Scoreboard/api/default-players/rename`
-
-Rename a player.
-
-**Request body:**
-```json
-{ "id": 1742075931014, "newName": "Alicia" }
-```
-
-**Response (200):**
-```json
-{ "success": true }
-```
-
-**Errors:** `400` — new name is required, `404` — player not found
-
----
-
-### GET `/Scoreboard/api/default-players/team-names`
-
-Get the custom team names.
-
-**Response (200):**
-```json
-{ "team1Name": "EAGLES", "team2Name": "HAWKS" }
-```
-
-Defaults to `"BLACK"` / `"WHITE"` if not set.
-
----
-
-### POST `/Scoreboard/api/default-players/team-names`
-
-Save custom team names.
-
-**Request body:**
-```json
-{ "team1Name": "EAGLES", "team2Name": "HAWKS" }
-```
-
-Blank names default to `"BLACK"` / `"WHITE"`.
-
-**Response (200):**
-```json
-{ "success": true }
-```
-
-**Errors:** `400` — invalid request
-
----
-
-### POST `/Scoreboard/api/default-players/{id}/image`
-
-Upload a player avatar image. The server center-crops to a square and resizes to 96×96 PNG.
-
-**Request:** `multipart/form-data` with a field named `image`.
-
-**Constraints:** Max file size 10 MB.
-
-**Response (200):**
-```json
-{ "imageUrl": "/Scoreboard/api/default-players/1742075931014/image" }
-```
-
-**Errors:** `400` — no image file or file too large, `500` — image processing failure
-
----
-
-### GET `/Scoreboard/api/default-players/{id}/image`
-
-Get a player's avatar image. Returns the PNG directly (no authentication required).
-
-**Response (200):** `image/png` binary
-
-**Errors:** `404` — no image for this player
+All endpoints are under `/Scoreboard/api`. No authentication. JSON bodies are limited to 1 MB; game ids must be letters, digits, `-` or `_` (up to 80).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/info` | Version, data folder, number of games, whether a roster is saved |
+| GET | `/roster` | The roster. Before one is saved, returns the bundled default players with `"seeded": true` |
+| PUT | `/roster` | Replace the roster |
+| GET | `/current-game` | The current game document, or `204` if there is none |
+| PUT | `/current-game` | Set the current game: `{ "gameId": "game-2026-11-14-970d" }` |
+| GET | `/games` | All saved games, as one JSON array |
+| GET | `/games/{id}` | One game, or `404` |
+| PUT | `/games/{id}` | Save a game |
+| POST | `/players/{id}/image` | Upload a photo (`multipart/form-data`, field `image`, max 10 MB). Returns `{ "imageUrl": "..." }` |
+| GET | `/players/{id}/image` | The player's photo (`image/png`), or `404` |
+
+`PUT` endpoints return `204` on success, `400` if the body isn't JSON (or the id is invalid), and `413` if it's over 1 MB.
     </script>
 
     <script>

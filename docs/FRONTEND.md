@@ -1,525 +1,240 @@
 # Frontend Architecture
 
-This document describes the layout, JavaScript class structure, user interactions, persistence, and page-specific details of the MDL Scoreboard frontend. It does not cover the ASP.NET module/host loading system.
+How the browser side of the MDL Scoreboard is put together: pages, the `app.js` classes, how data reaches the server, and the stats pages. For the module/host loading system see the README.
 
-The frontend is a set of static HTML/CSS/JS files served from `src/Scoreboard/wwwroot/`. There is no build step, no bundler, and no framework -- everything is vanilla JavaScript with ES6 classes.
-
----
-
-## Pages Overview
-
-| File | URL Path | Purpose |
-|------|----------|---------|
-| `index.html` | `/Scoreboard/` | Main scoreboard SPA |
-| `game.html` | `/Scoreboard/Game?s={code}` | Public shared game results page |
-| `stats.html` | `/Scoreboard/Stats` | Game history list and detail viewer |
-| `manage-players.html` | `/Scoreboard/ManagePlayers` | Default player CRUD with drag-and-drop |
-
-`index.html` loads `app.js` and `styles.css` as external files. The other three pages are self-contained -- each has its own inline `<style>` and `<script>` blocks with no shared dependencies.
+Everything lives in `src/Scoreboard/wwwroot/` as plain HTML/CSS/JS. No build step, no bundler, no framework.
 
 ---
 
-## 1. Layout Architecture (index.html + styles.css)
+## Pages
 
-### Root Structure
+| File | URL | Purpose |
+|------|-----|---------|
+| `index.html` + `app.js` + `styles.css` | `/Scoreboard/` | The scoreboard (scores, timer, teams panel, settings) |
+| `stats.html` + `stats-core.js` + `insights.js` + `stats.css` | `/Scoreboard/stats` | Stats dashboard: overview, players, insights, game history |
+| `game.html` + `stats-core.js` + `insights.js` + `stats.css` | `/Scoreboard/game?id={gameId}` | One game: result, quarters, chart, box score, play-by-play |
+| `docs.html` | `/Scoreboard/docs` | User-facing docs (markdown rendered with marked.js) |
 
-The body is a full-viewport flex container (`100vw x 100vh`, `overflow: hidden`) with a black background. Everything lives inside a single `.scoreboard` div that fills the viewport and uses `position: relative` as the positioning context for absolutely-placed children.
+`/Scoreboard/ManagePlayers` redirects to `/Scoreboard/#teams`, which opens the teams panel.
 
-```
-body (flex column, centered)
-  .scoreboard (relative, full height, max-width 1200px)
-    .team-players-list#team1-players-display  (absolute, left)
-    .team-players-list#team2-players-display  (absolute, right)
-    .scores-container                         (z-index: 1, pointer-events: none)
-      .scores (flex row)
-        .team (team name + score)
-        .team (team name + score)
-    .timer-container                          (z-index: 1, pointer-events: none)
-      .timer
-      .score-history
-    .control-buttons                          (absolute, bottom-right, z-index: 100)
-    #players-panel.side-panel                 (absolute, bottom-right, z-index: 99)
-    #settings-panel.side-panel                (absolute, bottom-right, z-index: 99)
-```
-
-### Layering and Pointer-Events Pass-Through
-
-The layout uses a deliberate z-index and `pointer-events` strategy to allow the player lists to sit behind the scores while remaining clickable in their own areas:
-
-- **`.scores-container`** and **`.timer-container`** have `z-index: 1` and `pointer-events: none`. This makes the containers visually above the player lists but transparent to clicks.
-- **`.score`**, **`.team-name`**, **`.timer`**, and **`.period-score`** elements re-enable `pointer-events: auto` so they remain tappable despite their parent having `pointer-events: none`.
-- **`.team-players-list`** elements are `position: absolute` with `top: 10px; bottom: 10px`, pinned to the left and right edges (width 250px each). They have no explicit z-index, so they render below the z-index: 1 score/timer containers but remain interactive in the areas not occluded.
-- **`.control-buttons`** sits at `z-index: 100` (absolute, bottom-right) to always be on top.
-- **`.side-panel`** sits at `z-index: 99` (absolute, bottom-right, hidden by default, shown via `.active` class).
-
-### Frosted Glass Effect
-
-The `.score` and `.timer` elements use a frosted glass aesthetic:
-
-```css
-.score {
-    background: rgba(30, 30, 30, 0.85);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 12px;
-}
-
-.timer {
-    background: radial-gradient(ellipse at center, rgba(15, 15, 15, 0.7) 0%, rgba(0, 0, 0, 0.5) 100%);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    text-shadow: 0 0 60px rgba(255,255,255,0.15), ...;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-}
-```
-
-This creates semi-transparent dark panels that blur any player list content showing through behind them.
-
-### Player List Panels (On-Screen)
-
-The `.team-players-list` containers have a semi-transparent dark background (`rgba(51,51,51,0.7)`), border-radius, and `overflow-y: auto` for scrollable player lists. Each player button (`.player-item-display`) has a colored left border to indicate team membership: blue (`#007bff`) for team 1, red (`#dc3545`) for team 2.
+HTML pages are embedded resources served by `Page()` in `ScoreboardModule.cs` with `Cache-Control: no-cache`. It replaces `{{v}}` with a per-build id, so `app.js?v={{v}}` and friends are cache-busted on every deploy. Static assets (JS, CSS, icons, audio) are served from `/_content/Scoreboard/`.
 
 ---
 
-## 2. JavaScript Class Architecture (app.js)
+## Data Model
 
-All JavaScript for the main scoreboard page lives in `app.js`, organized into seven classes. The `ScoreboardApp` class is the central coordinator, and every other class receives a reference to it via its constructor.
+The server is the single source of truth. The browser reads and writes whole JSON documents through `/Scoreboard/api` (see `ScoreboardApi.cs`):
 
-### Class Dependency Diagram
+| Document | Endpoint | Shape |
+|----------|----------|-------|
+| Roster | `GET/PUT roster` | `{ team1Name, team2Name, players: [{ id, name, team, active, imageUrl? }] }` |
+| Current game pointer | `PUT current-game` | `{ gameId }` (`GET` returns the game document it points to, or 204) |
+| Game | `GET/PUT games/{id}` | see below |
+| All games | `GET games` | array of game documents |
 
-```
-ScoreboardApp (central coordinator)
-  |-- Timer          (countdown clock logic)
-  |-- Teams          (score state + score DOM)
-  |-- Players        (player list management + side panel DOM)
-  |-- Settings       (settings panel DOM + event wiring)
-  |-- UI             (fullscreen, font size updates, score history display)
-  |-- BlobSync       (Azure Blob Storage read/write via SAS URLs)
-  |-- SyncManager    (dirty-flag tracking, periodic/online/visibility sync)
-```
+Teams are **BLACK** and **WHITE**, stored as `'1'` and `'2'`. A player is on team `'1'`, team `'2'`, or **out** (`active: false`; their last team is remembered).
 
-### Initialization Flow
-
-```
-DOMContentLoaded
-  -> new ScoreboardApp()
-       -> new Timer(this)         // binds to #timer, sets up click handler
-       -> new Teams(this)         // binds to .score elements, sets up click/touch
-       -> new Players(this)       // binds to players panel, builds display
-       -> new Settings(this)      // binds to settings panel, all sliders/buttons
-       -> new UI(this)            // binds fullscreen button
-       -> new BlobSync(this)      // no DOM, pure data layer
-       -> new SyncManager(this)   // sets up online/visibility/periodic listeners
-       -> loadSavedSettings()     // restores localStorage state
-       -> initGroupConnection()   // auto-joins group from URL param or localStorage
-```
-
-The app instance is stored on `window.scoreboardApp` for debugging access.
-
-### ScoreboardApp
-
-The central coordinator that owns all component instances and global state:
-
-- **`periodScores`** -- array of strings like `"3 - 5"` capturing the score at each period end.
-- **`events`** -- array of event objects (score changes and period endings) with timestamps.
-- **`playersList`** -- array of player objects `{ id, name, team, active, points }`.
-- **`currentShareCode`** -- the most recent share code for the current game.
-- **`wakeLock`** -- reference to the active `WakeLockSentinel`, if any.
-
-Key methods:
-- `loadSavedSettings()` -- restores font sizes, player button size, wake lock, players list, and game events from localStorage.
-- `initGroupConnection()` -- checks URL query `?code=`, URL hash `#code`, or `localStorage.groupCode` and auto-joins the group.
-- `loadGroupData()` -- downloads `roster.json` and today's game state from blob storage.
-- `syncGame()` -- builds a consolidated game state object and does a debounced upload to blob.
-- `captureScore()` -- records end-of-period event, pushes to `periodScores`, triggers sync.
-- `recordScoreChange(teamNumber, isIncrement, playerName)` -- appends a score event, persists to localStorage, triggers sync.
-- `shareGame()` -- uploads current game state, calls the share API, copies the share URL to clipboard.
-- `requestWakeLock()` / `releaseWakeLock()` / `toggleWakeLock()` -- Screen Wake Lock API management.
-
-### Timer
-
-Manages the countdown timer with `setInterval` at 1-second ticks.
-
-**State:** `timeLeft` (seconds), `isRunning`, `interval` (interval ID), `lastTap` (timestamp for double-tap detection).
-
-**Key behaviors:**
-- Single tap on timer -> start/stop.
-- Double tap on timer (< 300ms between taps) -> reset to configured minutes.
-- When timer reaches zero: calls `app.captureScore()`, plays the buzzer audio, resets to configured time.
-- `playAlarm()` -- plays `buzzer.mp3` and blinks the timer background red 5 times at 250ms intervals.
-- `simulateTimerEnd()` -- testing shortcut that triggers the end-of-timer sequence without waiting.
-
-### Teams
-
-Manages team scores and the score/name DOM elements.
-
-**State:** `team1Points`, `team2Points`.
-
-**Key behaviors:**
-- Click on a `.score` element -> increment that team's score by 1.
-- Long press (touchstart + 800ms timeout) on a `.score` element -> decrement that team's score by 1 (touch devices only).
-- `contenteditable` team name divs sync bidirectionally with the settings panel text inputs.
-- All score changes call `app.recordScoreChange()` to log the event.
-
-### Players
-
-Manages the player panel (table inside `#players-panel`) and the on-screen player button lists (`#team1-players-display`, `#team2-players-display`).
-
-**Two distinct UI areas:**
-1. **Side panel table** (`updatePlayersList()`) -- full CRUD table with columns: Name, Team (dropdown), Active (checkbox), Points (+/- buttons), Remove button. Sorted by team, then active status, then name.
-2. **On-screen player buttons** (`updatePlayersDisplay()`) -- simplified buttons on the left/right edges showing only active players, sorted by name. Tapping a player button increments their points and their team's score simultaneously.
-
-**Player data model:**
-```js
-{ id: Number, name: String, team: "1"|"2", active: Boolean, points: Number }
-```
-
-**Key methods:**
-- `addPlayer()` -- creates player with `Date.now()` as ID, defaults to team 1, active.
-- `removePlayer(id)` -- splices from array, saves, re-renders.
-- `incrementPlayerPoints(id)` -- increments player points AND the corresponding team score, records event with player name attribution.
-- `savePlayersState()` -- writes to localStorage and does a debounced blob upload of `roster.json`.
-- `exportPlayers()` -- copies JSON to clipboard.
-- `importPlayers()` -- prompts for JSON paste, validates, replaces player list.
-- `loadDefaultPlayers()` -- fetches from `/Scoreboard/api/default-players`, replaces player list.
-
-### Settings
-
-Manages the settings panel and wires up all settings-related event listeners.
-
-**Responsibilities:**
-- Timer configuration (set minutes).
-- Team name text inputs (bidirectional sync with contenteditable divs).
-- Score decrement buttons (-1 for each team).
-- Reset scores / reset history / test buzzer / simulate timer end buttons.
-- Font size sliders (score, timer, player button).
-- Keep screen on checkbox.
-- Group management (create, join, share link, share game, leave).
-- Navigate to Manage Default Players page.
-
-**Panel toggle:** Clicking the settings gear icon toggles `.active` class. Clicking outside the panel closes it.
-
-**Group UI updates:** `updateGroupUI()` swaps between the "join" form and the "connected" info display depending on `blobSync.isConnected`.
-
-### UI
-
-A smaller utility class handling:
-- **Fullscreen toggle** -- uses the Fullscreen API with vendor-prefixed fallbacks (`webkit`, `ms`).
-- **Score history display** -- renders `periodScores` as clickable `.period-score` spans. Clicking a period score calls `app.correctPeriodScore(index)` to overwrite that period's recorded score with the current score values.
-- **Font/button size updates** -- applies inline `fontSize` styles and sets the CSS custom property `--player-button-padding`.
-
-### BlobSync
-
-Pure data-layer class for reading/writing JSON blobs to Azure Blob Storage via SAS URLs.
-
-**State:** `groupId`, `groupName`, `isAdmin`, `readUrl`, `writeUrl`, `code`, `saveTimeouts`.
-
-**Key methods:**
-- `join(code)` -- calls `/Scoreboard/api/groups/join?code=`, stores SAS URLs and group metadata, persists code to localStorage.
-- `createGroup(name)` -- POSTs to `/Scoreboard/api/groups`, then joins with the returned admin code.
-- `leave()` -- clears all state and removes `groupCode` from localStorage.
-- `download(path)` -- GETs `{containerUrl}/{groupId}/{path}` with SAS token. Auto-refreshes SAS on 403.
-- `upload(path, data)` -- PUTs JSON blob with `x-ms-blob-type: BlockBlob` header. Auto-refreshes SAS on 403.
-- `debouncedUpload(path, data, delayMs)` -- wraps `upload` with a per-path `setTimeout` to batch rapid changes (default 3s delay, game sync uses 5s).
-
-**SAS URL structure:** The server returns a container-level SAS URL. `_blobUrl()` appends `/{groupId}/{path}` to the container pathname, keeping the query-string SAS token intact.
-
-### SyncManager
-
-Ensures game state reaches blob storage reliably, even across network disruptions.
-
-**Tracks a `dirty` flag.** When dirty and conditions are right, triggers `app.syncGame()`.
-
-**Three sync triggers:**
-1. **`online` event** -- when the browser regains connectivity.
-2. **`visibilitychange` event** -- when the tab becomes visible again.
-3. **Periodic interval** -- every 2 minutes, checks if dirty + online + connected.
-
----
-
-## 3. User Interactions
-
-### Scoring
-
-| Action | Where | Result |
-|--------|-------|--------|
-| Tap score number | Main scoreboard | Increment team score by 1 |
-| Long press score number (800ms) | Main scoreboard (touch only) | Decrement team score by 1 |
-| Tap player button | Left/right player lists | Increment player points + team score |
-| Click +/- in player table | Players panel | Increment/decrement player points + team score |
-| Click -1 button in settings | Settings panel | Decrement team score |
-
-All scoring actions record an event with timestamp, team, action type, player name (if applicable), current scores, and timer value.
-
-### Timer
-
-| Action | Result |
-|--------|--------|
-| Single tap timer | Start or stop countdown |
-| Double tap timer (< 300ms) | Reset timer to configured minutes |
-| Timer reaches zero | Capture period score, play buzzer, blink red, auto-reset |
-
-### Team Names
-
-Team names use `contenteditable="true"` divs in the main display. Editing the team name on the scoreboard updates the corresponding text input in the settings panel, and vice versa.
-
-### Period Score Correction
-
-Clicking a period score chip (e.g., "3 - 5") in the score history bar overwrites that period's recorded scores with the current team scores. This allows correcting mistakes after a period ends.
-
-### Panel Management
-
-- Players button toggles the players panel and closes the settings panel.
-- Settings button toggles the settings panel.
-- Clicking outside either panel closes it (via document-level click listener checking `contains()`).
-
----
-
-## 4. Settings and Persistence
-
-### localStorage Keys
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `scoreFontSize` | string (number) | Score display font size in rem |
-| `timerFontSize` | string (number) | Timer display font size in rem |
-| `playerButtonSize` | string (number) | Player button padding in px |
-| `keepScreenOn` | `"true"` or `"false"` | Whether to request wake lock |
-| `playersList` | JSON string | Array of player objects |
-| `gameEvents` | JSON string | Array of score/period events |
-| `groupCode` | string | Group code for auto-rejoin on page load |
-
-### Font Size and Button Size Sliders
-
-Three range inputs in the settings panel control display sizing:
-
-- **Score Font Size** -- range 5-15rem, step 0.5, default 10rem. Applied via inline `style.fontSize` on all `.score` elements.
-- **Timer Font Size** -- range 6-20rem, step 0.5, default 14rem. Applied via inline `style.fontSize` on the `#timer` element.
-- **Player Button Size** -- range 10-30px, step 1, default 15px. Applied by setting the CSS custom property `--player-button-padding` on `document.documentElement`. The `.player-item-display` rule uses `padding: var(--player-button-padding, 15px)`.
-
-All three persist to localStorage immediately on slider input.
-
-### Keep Screen On
-
-Uses the Screen Wake Lock API (`navigator.wakeLock.request('screen')`). Re-acquires the lock on `visibilitychange` (when returning to the tab) if the checkbox is still checked.
-
-### Data Migration
-
-On startup, `loadSavedSettings()` migrates the legacy `scoreHistory` localStorage key to `gameEvents`, and cleans up the obsolete `lastUploadAttempt` key.
-
----
-
-## 5. Player Management (Main Scoreboard)
-
-### Data Flow
-
-```
-User action (add/remove/edit/import)
-  -> Modify app.playersList in memory
-  -> savePlayersState()
-       -> localStorage.setItem('playersList', ...)
-       -> blobSync.debouncedUpload('roster.json', ...)  [if connected]
-  -> updatePlayersList()     [re-render settings panel table]
-  -> updatePlayersDisplay()  [re-render on-screen player buttons]
-```
-
-### On-Screen Player Buttons
-
-Active players are displayed in two absolutely-positioned panels on the left (team 1) and right (team 2) edges of the scoreboard. Each button shows the player name and their current point total. Tapping a button:
-
-1. Increments the player's `points` property.
-2. Increments the corresponding team's score.
-3. Records a score event attributed to that player.
-4. Saves to localStorage and triggers blob sync.
-5. Re-renders both the button display and the panel table.
-
-### Export / Import
-
-- **Export** copies the full `playersList` JSON array to the clipboard.
-- **Import** prompts the user to paste JSON, validates structure (requires `name`, `team`, `active` properties), assigns IDs if missing, and replaces the current list.
-- **Load Defaults** fetches from `/Scoreboard/api/default-players` and replaces the current list (after confirmation).
-
----
-
-## 6. Group / Sync System
-
-### Group Lifecycle
-
-1. **Create:** User enters a group name -> POST `/Scoreboard/api/groups` -> receives `adminCode` and `readerCode` -> auto-joins with admin code -> uploads current roster to blob.
-2. **Join:** User enters a code (or arrives via `?code=` URL) -> GET `/Scoreboard/api/groups/join?code=` -> receives `groupId`, `groupName`, `isAdmin`, `sasUrls` -> stores code in localStorage -> downloads roster and active game from blob.
-3. **Leave:** Clears all BlobSync state and removes `groupCode` from localStorage.
-
-### Sync Architecture
-
-Game state is a single consolidated JSON blob at `games/game-{YYYY-MM-DD}.json` within the group's blob container. It contains:
+A game document (example: `tests/Scoreboard.Tests.Playwright/Fixtures/full-game-state.json`):
 
 ```json
 {
-  "id": "game-2024-01-15",
+  "id": "game-2026-11-14-970d",
   "version": 1,
-  "weekDate": "2024-01-15",
-  "team1": { "name": "BLACK", "score": 12 },
-  "team2": { "name": "WHITE", "score": 9 },
-  "period": 3,
-  "periodScores": ["4 - 3", "8 - 6"],
-  "timerMinutes": 15,
-  "players": [ ... ],
-  "events": [ ... ],
-  "shareCode": "abc123",
-  "lastUpdated": "2024-01-15T20:30:00.000Z"
+  "weekDate": "2026-11-14",
+  "team1": { "name": "BLACK", "score": 44 },
+  "team2": { "name": "WHITE", "score": 42 },
+  "period": 5,
+  "periodScores": ["20 - 21", "34 - 30", "44 - 42"],
+  "timerMinutes": 5,
+  "players": [{ "id": 1794637552563, "name": "Adams", "team": "1", "active": true, "points": 9 }],
+  "events": [
+    { "ts": "...", "type": "score", "team": 1, "player": "Adams", "playerId": 1794637552563,
+      "action": "increment", "scores": [1, 0], "timer": 300 },
+    { "ts": "...", "type": "score_set", "scores": [20, 21] },
+    { "ts": "...", "type": "period_end", "scores": [20, 21], "period": 1 }
+  ],
+  "lastUpdated": "2026-11-14T06:25:57.002Z"
 }
 ```
 
-Every scoring action calls `syncManager.markDirty()` followed by `syncGame()`. The `syncGame()` method uses `blobSync.debouncedUpload()` with a 5-second delay, so rapid score changes are batched into a single PUT request.
-
-### SAS Token Refresh
-
-If a blob request returns HTTP 403, BlobSync automatically calls `/Scoreboard/api/groups/{groupId}/sas/refresh?code=` to get fresh SAS URLs, then retries the request once.
-
----
-
-## 7. Game Sharing (game.html)
-
-`game.html` is a standalone public page for viewing shared game results. It has no dependency on `app.js` or `styles.css`.
-
-### Flow
-
-1. Reads the `s` query parameter for the share code.
-2. Fetches `/Scoreboard/api/shares/{code}`.
-3. Renders the result with inline JavaScript.
-
-### Rendered Sections
-
-- **Final Score** -- team names, scores, date. Winning team's score is highlighted green.
-- **Period Breakdown** -- table showing per-period scores parsed from `"X - Y"` strings.
-- **Player Stats** -- active players with points > 0, grouped by team, sorted by points descending.
-- **Event Timeline** -- chronological list of all score and period events with timestamps and running score.
-
-### Sharing Initiation (from main app)
-
-When the user clicks "Share Game Results" in the settings panel:
-
-1. The current game state is force-uploaded to blob storage (not debounced).
-2. POST `/Scoreboard/api/games/share` with `groupId` and `gameId`.
-3. The server returns a `shareCode` and `shareUrl`.
-4. The share URL is copied to clipboard (or shown in a prompt as fallback).
-5. The `shareCode` is stored in the game state for future reference.
+- `periodScores` holds cumulative `"a - b"` strings, one per ended quarter.
+- `events` is the audit trail: `score` (a tap; `player`/`playerId` are null for a team-score tap), `score_set` (score typed in), `period_end`.
+- Game ids are `game-YYYY-MM-DD-xxxx`; the date in the id is the game date, so re-saving an old game never moves it.
+- Player points belong to the game, not the roster.
 
 ---
 
-## 8. Stats Page (stats.html)
+## app.js
 
-`stats.html` is a standalone game history viewer. It has no dependency on `app.js` or `styles.css`.
+### Classes
 
-### Data Loading
-
-1. Reads `groupCode` from localStorage. If absent, shows a "connect to a group" prompt.
-2. Joins the group to get SAS URLs.
-3. Lists all blobs with prefix `{groupId}/games/` using the Azure Blob Storage REST API (`restype=container&comp=list`).
-4. Fetches each game blob in parallel, sorts by `lastUpdated` descending.
-
-### List View
-
-Game cards showing: date, team names and scores (winners highlighted green), period count, duration (calculated from first to last event timestamps), scorer count, event count. Clicking a card navigates to the detail view.
-
-### Detail View
-
-- **Score Progression Graph** -- drawn on a `<canvas>` element using the Canvas 2D API. Plots team 1 scores in blue (`#228be6`) and team 2 scores in pink (`#e64980`) as line graphs. Handles device pixel ratio for sharp rendering. Shows grid lines and a legend.
-- **Period Breakdown** -- same table format as game.html.
-- **Player Stats** -- includes colored point bars (blue for team 1, pink for team 2) scaled relative to the max scorer.
-- **Scoring Timeline** -- similar to game.html's event timeline but with colored team dots and seconds in timestamps.
-
-A "Back to games" button returns to the list view by toggling `display` between `#list-view` and `#detail-view`.
-
----
-
-## 9. Manage Players Page (manage-players.html)
-
-`manage-players.html` is a standalone admin page for managing the server-side default player list. It has no dependency on `app.js` or `styles.css`.
-
-### Layout
-
-Three columns using a flex container:
-- **Team 1** (red header)
-- **Team 2** (blue header)
-- **No Team** (gray header)
-
-Each column contains a draggable list of player items. Below the columns is an "Add New Player" form and action buttons (Save, Export, Back).
-
-### Drag and Drop
-
-Uses the native HTML5 Drag and Drop API:
-- `dragstart` -- stores the dragged player's ID, adds `.dragging` class (rotates the item 5 degrees).
-- `dragover` -- prevents default to allow dropping.
-- `dragenter`/`dragleave` -- adds/removes `.drag-over` highlight class on team sections.
-- `drop` -- calls `movePlayer()` which POSTs to `/Scoreboard/api/default-players/move`.
-
-### API Integration
-
-| Action | Endpoint | Method |
-|--------|----------|--------|
-| Load players | `/Scoreboard/api/default-players` | GET |
-| Add player | `/Scoreboard/api/default-players/add` | POST |
-| Move player | `/Scoreboard/api/default-players/move` | POST |
-| Delete player | `/Scoreboard/api/default-players/delete` | POST |
-| Save all | `/Scoreboard/api/default-players/save` | POST |
-
-The Export button downloads the current player list as a `default-players.json` file using `Blob` + `URL.createObjectURL`.
-
----
-
-## 10. Responsive Design
-
-### Breakpoints
-
-**Mobile (max-width: 768px):**
-```css
-.team-name { font-size: 1.5rem; }    /* down from 2rem */
-.score { font-size: 5rem; min-width: 120px; padding: 10px 20px; }  /* down from 10rem */
-.timer { font-size: 6rem; min-width: 280px; padding: 10px 20px; }  /* down from 14rem */
+```
+ScoreboardApp   coordinator: state, server refresh, game saving
+  |-- Sync      debounced PUTs with retry (owned via app.sync)
+  |-- Timer     countdown clock, buzzer
+  |-- Teams     team scores and names
+  |-- Settings  settings panel, quarter score entry
+  |-- Players   teams panel + tappable player lists on the scoreboard
+  |-- UI        fullscreen, period chips, font sizes, sync badge
 ```
 
-**Landscape on small screens (orientation: landscape, max-height: 600px):**
-- `.scores-container` becomes a column layout at 60% width.
-- `.scores` switches to column direction.
-- Teams stack vertically instead of side-by-side.
-- Timer font reduces to 8rem.
+A small `api` object wraps `fetch`: `api.get(path)` returns parsed JSON or `null` on 204/404; `api.put(path, data)` returns `true`/`false` and never throws. The app instance is on `window.scoreboardApp`.
 
-### General Viewport Handling
+### Sync
 
-- `user-select: none` on all elements prevents text selection during taps.
-- `overflow: hidden` on body prevents any scrolling of the main scoreboard.
-- Player lists use `overflow-y: auto` for their own independent scrolling.
-- The side panel has `max-height: 80vh` and `overflow-y: auto` so settings/players scroll independently.
-- The manage-players page uses `flex-wrap: wrap` on its columns container so it stacks on narrow screens.
+`Sync.save(path, build, delayMs = 1000)` queues a write. `build()` runs at send time, so the latest state goes out. Each path has its own debounce timer.
+
+- A failed PUT stays pending and is retried on `online`, on the tab becoming visible, and every 60s. `pagehide` flushes with `keepalive`.
+- A per-path generation counter keeps a change made during an upload from being dropped.
+- `busy` is true while anything is pending. `changes` counts local edits, so a server refresh can tell it raced with one.
+- `onStatus(false)` shows the **"Not saved yet, retrying…"** badge (`#sync-status`); it hides once everything is saved.
+
+### Server refresh
+
+`ScoreboardApp.refresh()` runs on load, when the tab becomes visible, on `online`, and every 15s while visible. It:
+
+1. Flushes pending saves; skips the refresh if any are still pending.
+2. Fetches `roster` and `current-game` in parallel.
+3. On the first load only, runs `migrateDeviceData()`.
+4. Discards the result if a local change happened during the fetch.
+5. `applyServerState()` applies roster, team names, scores, periods, events and player points (no-op if nothing changed).
+
+Until the first successful load (`loaded`), `saveRoster()` refuses to write, so a fresh device can never overwrite the shared roster with an empty one.
+
+### Device data migration
+
+Older versions kept data in the browser. On first load, if any of `playersList`, `gameEvents`, `currentGameId`, `scoreHistory`, `groupCode`, `lastUploadAttempt` exist in localStorage:
+
+- `playersList` is uploaded as the roster **only** if the server roster is still the seeded default (`seeded: true`).
+- `gameEvents` (or `scoreHistory`) + `currentGameId` are rebuilt into a game document and uploaded if that game isn't on the server yet; it becomes the current game if there is none.
+- If every upload succeeded, all those keys are removed.
+
+### Saving the game
+
+- `recordScoreChange()`, `captureScore()`, `correctPeriodScore()`, `setScores()` all end in `syncGame()`, which saves `games/{id}` and the `current-game` pointer (3s debounce).
+- `startNewGame()` (the **New Game** button) saves the old game under its own id (only if it has events), makes a new id, zeroes scores/points/periods/events, and saves immediately. The old game stays in history.
+- `shareGame()` (**Copy Results Link**) forces a save and copies `/Scoreboard/game?id={gameId}`.
+
+### Timer
+
+- Tap: start/stop. Double tap (< 300ms): reset to the configured minutes.
+- Starting the timer ends "post-period" mode and shows a 2s green glow; pressing shows a brief glow.
+- At zero (or **Test Timer End**): `captureScore()`, play `audio/buzzer.mp3`, blink red 5x, reset.
+
+### Scoring and periods
+
+- Tap a team score: +1. Long-press (800ms, touch): −1, floored at 0. The −1 buttons in Settings do the same.
+- Tap a player on the scoreboard: +1 to the player and their team (event carries `player` and `playerId`).
+- `captureScore()` pushes `"a - b"` to `periodScores`, appends `period_end`, and enters **post-period** mode: until the timer is started again, further score changes also update the last period (the active chip is highlighted).
+- Tap a period chip under the timer to overwrite that period with the current score (also updates the matching `period_end` event).
+- **Clear Periods** empties `periodScores` and `events` (scores are kept).
+
+### Quarter score entry (Settings)
+
+For games where only team scores are kept. Two number inputs, prefilled with the current score when Settings opens:
+
+- **End Q*n* at this score** — `endQuarterAt(a, b)`: sets the score (`score_set` event) then captures the period.
+- **Just set the score** — `setScores(a, b)`: records `score_set`; during post-period it also corrects the last quarter.
+
+### Teams panel (Players class)
+
+Opened with the people icon (or `#teams` in the URL). Full screen on phones (≤ 700px).
+
+- Header: count chips for BLACK / WHITE / Out (highlighted when teams differ by more than one), and **Shuffle**, **All out**, **Share**, **Edit**, **Done**.
+- Each roster row (alphabetical, stable order): 📌 pin, name, −/points/+ (when in), and a **BLACK / Out / WHITE** toggle.
+- **Add a player** goes on the smaller team.
+- **Prediction** line under the counts (`#team-prediction`): "BLACK by 3 · 64% to win" from the history model (`Insights.fit`, needs 3+ games, cached 10 min); highlighted when the gap is 4+ points.
+- **Balance**: searches every split of the unpinned players for the most even predicted game, preferring the fewest moves; does nothing if it would gain less than half a point ("Already even"). Without enough history it falls back to Shuffle.
+- **Shuffle**: Fisher–Yates over everyone who's in and not pinned, filling the smaller team first (random on a tie). Pins are per device and not saved.
+- **All out**: everyone out, pins cleared — start of the week, then tap in whoever shows up.
+- **Share**: chat-ready list (`🏀 Teams for Sat, Nov 14`, then each team with a count). Share sheet on touch devices, clipboard elsewhere.
+- **Edit** mode: per-row **Photo** (POST `players/{id}/image`; server crops to 96×96 PNG), **Rename**, **Delete**.
+
+Every roster change calls `saveRoster()` (1s debounce) and re-renders the panel and the scoreboard lists. Team names edited on the scoreboard (`contenteditable`) or in Settings are saved with the roster.
+
+### Settings panel
+
+Quarter score entry, timer minutes, team names with −1 buttons, **New Game**, **Clear Periods**, **Test Buzzer**, **Test Timer End**, font/button size sliders, **Keep screen on**, **Copy Results Link**, **Stats & History**. Clicking outside closes it.
+
+### localStorage
+
+Only device preferences, restored by `loadSavedSettings()`:
+
+| Key | Meaning |
+|-----|---------|
+| `scoreFontSize` | Score font size (rem, slider 5–25) |
+| `timerFontSize` | Timer font size (rem, slider 6–30) |
+| `playerButtonSize` | Player button padding (px, slider 10–50), applied via `--player-button-padding` |
+| `keepScreenOn` | `"true"`/`"false"`; Screen Wake Lock, re-acquired when the tab becomes visible |
+
+`stats.html` also stores the selected range in `statsRange`.
 
 ---
 
-## 11. CSS Custom Properties
+## Layout (index.html + styles.css)
 
-The application uses one CSS custom property:
+```
+body
+  #sync-status                 fixed badge, top center
+  .scoreboard                  relative, full viewport
+    #team1-players-display     absolute, left  (BLACK players)
+    #team2-players-display     absolute, right (WHITE players)
+    .scores-container          z-index 1, pointer-events: none
+    .timer-container           z-index 1, pointer-events: none (timer + period chips)
+    .control-buttons           bottom-right, z-index 100 (teams, settings, fullscreen)
+    #players-panel.side-panel  teams panel
+    #settings-panel.side-panel
+```
 
-### `--player-button-padding`
+The score and timer containers sit above the player lists but pass clicks through (`pointer-events: none`); `.score`, `.team-name`, `.timer` and `.period-score` turn `pointer-events` back on. Player buttons show an avatar (or initial) and name, with points on the inner side (right for BLACK, left for WHITE).
 
-- **Defined on:** `document.documentElement` (`:root`), set via JavaScript.
-- **Used by:** `.player-item-display { padding: var(--player-button-padding, 15px); }`
-- **Controlled by:** The "Player Button Size" range slider in settings (10-30px range).
-- **Persisted in:** `localStorage.playerButtonSize`.
-
-This is the mechanism for dynamically sizing the on-screen player buttons. The fallback value is `15px` when the property is not set. The JavaScript call `document.documentElement.style.setProperty('--player-button-padding', value + 'px')` updates the property, and all player buttons respond immediately without re-rendering.
-
-The score and timer font sizes are applied via direct inline `style.fontSize` assignments rather than CSS custom properties.
+Breakpoints: ≤ 768px shrinks scores/timer; landscape with height ≤ 600px stacks the teams; ≤ 700px makes the teams panel full screen and pins Settings above the control buttons.
 
 ---
 
-## Key Files Reference
+## Stats pages
 
-| File | Absolute Path |
-|------|---------------|
-| Main HTML | `C:\Users\andre\source\repos\Scoreboard\src\Scoreboard\wwwroot\index.html` |
-| Main CSS | `C:\Users\andre\source\repos\Scoreboard\src\Scoreboard\wwwroot\styles.css` |
-| Main JS | `C:\Users\andre\source\repos\Scoreboard\src\Scoreboard\wwwroot\app.js` |
-| Game Results | `C:\Users\andre\source\repos\Scoreboard\src\Scoreboard\wwwroot\game.html` |
-| Stats/History | `C:\Users\andre\source\repos\Scoreboard\src\Scoreboard\wwwroot\stats.html` |
-| Manage Players | `C:\Users\andre\source\repos\Scoreboard\src\Scoreboard\wwwroot\manage-players.html` |
+`stats.html` and `game.html` share `stats-core.js` (global `Stats`), `insights.js` (global `Insights`) and `stats.css`. Neither uses `app.js`; the scoreboard page loads `stats-core.js` and `insights.js` for the Teams panel prediction.
+
+### stats-core.js
+
+- `Stats.normalize(raw)` turns any stored game into one shape: `date`, `names`, `final`, `winner`, `margin`, `quarters` (per-quarter points and cumulative totals, from `period_end` events or `periodScores`), `unfinished` (score moved after the last quarter), `players` (in, on a team), `tracked`, `coverage`, `unattributed` (per-team points not credited to a player), `scoreEvents`.
+  It handles **fully tracked** games (every basket credited), **partially tracked** games (some points uncredited), and **team-only** games (just quarter scores; `tracked` is false).
+- `Stats.loadGames()` fetches `/Scoreboard/api/games`, normalizes, drops unplayed games (`isPlayed`), sorts newest first.
+- `summarize(games)`: wins, ties, points, closest/biggest game, current streak, comebacks (won after trailing at half), per-quarter averages and quarters won.
+- `players(games)`: per player GP, W-L-T, win %, average +/- (team margin) from every game; PPG and high only from tracked games; a per-game log.
+- `flow(g)`: lead changes, ties, biggest lead per team. `chartSvg(g)`: score-over-time SVG (per event, or per quarter for team-only games).
+- Helpers: `esc`, `formatDate`, `formatTime`, `signed`, `teamChip`, `shareText`, `share`.
+
+### insights.js
+
+Global `Insights`, used by `stats.html`, `game.html` and the Teams panel. Pure functions over normalized games.
+
+- `fit(games)`: weighted ridge regression on game margins ("adjusted plus-minus"). Each player gets an **impact** in points per game, controlling for teammates and opponents; recent games count more (half-life 25 games), margins are capped at 15, and a team-size term absorbs 5-on-4 games. Works for team-only games because it only needs who played and the final score.
+- `predict(model, ids1, ids2)` → `{ margin, p1 }`; `chance` turns a margin into a win probability using the model's residual spread.
+- `backtest(games)`: predicts each game from only the games before it, so the page can say honestly how often the model picks the winner.
+- `balance(model, players)`: exhaustive split search (up to 20 free players) that respects pins.
+- `duos`, `rivalries`, `playerPairs(games, id)` (best teammates / toughest opponents), `scoring` (PPG, consistency, share of team points, 4th-quarter share — tracked games only), `attendance`, `trend` (points per game over time), `closeness` (margin buckets), `runs(g)` (longest scoring run in a game).
+
+### stats.html
+
+Tabs (`#overview`, `#players`, `#insights`, `#games`, kept in the URL hash) under a range filter (Last 10 / This year / All time).
+
+- **Overview**: head-to-head record bar with streak, **Next game** prediction for the current roster, tiles (avg score, avg margin, closest game, biggest win), comebacks, by-quarter table.
+- **Players**: sortable table with an Impact column, and a "Showing up" attendance card. Tap a row for a sheet: record, impact rank, PPG, attendance, scoring by quarter, best teammates, toughest opponents, game log.
+- **Insights**: player impact diverging bars with the back-test result, best duos, rivalries, scoring table, points-per-game trend chart (tap for values), and how close the games are.
+- **Games**: history grouped by month with a "Player stats" / "Team scores" badge.
+
+The model and back-test always use every game; the range filter only changes what's summarized.
+
+### game.html
+
+Loads `games/{id}` and `current-game` together. Shows a hero scoreline with **Share result**, a quarters table (with a "Now" column if unfinished), the score chart with lead changes / biggest leads / longest scoring run, a box score (or **Who played** for team-only games, with "Not credited" for uncredited points), and a collapsible play-by-play.
+
+If the game is the current game and was updated in the last 3 hours it shows **LIVE** and reloads every 15s.
+
+---
+
+## Tests
+
+`tests/Scoreboard.Tests.Playwright/` (NUnit + Playwright, page object `ScoreboardPage.cs`). `FakeApi.cs` intercepts `/Scoreboard/api/**` and serves documents from memory, so tests never touch real storage. The host still has to be running to serve the pages.

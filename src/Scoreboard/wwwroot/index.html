@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>MDL Scoreboard</title>
     <link rel="stylesheet" href="/_content/Scoreboard/styles.css?v={{v}}">
+    <script src="/_content/Scoreboard/stats-core.js?v={{v}}"></script>
+    <script src="/_content/Scoreboard/insights.js?v={{v}}"></script>
     <script src="/_content/Scoreboard/app.js?v={{v}}"></script>
 </head>
 <body>
@@ -49,7 +51,9 @@
         <div id="players-panel" class="side-panel teams-panel">
             <div class="teams-header">
                 <div id="team-counts" class="team-counts"></div>
+                <div id="team-prediction" class="team-prediction" hidden></div>
                 <div class="teams-actions">
+                    <button id="balance-btn" title="Split everyone who's in into the most even teams based on past games (pinned players stay put)">Balance</button>
                     <button id="shuffle-btn" title="Randomly split everyone who's in into even teams (pinned players stay put)">Shuffle</button>
                     <button id="all-out-btn" title="Mark everyone out, then tap in whoever shows up">All out</button>
                     <button id="share-teams-btn" title="Send the teams to the group chat">Share</button>

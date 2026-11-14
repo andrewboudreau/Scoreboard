@@ -1,219 +1,174 @@
 
 # Scoreboard
 
-A dynamic web-based scoreboard application built as a SharedTools module for ASP.NET Core. This application provides real-time score tracking with persistent storage using Azure Blob Storage.
+A basketball scoreboard for a weekly pickup game, built as a SharedTools module for ASP.NET Core. Every phone, tablet or laptop that opens it sees the same teams, score and history; the server stores everything in Azure Blob Storage.
 
 ![Scoreboard Application Screenshot](demo.gif)
 
 ## Overview
 
-The Scoreboard application is built using a modular architecture that separates the scoreboard functionality into a loadable module (`Scoreboard.App`) and a lightweight host application (`Scoreboard.Web`). This design allows the scoreboard to be:
+The scoreboard is a loadable module (`src/Scoreboard`, package `SharedTools.Scoreboard`) hosted by a minimal ASP.NET Core app (`src/Scoreboard.WebApp`). The module is:
 
-- **Dynamically loaded** - The module can be loaded at runtime from NuGet packages
-- **Self-contained** - All assets, dependencies, and functionality are packaged together
-- **Reusable** - Can be easily integrated into other ASP.NET Core applications
-- **Isolated** - Module dependencies don't conflict with the host application
+- **Dynamically loaded** - fetched from a NuGet feed and loaded at runtime
+- **Self-contained** - pages, scripts, styles and audio are embedded in the module assembly
+- **Isolated** - module dependencies don't conflict with the host
 
 ## Features
 
-- **Real-time Score Tracking** - Keep track of scores for multiple players
-- **Persistent Storage** - Game history saved to Azure Blob Storage
-- **Responsive Design** - Works on desktop and mobile devices
-- **Audio Feedback** - Buzzer sounds for game events
-- **Customizable Players** - Add, remove, and manage player profiles
-- **Full-screen Mode** - Optimized display for presentations
-- **Rate Limiting** - Built-in protection against API abuse
+- **Scoreboard** - tap to score, long-press to undo, countdown timer with buzzer, quarter scores, fullscreen, keep-screen-on
+- **Player scoring** - tap a player to credit them and their team
+- **Team-only games** - type in the score at the end of each quarter when nobody is tracking baskets
+- **Teams panel** - one tap per player for BLACK / Out / WHITE, Balance (most even teams from past results) or Shuffle, pins, player photos, share the teams to the group chat
+- **Shared across devices** - the server is the single source of truth; changes save automatically and retry when offline
+- **Stats** - head-to-head record, streaks, comebacks, by-quarter averages, player table with game logs, game history
+- **Insights** - player impact ratings (adjusted plus-minus from final scores, back-tested), next-game win prediction, best duos, rivalries, scoring styles, attendance, trends (`insights.js`)
+- **Game pages** - score chart, box score, play-by-play, live follow-along while a game is in progress
+
+There is no login: anyone with the URL can view and edit. It's meant for a private group of friends.
 
 ## Project Structure
 
 ```
 Scoreboard/
-└── src/
-    ├── Scoreboard.App/          # The scoreboard module
-    │   ├── ScoreboardModule.cs  # Module entry point implementing IApplicationPartModule
-    │   ├── ScoreboardApiMethods.cs # API endpoints for the module
-    │   └── wwwroot/            # Static assets (HTML, CSS, JS, audio)
-    │       ├── index.html      # Main scoreboard UI
-    │       ├── app.js          # Client-side JavaScript
-    │       ├── styles.css      # Styling
-    │       ├── audio/          # Sound effects
-    │       └── icons/          # UI icons
-    │
-    └── Scoreboard.Web/         # The host application
-        └── Program.cs          # Minimal host for loading modules
+├── src/
+│   ├── Scoreboard/                 # The module (SharedTools.Scoreboard)
+│   │   ├── ScoreboardModule.cs     # IApplicationPartModule: services, page routes
+│   │   ├── ScoreboardApi.cs        # All /Scoreboard/api endpoints
+│   │   ├── Services/
+│   │   │   └── ScoreboardStore.cs  # Reads/writes JSON in the blob data folder
+│   │   ├── modules-docs/           # SharedTools module system docs
+│   │   └── wwwroot/                # Embedded static assets
+│   │       ├── index.html, app.js, styles.css      # Scoreboard
+│   │       ├── stats.html, game.html               # Stats dashboard, single game
+│   │       ├── stats-core.js, stats.css            # Shared by the stats pages
+│   │       ├── docs.html                           # User-facing docs
+│   │       ├── default-players.json                # Seed roster for a fresh install
+│   │       ├── audio/  icons/
+│   │
+│   └── Scoreboard.WebApp/          # Minimal host (Program.cs)
+├── tests/Scoreboard.Tests.Playwright/  # End-to-end tests
+└── docs/FRONTEND.md                # Frontend architecture
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- .NET 10.0 SDK or later
-- Azure Storage Account (or use local development storage)
-- Visual Studio 2022 or VS Code (optional)
+- .NET 10 SDK
+- Azure Storage account, or [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) locally
 
-### Running Locally
+### Running locally
 
-1. **Clone the repository**
+1. Start Azurite (blob endpoint on port 10000).
+2. Pack the module to the local feed and run the host:
    ```bash
-   git clone https://github.com/andrewboudreau/Scoreboard.git
-   cd Scoreboard
+   dotnet build src/Scoreboard/Scoreboard.csproj -c Debug
+   dotnet pack src/Scoreboard/Scoreboard.csproj -c Debug --no-build   # outputs to C:\LocalNuGet
+   dotnet nuget locals all --clear                                    # make the host pick up the new package
+   dotnet run --project src/Scoreboard.WebApp/Scoreboard.WebApp.csproj
    ```
+3. Open http://localhost:5227/Scoreboard/
 
-2. **Configure Azure Storage** (optional - for persistence)
-   
-   Update `src/Scoreboard.Web/appsettings.json`:
-   ```json
-   {
-     "BlobStorage": {
-       "ConnectionString": "UseDevelopmentStorage=true",
-       "ContainerName": "scoreboard-data"
-     }
-   }
-   ```
-
-3. **Build and run**
-   ```bash
-   dotnet build
-   cd src/Scoreboard.Web
-   dotnet run
-   ```
-
-4. **Open in browser**
-   Navigate to `http://localhost:5000/Scoreboard/`
-
-## Development
-
-### Building the Module
-
-The Scoreboard.App module is automatically packed to the local NuGet feed during Debug builds:
-
-```bash
-cd src/Scoreboard.App
-dotnet pack -c Debug
-```
-
-This outputs the package to `C:\LocalNuGet` for local testing.
-
-### Module Architecture
-
-The scoreboard is implemented as a SharedTools module following these patterns:
-
-1. **Module Class** (`ScoreboardModule.cs`)
-   - Implements `IApplicationPartModule`
-   - Registers services (Azure Blob Storage, Rate Limiting)
-   - Maps API endpoints with `/Scoreboard/` prefix
-   - Configures middleware
-
-2. **API Methods** (`ScoreboardApiMethods.cs`)
-   - Static methods for handling HTTP requests
-   - Upload game history to blob storage
-   - Test blob storage connectivity
-
-3. **Static Assets** (`wwwroot/`)
-   - Served via `/_content/Scoreboard/` path
-   - Includes HTML, CSS, JavaScript, and audio files
-   - Packaged as embedded resources in the module
-
-### Testing the Module
-
-The `Scoreboard.Web` project serves as a test host:
-
-```csharp
-// Program.cs - Minimal host application
-await builder.AddApplicationPartModules(["ScoreboardModule"]);
-app.UseApplicationPartModules();
-```
+Changes to `src/Scoreboard` need a repack and a host restart.
 
 ## Configuration
 
-### Azure Blob Storage
+In the host's `appsettings.json`:
 
-Configure blob storage in `appsettings.json`:
-
-```json
-{
-  "BlobStorage": {
-    "ConnectionString": "DefaultEndpointsProtocol=https;AccountName=...",
-    "ContainerName": "scoreboard-data"
-  }
-}
-```
-
-For local development, use the Azure Storage Emulator:
 ```json
 {
   "BlobStorage": {
     "ConnectionString": "UseDevelopmentStorage=true",
-    "ContainerName": "scoreboard-data"
+    "ContainerName": "scoreboard-data",
+    "DataFolder": "main"
   }
 }
 ```
 
-### Rate Limiting
+- `ConnectionString` and `ContainerName` are required.
+- `DataFolder` (optional) is the folder inside the container that holds all data. If unset, the module uses the folder of the old group with the most games (so history from earlier versions carries over), or `main` on a fresh install. `GET /Scoreboard/api/info` shows which folder is in use.
 
-The module includes built-in rate limiting:
-- 6 requests per minute per IP address
-- Applied only to `/Scoreboard/` endpoints
-- Returns HTTP 429 when limit exceeded
+### Storage layout
 
-## API Endpoints
+```text
+{container}/{dataFolder}/
+├── roster.json          # { team1Name, team2Name, players: [...] }
+├── current-game.json    # { gameId }
+├── games/{gameId}.json  # full game: scores, quarters, players, events
+└── players/{id}.png     # 96x96 player photos
+```
 
-- `GET /Scoreboard/` - Main scoreboard UI (redirects to index.html)
-- `POST /Scoreboard/api/upload-history` - Upload game history to blob storage
-- `GET /Scoreboard/api/test-blob-connection` - Test blob storage connectivity
+## API
+
+All under `/Scoreboard/api`. JSON bodies are capped at 1 MB; game ids must match `[A-Za-z0-9_-]{1,80}`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/info` | Version, data folder, game count, whether a roster exists |
+| GET | `/roster` | Roster; on a fresh install, the bundled default players with `seeded: true` |
+| PUT | `/roster` | Replace the roster |
+| GET | `/current-game` | The current game document, or 204 if none |
+| PUT | `/current-game` | Set the pointer: `{ "gameId": "..." }` |
+| GET | `/games` | Every saved game, as one JSON array |
+| GET | `/games/{id}` | One game (404 if missing) |
+| PUT | `/games/{id}` | Save a game |
+| POST | `/players/{id}/image` | Upload a photo (multipart field `image`, max 10 MB); center-cropped to 96x96 PNG. Returns `{ imageUrl }` |
+| GET | `/players/{id}/image` | Player photo (PNG) |
+
+Pages: `/Scoreboard/` (scoreboard), `/Scoreboard/stats`, `/Scoreboard/game?id={gameId}`, `/Scoreboard/docs`.
+
+## Development
+
+### Module architecture
+
+1. **`ScoreboardModule.cs`** implements `IApplicationPartModule`: registers the `BlobContainerClient` and `ScoreboardStore`, maps the HTML pages and calls `ScoreboardApi.Map`. Pages are read from embedded resources and `{{v}}` is replaced with a per-build id so browsers pick up new scripts.
+2. **`ScoreboardApi.cs`** is the whole API. The server stores JSON documents the browser sends; game logic lives in the browser.
+3. **`wwwroot/`** is embedded in the assembly and served from `/_content/Scoreboard/`.
+
+See [docs/FRONTEND.md](docs/FRONTEND.md) for the client side.
+
+### Host
+
+```csharp
+// src/Scoreboard.WebApp/Program.cs
+await builder.AddApplicationPartModules([
+    "SharedTools.Scoreboard",
+    "SharedTools.ModuleManagement"
+]);
+var app = builder.Build();
+app.UseApplicationPartModules();
+```
+
+### Tests
+
+Playwright end-to-end tests in `tests/Scoreboard.Tests.Playwright/`. The host must be running; the tests intercept `/Scoreboard/api/**` with an in-memory fake, so they never touch real storage.
+
+```bash
+dotnet test
+cmd /c "set HEADED=1 && dotnet test"          # visible browser
+set SCOREBOARD_BASE_URL=http://localhost:5227  # different host
+```
 
 ## Publishing
 
-### To Local NuGet Feed
-
-```bash
-cd src/Scoreboard.App
-dotnet pack -c Debug
-```
-
-### To NuGet.org
-
-1. Update version in `Directory.Build.props`
-2. Run the GitHub Actions workflow "Tag and Publish"
-3. Package will be published to NuGet.org
-
-See [MODULE_PUBLISH.md](MODULE_PUBLISH.md) for detailed publishing instructions.
+- Pushes to `master` bump the patch version in `Directory.Build.props` (`ci.yml`).
+- Run the **Tag and Publish** workflow to tag and publish `SharedTools.Scoreboard` to NuGet.org:
+  ```bash
+  gh workflow run "Tag and Publish"
+  ```
 
 ## Integration
 
-To use the Scoreboard module in another ASP.NET Core application:
-
-1. **Add NuGet package**
-   ```bash
-   dotnet add package Scoreboard.App
-   ```
-
-2. **Load the module**
-   ```csharp
-   await builder.AddApplicationPartModules(["ScoreboardModule"]);
-   ```
-
-3. **Activate modules**
-   ```csharp
-   app.UseApplicationPartModules();
-   ```
-
-4. **Configure blob storage** in your host's `appsettings.json`
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+To host the module in another ASP.NET Core app, add `"SharedTools.Scoreboard"` to `AddApplicationPartModules`, call `app.UseApplicationPartModules()`, and configure `BlobStorage` as above.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) file for details.
+MIT - see [LICENSE.txt](LICENSE.txt).
 
 ## Related Documentation
 
-- [SharedTools Module System](MODULE_README.md) - Overview of the module loading system
-- [Publishing Modules](MODULE_PUBLISH.md) - Guide for publishing to NuGet
-- [Migration Guide](MODULE_MIGRATION.md) - Converting existing projects to modules
-- [Architecture Overview](CLAUDE.md) - Detailed technical documentation
+- [Frontend Architecture](docs/FRONTEND.md)
+- [SharedTools Module System](src/Scoreboard/modules-docs/MODULE_README.md)
+- [Publishing Modules](src/Scoreboard/modules-docs/MODULE_PUBLISH.md)
+- [Migration Guide](src/Scoreboard/modules-docs/MODULE_MIGRATION.md)
+- [CLAUDE.md](CLAUDE.md) - build commands and workflow
