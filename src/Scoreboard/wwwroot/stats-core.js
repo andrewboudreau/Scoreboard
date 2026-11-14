@@ -82,6 +82,9 @@ const Stats = (() => {
 
         const roster = new Map((raw.players || []).filter(Boolean).map(p => [String(p.id ?? p.name), p]));
         const scoresOf = e => [num(e.scores[0]), num(e.scores[1])];
+        // A +1 for one team that made it 1–0 or 0–1: the score was 0–0 just before it.
+        const scoredFromZero = (e, sc) => e.type === 'score' && e.action !== 'decrement'
+            && sc[0] + sc[1] === 1 && sc[Number(e.team) === 2 ? 1 : 0] === 1;
         let carried = [0, 0]; // running score when the previous night ended
 
         return kept.map((night, i) => {
@@ -93,19 +96,22 @@ const Stats = (() => {
                 // back to zero, or reset the scores (older versions logged no event for that), tapped
                 // each player's points off (team scores went negative), then tapped the teams back to 0–0.
                 // Skip the wind-down. If the score is back at exactly 0–0 by the first quarter end,
-                // the night starts at the last such point. Otherwise it starts where the score bottoms
-                // out before the first quarter ends; if it just kept running, that's where last night ended.
+                // the night starts at the last such point; a reset with no event shows up as a first
+                // basket that took the score from 0–0, and that basket counts. Otherwise the night starts
+                // where the score bottoms out before the first quarter ends; if it just kept running,
+                // that's where last night ended.
                 const firstEnd = evs.findIndex(e => e?.type === 'period_end');
                 const lead = firstEnd < 0 ? evs.length : firstEnd;
-                let zeroAt = -1;
+                let startAt = -1;
                 for (let k = 0; k <= Math.min(lead, evs.length - 1); k++) {
                     if (!Array.isArray(evs[k]?.scores)) continue;
                     const sc = scoresOf(evs[k]);
-                    if (sc[0] === 0 && sc[1] === 0) zeroAt = k;
+                    if (sc[0] === 0 && sc[1] === 0) startAt = k + 1;
+                    else if (scoredFromZero(evs[k], sc)) startAt = k;
                 }
-                if (zeroAt >= 0) {
+                if (startAt >= 0) {
                     base = [0, 0];
-                    evs = evs.slice(zeroAt + 1);
+                    evs = evs.slice(startAt);
                 } else {
                     let low = carried[0] + carried[1], lowAt = -1;
                     for (let k = 0; k < lead; k++) {
@@ -324,9 +330,16 @@ const Stats = (() => {
                 const key = String(p.id);
                 const row = byId.get(key) || {
                     id: key, name: p.name, gp: 0, wins: 0, losses: 0, ties: 0, plusMinus: 0,
-                    trackedGp: 0, points: 0, high: null, log: []
+                    trackedGp: 0, points: 0, high: null, log: [], sources: new Map(), onRoster: false
                 };
                 row.name = p.name;
+                row.onRoster = !!p.onRoster;
+                // Where this player's games came from (see linkPlayers): id in the saved game, its name, how it matched
+                const srcKey = String(p.sourceId ?? key);
+                const src = row.sources.get(srcKey) || { id: srcKey, name: p.playedAs ?? p.name, how: p.how || 'own', gp: 0 };
+                src.name = p.playedAs ?? p.name;
+                src.gp++;
+                row.sources.set(srcKey, src);
                 row.gp++;
                 const won = g.winner === p.team, lost = g.winner && g.winner !== p.team;
                 if (won) row.wins++; else if (lost) row.losses++; else row.ties++;
@@ -481,17 +494,107 @@ const Stats = (() => {
     }
 
     async function loadGames() {
-        const [res, hidden] = await Promise.all([fetch('/Scoreboard/api/games'), hiddenIds()]);
+        const [res, hidden, roster, links] = await Promise.all([
+            fetch('/Scoreboard/api/games'),
+            hiddenIds(),
+            fetch('/Scoreboard/api/roster').then(r => r.ok ? r.json() : null).catch(() => null),
+            playerLinks()
+        ]);
         if (!res.ok) throw new Error(`Couldn't load games (${res.status})`);
-        const all = (await res.json())
+        const all = linkPlayers((await res.json())
             .flatMap(gamesFromDoc)
             .filter(isPlayed)
-            .sort((a, b) => (b.date + (b.raw.lastUpdated || '')).localeCompare(a.date + (a.raw.lastUpdated || '')));
+            .sort((a, b) => (b.date + (b.raw.lastUpdated || '')).localeCompare(a.date + (a.raw.lastUpdated || ''))), roster, links);
         const played = all.filter(g => !hidden.has(g.id));
         const games = played.filter(g => !isShort(g));
         games.shortGames = played.filter(isShort);
         games.hiddenGames = all.filter(g => hidden.has(g.id));
+        games.roster = roster;
         return games;
+    }
+
+    // ---- one person, several ids ----
+    // Each device used to keep its own player list, so the same person can have another id on another
+    // iPad. Stats follow the roster (the server's player list):
+    //   - a link saved on a player's stats page wins: { fromId: toId } (an id linked to itself stays separate)
+    //   - else a player missing from the roster who has the exact name of a roster player, and never
+    //     played in the same game as them, is that roster player
+    // Games come back with player ids (and score events) rewritten to the roster id and roster names.
+    // Each player keeps sourceId (the id in the saved game), playedAs (that game's name) and how it matched.
+    function linkPlayers(games, roster, links = {}) {
+        const onRoster = new Map((roster?.players || []).filter(Boolean).map(p => [String(p.id), p]));
+        const norm = s => String(s || '').trim().toLowerCase();
+        const byName = new Map();
+        for (const [id, p] of onRoster) byName.set(norm(p.name), byName.has(norm(p.name)) ? null : id);
+        const together = new Map();
+        for (const g of games) {
+            const ids = g.players.map(p => String(p.id));
+            for (const a of ids) {
+                const s = together.get(a) || new Set();
+                ids.forEach(b => s.add(b));
+                together.set(a, s);
+            }
+        }
+
+        const found = new Map(); // sourceId -> { id, how }
+        const resolve = (id, name) => {
+            if (found.has(id)) return found.get(id);
+            let to = id, how = onRoster.has(id) ? 'roster' : 'own';
+            if (links[id] != null) {
+                const seen = new Set([id]);
+                to = String(links[id]);
+                while (links[to] != null && !seen.has(to) && String(links[to]) !== to) { seen.add(to); to = String(links[to]); }
+                how = to === id ? 'separate' : 'link';
+            } else if (how === 'own') {
+                const match = byName.get(norm(name));
+                if (match && !together.get(id)?.has(match)) { to = match; how = 'name'; }
+            }
+            const r = { id: to, how };
+            found.set(id, r);
+            return r;
+        };
+
+        return games.map(g => {
+            const map = new Map();
+            const players = [];
+            for (const p of g.players) {
+                const src = String(p.id);
+                const { id, how } = resolve(src, p.name);
+                map.set(src, id);
+                const same = players.find(x => x.id === id);
+                if (same) { same.points += p.points; continue; } // two ids for one person in one game
+                const name = onRoster.get(id)?.name || p.name;
+                players.push({ ...p, id, name, sourceId: src, playedAs: p.name, how, onRoster: onRoster.has(id) });
+            }
+            const relink = e => e?.playerId != null && map.has(String(e.playerId)) ? { ...e, playerId: map.get(String(e.playerId)) } : e;
+            const events = g.events.map(relink);
+            return { ...g, players, events, scoreEvents: events.filter(e => Array.isArray(e?.scores)) };
+        });
+    }
+
+    async function playerLinks() {
+        try {
+            const res = await fetch('/Scoreboard/api/player-links', { cache: 'no-store' });
+            const doc = res.ok ? await res.json() : null;
+            return doc?.links && typeof doc.links === 'object' ? doc.links : {};
+        } catch {
+            return {};
+        }
+    }
+
+    // changes: { fromId: toId } counts fromId as toId in the stats; toId null removes the link.
+    // Reads the latest links first so two people linking players don't undo each other.
+    async function setPlayerLinks(changes) {
+        const links = await playerLinks();
+        for (const [from, to] of Object.entries(changes)) {
+            if (to == null) delete links[from]; else links[from] = String(to);
+        }
+        const res = await fetch('/Scoreboard/api/player-links', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ links })
+        });
+        if (!res.ok) throw new Error(`Couldn't save (${res.status})`);
     }
 
     // ---- games removed from stats (tests, mistakes); see /api/hidden-games ----
@@ -525,5 +628,5 @@ const Stats = (() => {
         return g.final[0] + g.final[1] < MIN_POINTS && !(age < SESSION_GAP_MS);
     }
 
-    return { normalize, gamesFromDoc, isShort, MIN_POINTS, isPlayed, flow, summarize, players, teamLabel, hiddenIds, setHidden, esc, formatDate, formatTime, signed, teamChip, shareText, share, chartSvg, loadGames };
+    return { normalize, gamesFromDoc, isShort, MIN_POINTS, isPlayed, flow, summarize, players, teamLabel, hiddenIds, setHidden, linkPlayers, playerLinks, setPlayerLinks, esc, formatDate, formatTime, signed, teamChip, shareText, share, chartSvg, loadGames };
 })();

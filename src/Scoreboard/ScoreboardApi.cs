@@ -18,6 +18,7 @@ namespace SharedTools.Scoreboard;
 ///   current-game.json  { gameId }
 ///   games/{id}.json    full game state
 ///   hidden-games.json  { ids: [...] } games left out of stats
+///   player-links.json  { links: { fromId: toId } } one person under two ids
 /// </summary>
 public static partial class ScoreboardApi
 {
@@ -45,6 +46,12 @@ public static partial class ScoreboardApi
         api.MapGet("/hidden-games", async (ScoreboardStore store) =>
             await store.ReadAsync("hidden-games.json") is { } doc ? Results.Bytes(doc.ToArray(), Json) : Results.Json(new { ids = Array.Empty<string>() }));
         api.MapPut("/hidden-games", (HttpRequest req, ScoreboardStore store) => SaveJson(req, store, "hidden-games.json"));
+
+        // The same person under two ids (each device used to keep its own player list):
+        // { links: { fromId: toId } }. Stats count fromId as toId; an id linked to itself stays separate.
+        api.MapGet("/player-links", async (ScoreboardStore store) =>
+            await store.ReadAsync("player-links.json") is { } doc ? Results.Bytes(doc.ToArray(), Json) : Results.Json(new { links = new Dictionary<string, string>() }));
+        api.MapPut("/player-links", (HttpRequest req, ScoreboardStore store) => SaveJson(req, store, "player-links.json"));
 
         api.MapPost("/players/{id:long}/image", UploadPlayerImage).DisableAntiforgery();
         api.MapGet("/players/{id:long}/image", GetPlayerImage);
