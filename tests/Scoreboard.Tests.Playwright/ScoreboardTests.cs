@@ -736,9 +736,9 @@ public class ScoreboardTests : PageTest
         await Page.Locator("#crop-done").ClickAsync();
 
         // Styles from the server; the fake hands the photo back
-        await Expect(Page.Locator(".style-chip")).ToHaveTextAsync(["Original", "Anime", "8-bit"]);
-        await Page.Locator(".style-chip", new() { HasText = "Anime" }).ClickAsync();
-        await Expect(Page.Locator(".style-chip.selected")).ToHaveTextAsync("Anime");
+        await Expect(Page.Locator(".style-chip")).ToHaveTextAsync(["Original", "Goth", "8-bit"]);
+        await Page.Locator(".style-chip", new() { HasText = "Goth" }).ClickAsync();
+        await Expect(Page.Locator(".style-chip.selected")).ToHaveTextAsync("Goth");
         await Expect(Page.Locator("#remaining")).ToContainTextAsync("9 AI tries left");
         var stylize = JsonDocument.Parse(_api.Docs["photo/stylize"]).RootElement;
         Assert.That(stylize.GetProperty("playerId").GetInt64(), Is.EqualTo(1));
@@ -747,7 +747,7 @@ public class ScoreboardTests : PageTest
         await Page.Locator("#save").ClickAsync();
         await Expect(Page.Locator("#done-title")).ToHaveTextAsync("Looking good, Zed!");
         var save = JsonDocument.Parse(_api.Docs["photo/save"]).RootElement;
-        Assert.That(save.GetProperty("style").GetString(), Is.EqualTo("anime"));
+        Assert.That(save.GetProperty("style").GetString(), Is.EqualTo("goth"));
         Assert.That(save.GetProperty("image").GetString(), Does.StartWith("data:image/jpeg;base64,"));
     }
 
