@@ -17,7 +17,7 @@ Everything lives in `src/Scoreboard/wwwroot/` as plain HTML/CSS/JS. No build ste
 
 `/Scoreboard/ManagePlayers` redirects to `/Scoreboard/#teams`, which opens the teams panel.
 
-HTML pages are embedded resources served by `Page()` in `ScoreboardModule.cs` with `Cache-Control: no-cache`. It replaces `{{v}}` with a per-build id, so `app.js?v={{v}}` and friends are cache-busted on every deploy. Static assets (JS, CSS, icons, audio) are served from `/_content/Scoreboard/`.
+HTML pages are files in the drop's `wwwroot/`, served by `Page()` in `ScoreboardModule.cs` with `Cache-Control: no-cache`. It replaces `{{v}}` with a per-build id, so `app.js?v={{v}}` and friends are cache-busted on every deploy. Static assets (JS, CSS, icons, audio) are served from `/_content/Scoreboard/`.
 
 ---
 
