@@ -946,6 +946,8 @@ class Players {
         this.allOutBtn = document.getElementById('all-out-btn');
         this.shareTeamsBtn = document.getElementById('share-teams-btn');
         this.editRosterBtn = document.getElementById('edit-roster-btn');
+        this.titleEl = document.getElementById('teams-title');
+        this.hintEl = document.getElementById('teams-hint');
         this.photoInput = document.getElementById('player-photo-input');
         this.team1PlayersDisplay = document.getElementById('team1-players-display');
         this.team2PlayersDisplay = document.getElementById('team2-players-display');
@@ -955,6 +957,8 @@ class Players {
         this.modelAt = 0;
         this.editing = false;      // edit mode: rename / photo / delete
         this.photoPlayerId = null;
+        this.confirmDeleteId = null; // edit mode: player whose Delete is waiting for a second tap
+        this.confirmDeleteTimer = null;
 
         this.setupEventListeners();
         this.render();
@@ -981,6 +985,7 @@ class Players {
         this.shareTeamsBtn.addEventListener('click', () => this.shareTeams());
         this.editRosterBtn.addEventListener('click', () => {
             this.editing = !this.editing;
+            this.confirmDeleteId = null;
             this.render();
         });
         this.photoInput.addEventListener('change', () => this.uploadPhoto());
@@ -999,6 +1004,12 @@ class Players {
     }
 
     open() {
+        // Always open on the teams view, never stuck in edit mode from last time
+        if (this.editing) {
+            this.editing = false;
+            this.confirmDeleteId = null;
+            this.render();
+        }
         this.playersPanel.classList.add('active');
         document.getElementById('settings-panel').classList.remove('active');
         this.loadModel().then(() => this.renderPrediction());
@@ -1132,7 +1143,20 @@ class Players {
         this.playerNameInput.focus();
     }
 
+    // First tap arms the button ("Delete?"), a second tap within a few seconds deletes
     removePlayer(id) {
+        if (this.confirmDeleteId !== id) {
+            this.confirmDeleteId = id;
+            clearTimeout(this.confirmDeleteTimer);
+            this.confirmDeleteTimer = setTimeout(() => {
+                this.confirmDeleteId = null;
+                this.renderPanel();
+            }, 3000);
+            this.renderPanel();
+            return;
+        }
+        this.confirmDeleteId = null;
+        clearTimeout(this.confirmDeleteTimer);
         this.app.playersList = this.app.playersList.filter(p => p.id !== id);
         this.pinned.delete(id);
         this.changed();
@@ -1289,9 +1313,14 @@ class Players {
         });
         this.countsEl.classList.toggle('uneven', Math.abs(n1 - n2) > 1);
 
+        // One primary button at a time: Edit/✕ normally, a single Done while editing
         this.editRosterBtn.textContent = this.editing ? 'Done' : 'Edit';
-        this.editRosterBtn.classList.toggle('active', this.editing);
+        this.editRosterBtn.classList.toggle('primary', this.editing);
         this.playersPanel.classList.toggle('editing', this.editing);
+        this.titleEl.textContent = this.editing ? 'Edit players' : 'Teams';
+        this.hintEl.textContent = this.editing
+            ? 'Tap a photo to change it, or a name to rename'
+            : '📌 keeps a player on their team when you Balance or Shuffle';
 
         // Alphabetical and stable, so rows don't jump around while you tap
         const players = [...this.app.playersList]
@@ -1316,30 +1345,61 @@ class Players {
             name.textContent = player.name;
 
             if (this.editing) {
-                row.appendChild(name);
-                row.appendChild(this.button('Photo', 'roster-btn', () => this.choosePhoto(player.id)));
-                row.appendChild(this.button('Rename', 'roster-btn', () => this.renamePlayer(player.id)));
-                row.appendChild(this.button('Delete', 'roster-btn remove-player', () => this.removePlayer(player.id)));
+                row.classList.add('editing-row');
+
+                // Tap the photo to change it
+                const photo = this.button('', 'roster-photo', () => this.choosePhoto(player.id));
+                photo.setAttribute('aria-label', `Change photo for ${player.name}`);
+                if (player.imageUrl) {
+                    const img = document.createElement('img');
+                    img.src = player.imageUrl;
+                    img.alt = '';
+                    photo.appendChild(img);
+                } else {
+                    photo.textContent = player.name.charAt(0).toUpperCase();
+                }
+                row.appendChild(photo);
+
+                // Tap the name to rename
+                const rename = this.button('', 'roster-name rename-btn', () => this.renamePlayer(player.id));
+                rename.setAttribute('aria-label', `Rename ${player.name}`);
+                rename.append(player.name);
+                row.appendChild(rename);
+
+                // Delete takes two taps so a stray finger can't remove someone
+                const armed = this.confirmDeleteId === player.id;
+                const del = this.button(armed ? 'Delete?' : 'Delete', `roster-btn remove-player${armed ? ' armed' : ''}`,
+                    () => this.removePlayer(player.id));
+                row.appendChild(del);
                 this.listEl.appendChild(row);
                 return;
             }
 
             const pin = this.button('📌', 'pin-btn', () => this.togglePin(player.id));
-            pin.title = 'Pin: keep on this team when shuffling';
+            pin.title = 'Pin: keep on this team when you Balance or Shuffle';
+            pin.setAttribute('aria-label', `Pin ${player.name} to their team`);
+            pin.setAttribute('aria-pressed', String(this.pinned.has(player.id)));
             pin.classList.toggle('pinned', this.pinned.has(player.id));
             pin.disabled = status === 'out';
             row.appendChild(pin);
             row.appendChild(name);
 
+            // Points stepper: one joined control, for fixing points away from the big scoreboard buttons
             const points = document.createElement('span');
             points.className = 'roster-points';
             if (status !== 'out') {
-                points.appendChild(this.button('−', 'points-btn decrement-btn', () => this.changePlayerPoints(player.id, -1)));
+                const pts = player.points || 0;
+                const minus = this.button('−', 'points-btn decrement-btn', () => this.changePlayerPoints(player.id, -1));
+                minus.setAttribute('aria-label', `Take a point from ${player.name}`);
+                minus.disabled = pts <= 0;
+                points.appendChild(minus);
                 const value = document.createElement('span');
                 value.className = 'points-display';
-                value.textContent = player.points || 0;
+                value.textContent = pts;
                 points.appendChild(value);
-                points.appendChild(this.button('+', 'points-btn increment-btn', () => this.changePlayerPoints(player.id, 1)));
+                const plus = this.button('+', 'points-btn increment-btn', () => this.changePlayerPoints(player.id, 1));
+                plus.setAttribute('aria-label', `Give ${player.name} a point`);
+                points.appendChild(plus);
             }
             row.appendChild(points);
 

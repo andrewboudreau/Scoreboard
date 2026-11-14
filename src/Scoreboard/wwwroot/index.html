@@ -50,16 +50,22 @@
 
         <div id="players-panel" class="side-panel teams-panel">
             <div class="teams-header">
-                <div id="team-counts" class="team-counts"></div>
-                <div id="team-prediction" class="team-prediction" hidden></div>
+                <div class="teams-titlebar">
+                    <h2 id="teams-title" class="teams-title">Teams</h2>
+                    <button id="edit-roster-btn" class="titlebar-btn" title="Rename, add photos, or delete players">Edit</button>
+                    <button id="close-teams-btn" class="titlebar-btn close-btn" aria-label="Close" title="Close">&#x2715;</button>
+                </div>
+                <div class="teams-summary">
+                    <div id="team-counts" class="team-counts"></div>
+                    <div id="team-prediction" class="team-prediction" hidden></div>
+                </div>
                 <div class="teams-actions">
                     <button id="balance-btn" title="Split everyone who's in into the most even teams based on past games (pinned players stay put)">Balance</button>
                     <button id="shuffle-btn" title="Randomly split everyone who's in into even teams (pinned players stay put)">Shuffle</button>
                     <button id="all-out-btn" title="Mark everyone out, then tap in whoever shows up">All out</button>
                     <button id="share-teams-btn" title="Send the teams to the group chat">Share</button>
-                    <button id="edit-roster-btn" title="Rename, add photos, or delete players">Edit</button>
-                    <button id="close-teams-btn" class="done-btn">Done</button>
                 </div>
+                <p class="teams-hint" id="teams-hint">&#x1F4CC; keeps a player on their team when you Balance or Shuffle</p>
             </div>
             <div id="players-list" class="roster-list"></div>
             <div class="add-player">

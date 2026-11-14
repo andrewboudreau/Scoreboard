@@ -454,76 +454,159 @@ body {
     padding: 0 16px 16px;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+    background-color: #2b2b2b;
+    border-color: #4a4a4a;
 }
 
 .teams-panel button {
     touch-action: manipulation; /* no double-tap zoom delay */
+    font-family: inherit;
 }
 
 .teams-header {
     position: sticky;
     top: 0;
     margin: 0 -16px 10px;
-    padding: 16px 16px 10px;
-    background: rgb(51, 51, 51);
-    border-bottom: 1px solid #555;
+    padding: 12px 16px 12px;
+    background: #2b2b2b;
+    border-bottom: 1px solid #444;
     z-index: 1;
+}
+
+/* Title + Edit + close */
+.teams-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.teams-title {
+    flex: 1;
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.titlebar-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid #5a5a5a;
+    border-radius: 22px;
+    background: transparent;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.titlebar-btn.primary {
+    background: #1c7ed6;
+    border-color: #1c7ed6;
+    font-weight: 800;
+}
+
+.close-btn {
+    padding: 0;
+    border-color: transparent;
+    background: #3d3d3d;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.teams-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-bottom: 10px;
 }
 
 .team-counts {
     display: flex;
-    gap: 8px;
-    margin-bottom: 10px;
+    gap: 6px;
 }
 
 .count-chip {
     padding: 4px 10px;
     border-radius: 12px;
     font-weight: bold;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     text-transform: uppercase;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
 }
 
-.count-chip.team1 { background: #111; color: #fff; border: 1px solid #777; }
-.count-chip.team2 { background: #eee; color: #111; }
-.count-chip.out { background: transparent; color: #aaa; border: 1px solid #666; }
+.count-chip.team1 { background: #000; color: #fff; border: 1px solid #777; }
+.count-chip.team2 { background: #eee; color: #111; border: 1px solid #eee; }
+.count-chip.out { background: transparent; color: #999; border: 1px solid #555; }
 .team-counts.uneven .count-chip.team1,
 .team-counts.uneven .count-chip.team2 { box-shadow: 0 0 0 2px #f59f00; }
 
+/* Predicted result for the current teams */
+.team-prediction {
+    font-size: 0.9rem;
+    color: #bbb;
+}
+.team-prediction.lopsided { color: #ffc078; }
+
+/* Balance / Shuffle / All out / Share: one even row */
 .teams-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
     gap: 6px;
-    flex-wrap: wrap;
 }
 
 .teams-actions button,
 .roster-btn {
     min-height: 44px;
-    padding: 8px 14px;
-    background-color: #444;
-    border: 1px solid gray;
-    border-radius: 6px;
-    color: white;
+    padding: 8px 10px;
+    background-color: #3d3d3d;
+    border: 1px solid #555;
+    border-radius: 10px;
+    color: #fff;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
-.teams-actions button.active { background-color: #2b8a3e; border-color: #2b8a3e; }
-.teams-actions .done-btn { margin-left: auto; background-color: #1c7ed6; border-color: #1c7ed6; font-weight: bold; }
+/* All out resets who's here: keep it quieter than the rest */
+.teams-actions #all-out-btn {
+    background: transparent;
+    color: #ccc;
+}
+
+.teams-hint {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: #8a8a8a;
+}
 
 @media (hover: hover) {
     .teams-actions button:hover,
-    .roster-btn:hover { filter: brightness(1.2); }
+    .titlebar-btn:hover,
+    .roster-btn:hover,
+    .roster-photo:hover { filter: brightness(1.2); }
     .team-toggle button:hover { color: #fff; }
+    .rename-btn:hover::after { color: #fff; }
 }
+
+/* Editing: only the roster and one Done button */
+.teams-panel.editing .close-btn,
+.teams-panel.editing .teams-summary,
+.teams-panel.editing .teams-actions { display: none; }
+.teams-panel.editing .teams-hint { margin-top: 0; }
+
+/* ---- Roster rows ---- */
 
 .roster-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
 
 .roster-empty {
@@ -532,21 +615,30 @@ body {
     text-align: center;
 }
 
+/* pin | name | points | team, with a team-colored edge */
 .roster-row {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto auto;
+    grid-template-areas: "pin name points team";
     align-items: center;
-    gap: 6px 8px;
-    padding: 6px 8px;
-    border-radius: 8px;
-    background: #3a3a3a;
+    gap: 6px 10px;
+    padding: 6px 8px 6px 6px;
+    border-radius: 10px;
+    background: #383838;
+    box-shadow: inset 4px 0 0 transparent;
 }
 
-.roster-row.status-out { background: transparent; }
-.roster-row.status-out .roster-name { color: #888; }
+.roster-row.status-1 { box-shadow: inset 4px 0 0 #000; }
+.roster-row.status-2 { box-shadow: inset 4px 0 0 #eee; }
+.roster-row.status-out { background: #262626; }
+.roster-row.status-out .roster-name { color: #7a7a7a; }
+
+.roster-row > .pin-btn { grid-area: pin; }
+.roster-row > .roster-name { grid-area: name; }
+.roster-row > .roster-points { grid-area: points; }
+.roster-row > .team-toggle { grid-area: team; }
 
 .roster-name {
-    flex: 1 1 90px;
     min-width: 0;
     font-weight: bold;
     font-size: 1.05rem;
@@ -555,54 +647,76 @@ body {
     white-space: nowrap;
 }
 
-.roster-points {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.roster-points .points-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 1.2rem;
-}
-
 .pin-btn {
     width: 40px;
     height: 40px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     background: transparent;
     cursor: pointer;
     font-size: 1rem;
     opacity: 0.25;
     filter: grayscale(1);
-    flex-shrink: 0;
 }
 
 .pin-btn.pinned { opacity: 1; filter: none; background: #555; }
 .pin-btn:disabled { visibility: hidden; }
 
+/* Points stepper: − 12 + as one joined control */
+.roster-points {
+    display: flex;
+    align-items: center;
+}
+
+.roster-points:not(:empty) {
+    border: 1px solid #555;
+    border-radius: 10px;
+    background: #2a2a2a;
+    overflow: hidden;
+}
+
+.roster-points .points-btn {
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    font-size: 1.3rem;
+    font-weight: bold;
+}
+
+.roster-points .decrement-btn { color: #ff8787; }
+.roster-points .increment-btn { color: #69db7c; }
+.roster-points .points-btn:active { background: #444; }
+.roster-points .points-btn:disabled { opacity: 0.25; cursor: default; }
+
+.roster-points .points-display {
+    min-width: 30px;
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+}
+
 .team-toggle {
     display: flex;
-    border: 1px solid #666;
-    border-radius: 8px;
+    border: 1px solid #555;
+    border-radius: 10px;
     overflow: hidden;
-    flex-shrink: 0;
 }
 
 .team-toggle button {
     min-width: 76px;
     max-width: 120px;
-    min-height: 44px;
+    min-height: 42px;
     padding: 8px;
     border: none;
-    border-right: 1px solid #666;
+    border-right: 1px solid #555;
     background: #2a2a2a;
-    color: #999;
+    color: #8a8a8a;
     cursor: pointer;
     font-weight: bold;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     text-transform: uppercase;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -614,20 +728,100 @@ body {
 .team-toggle button.team2.selected { background: #eee; color: #000; }
 .team-toggle button.out.selected { background: #555; color: #ddd; }
 
-.remove-player { color: #ff8787; }
+/* Edit rows: photo | name (tap to rename) | delete */
+.roster-row.editing-row {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-areas: none;
+    padding: 6px 8px;
+    box-shadow: none;
+    background: #383838;
+}
+
+.roster-row.editing-row > * { grid-area: auto; }
+.roster-row.editing-row .roster-name { color: #fff; }
+
+.roster-photo {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.roster-photo img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+/* little camera badge: this is tappable */
+.roster-photo::after {
+    content: '📷';
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #1c7ed6;
+    font-size: 11px;
+    line-height: 20px;
+    text-align: center;
+}
+
+.rename-btn {
+    min-height: 44px;
+    padding: 0 4px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.rename-btn::after {
+    content: ' ✎';
+    color: #888;
+    font-weight: normal;
+}
+
+.remove-player {
+    min-width: 88px; /* same width armed or not, so nothing shifts under your finger */
+    color: #ff8787;
+    background: transparent;
+    border-color: #6b3a3a;
+}
+
+.remove-player.armed {
+    background: #c92a2a;
+    border-color: #c92a2a;
+    color: #fff;
+}
 
 .teams-panel .add-player {
     margin-top: 12px;
+    gap: 6px;
 }
 
 .teams-panel .add-player input,
 .teams-panel .add-player button {
     min-height: 44px;
-    padding: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border-color: #555;
     font-size: 16px; /* 16px+ stops iOS zooming in on focus */
 }
 
-/* Phones: full screen, toggle on its own full-width line */
+.teams-panel .add-player input { background: #383838; }
+.teams-panel .add-player button { background: #3d3d3d; font-weight: 600; }
+
+/* Phones: full screen; each row is name + points on top, the team toggle full width below */
 @media (max-width: 700px) {
     .teams-panel {
         inset: 0;
@@ -642,16 +836,19 @@ body {
 
     .teams-header {
         margin: 0 -12px 10px;
-        padding: calc(12px + env(safe-area-inset-top)) 12px 10px;
+        padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
     }
 
     .teams-actions button {
-        flex: 1;
-        padding: 8px 6px;
+        padding: 8px 4px;
     }
 
-    .team-toggle {
-        width: 100%;
+    .roster-row {
+        grid-template-columns: 40px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "pin name points"
+            "team team team";
+        padding: 6px 8px 8px 6px;
     }
 
     .team-toggle button {
@@ -779,11 +976,3 @@ body {
         width: 100%;
     }
 }
-
-/* Teams panel: predicted result for the current teams */
-.team-prediction {
-    font-size: 0.95rem;
-    color: #ddd;
-    margin: -4px 0 10px;
-}
-.team-prediction.lopsided { color: #ffc078; }

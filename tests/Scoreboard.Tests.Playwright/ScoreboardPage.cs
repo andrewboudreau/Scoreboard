@@ -190,7 +190,10 @@ public class ScoreboardPage
     public async Task RemovePlayer(int rowIndex)
     {
         await EditRosterBtn.ClickAsync();
-        await PlayerRows.Nth(rowIndex).Locator(".remove-player").ClickAsync();
+        // Delete takes two taps: the first arms it ("Delete?"), the second removes the player
+        var delete = PlayerRows.Nth(rowIndex).Locator(".remove-player");
+        await delete.ClickAsync();
+        await PlayerRows.Nth(rowIndex).Locator(".remove-player.armed").ClickAsync();
         await EditRosterBtn.ClickAsync();
     }
 
