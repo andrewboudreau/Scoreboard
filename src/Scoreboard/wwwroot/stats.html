@@ -6,6 +6,7 @@
     <title>Stats — MDL Scoreboard</title>
     <link rel="stylesheet" href="/_content/Scoreboard/stats.css?v={{v}}">
     <script src="/_content/Scoreboard/stats-core.js?v={{v}}"></script>
+    <script src="/_content/Scoreboard/insights.js?v={{v}}"></script>
 </head>
 <body>
     <div class="container">
@@ -14,6 +15,13 @@
             <h1>Stats</h1>
             <span style="width:90px"></span>
         </div>
+
+        <nav class="tabs" id="tabs">
+            <button data-tab="overview">Overview</button>
+            <button data-tab="players">Players</button>
+            <button data-tab="insights">Insights</button>
+            <button data-tab="games">Games</button>
+        </nav>
 
         <div class="segmented" id="range">
             <button data-range="10">Last 10</button>
@@ -32,8 +40,13 @@
 
     <script>
         const { esc, formatDate, signed, teamChip } = Stats;
+        const TABS = ['overview', 'players', 'insights', 'games'];
         let allGames = [];
+        let roster = null;
+        let model = null;      // impact model over every game (not just the range)
+        let backtest = null;
         let range = localStorage.getItem('statsRange') || '10';
+        let tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
         let sort = { key: 'gp', desc: true };
 
         const content = document.getElementById('content');
@@ -41,7 +54,14 @@
 
         (async () => {
             try {
-                allGames = await Stats.loadGames();
+                const [games, r] = await Promise.all([
+                    Stats.loadGames(),
+                    fetch('/Scoreboard/api/roster').then(res => res.ok ? res.json() : null).catch(() => null)
+                ]);
+                allGames = games;
+                roster = r;
+                model = Insights.fit(allGames);
+                backtest = Insights.backtest(allGames);
                 document.getElementById('loading').hidden = true;
                 content.hidden = false;
                 render();
@@ -57,6 +77,12 @@
             range = b.dataset.range;
             localStorage.setItem('statsRange', range);
             render();
+        }));
+        document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => {
+            tab = b.dataset.tab;
+            history.replaceState(null, '', '#' + tab);
+            render();
+            window.scrollTo(0, 0);
         }));
 
         sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
@@ -76,17 +102,30 @@
             return allGames[0]?.names || ['BLACK', 'WHITE'];
         }
 
+        function rangeLabel() {
+            return range === '10' ? 'last 10 games' : range === 'year' ? 'this year' : 'all time';
+        }
+
         function render() {
             document.querySelectorAll('#range button').forEach(b => b.classList.toggle('selected', b.dataset.range === range));
+            document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('selected', b.dataset.tab === tab));
             const games = gamesInRange();
             if (!games.length) {
                 content.innerHTML = `<div class="empty">No games ${range === 'year' ? 'this year' : 'yet'}.<br>Games show up here once you keep score.</div>`;
                 return;
             }
-            content.innerHTML = summaryHtml(games) + quartersHtml(games) + playersHtml(games) + historyHtml(games) +
-                `<div class="footer"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
+            const pages = {
+                overview: () => summaryHtml(games) + quartersHtml(games),
+                players: () => playersHtml(games),
+                insights: () => insightsHtml(games),
+                games: () => historyHtml(games)
+            };
+            content.innerHTML = pages[tab]() + `<div class="footer"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
             bindPlayers(games);
+            bindCharts();
         }
+
+        // ---------------- Overview ----------------
 
         function summaryHtml(games) {
             const s = Stats.summarize(games);
@@ -117,6 +156,7 @@
                     </div>
                     <div class="record-sub">${s.ties ? `${s.ties} tie${s.ties === 1 ? '' : 's'} · ` : ''}${streak}</div>
                 </div>
+                ${matchupHtml()}
                 <div class="tiles">
                     <div class="tile">
                         <div class="label">Avg score</div>
@@ -135,7 +175,7 @@
                 <div class="card">
                     <h2>Comebacks · won after trailing at half</h2>
                     ${s.comebacks.slice(0, 5).map(c => `
-                        <a href="/Scoreboard/game?id=${encodeURIComponent(c.game.id)}" style="display:flex;justify-content:space-between;padding:6px 0;color:inherit;text-decoration:none">
+                        <a href="/Scoreboard/game?id=${encodeURIComponent(c.game.id)}" class="list-link">
                             <span>${teamChip(c.game.winner, c.game.names[c.game.winner - 1])} down ${c.deficit} at half</span>
                             <span class="dim">${formatDate(c.game.date)} · ${c.game.final[0]}–${c.game.final[1]}</span>
                         </a>`).join('')}
@@ -168,20 +208,52 @@
                 </div>`;
         }
 
+        // Prediction for the teams currently set on the scoreboard
+        function matchupHtml() {
+            if (!roster || !model || model.n < 3) return '';
+            const playing = (roster.players || []).filter(p => p.active !== false && (p.team === '1' || p.team === '2'));
+            const t1 = playing.filter(p => p.team === '1'), t2 = playing.filter(p => p.team === '2');
+            if (!t1.length || !t2.length) return '';
+            const [n1, n2] = [roster.team1Name || 'BLACK', roster.team2Name || 'WHITE'];
+            const { margin, p1 } = Insights.predict(model, t1.map(p => p.id), t2.map(p => p.id));
+            const pct = Math.round(p1 * 100);
+            const fav = Math.abs(margin) < 0.5 ? 'Dead even' : `${esc(margin > 0 ? n1 : n2)} by ${Math.abs(margin).toFixed(1)}`;
+            const names = list => list.map(p => esc(p.name)).sort().join(', ');
+            return `
+                <div class="card" id="matchup">
+                    <h2>Next game · current teams</h2>
+                    <div class="record">
+                        <div class="side">${teamChip(1, n1)}<div class="wins">${pct}%</div></div>
+                        <div class="bar"><div style="width:${pct}%"></div></div>
+                        <div class="side">${teamChip(2, n2)}<div class="wins">${100 - pct}%</div></div>
+                    </div>
+                    <div class="record-sub">Predicted: ${fav}</div>
+                    <div class="note">${esc(n1)}: ${names(t1)}<br>${esc(n2)}: ${names(t2)}</div>
+                    <div class="note">Win chances from the impact model (Insights tab). Tap <b>Balance</b> in the Teams panel for the most even split.</div>
+                </div>`;
+        }
+
+        // ---------------- Players ----------------
+
         const COLUMNS = [
             { key: 'name', label: 'Player', fmt: r => esc(r.name), cls: 'name' },
             { key: 'gp', label: 'GP', fmt: r => r.gp },
             { key: 'record', label: 'W-L', fmt: r => `${r.wins}-${r.losses}${r.ties ? `-${r.ties}` : ''}`, value: r => r.wins - r.losses },
             { key: 'winPct', label: 'Win%', fmt: r => Math.round(r.winPct * 100) },
             { key: 'avgPlusMinus', label: '+/-', fmt: r => signed(r.avgPlusMinus, 1) },
+            { key: 'impact', label: 'Impact', fmt: r => signed(r.impact, 1) },
             { key: 'ppg', label: 'PPG', fmt: r => r.ppg === null ? '<span class="dim">–</span>' : r.ppg.toFixed(1) },
             { key: 'high', label: 'High', fmt: r => r.high ? r.high.points : '<span class="dim">–</span>', value: r => r.high?.points ?? -1 }
         ];
 
+        function playerRows(games) {
+            return Stats.players(games).map(p => ({ ...p, impact: model.impact(p.id) }));
+        }
+
         function sortedPlayers(games) {
             const col = COLUMNS.find(c => c.key === sort.key);
             const val = r => col.value ? col.value(r) : r[col.key] ?? -Infinity;
-            return Stats.players(games).sort((a, b) => {
+            return playerRows(games).sort((a, b) => {
                 const va = val(a), vb = val(b);
                 const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
                 return (sort.desc ? -cmp : cmp) || b.gp - a.gp || a.name.localeCompare(b.name);
@@ -193,12 +265,28 @@
             if (!rows.length) return '';
             return `
                 <div class="card">
-                    <h2>Players</h2>
+                    <h2>Players · ${rangeLabel()}</h2>
                     <div class="table-wrap"><table id="players-table">
                         <thead><tr>${COLUMNS.map(c => `<th class="sortable${sort.key === c.key ? ' sorted' : ''}" data-key="${c.key}">${c.label}${sort.key === c.key ? (sort.desc ? ' ▾' : ' ▴') : ''}</th>`).join('')}</tr></thead>
                         <tbody>${rows.map(r => `<tr class="clickable" data-id="${esc(r.id)}">${COLUMNS.map(c => `<td class="${c.cls || ''}">${c.fmt(r)}</td>`).join('')}</tr>`).join('')}</tbody>
                     </table></div>
-                    <div class="note">GP, W-L, Win% and +/- (team's average margin) count every game played. PPG and High only count games where player points were tracked. Tap a player for their games.</div>
+                    <div class="note">GP, W-L, Win% and +/- (team's average margin) count every game played. Impact is the model's estimate of how many points a player adds to their team's margin, using every game (see Insights). PPG and High only count games where player points were tracked. Tap a player for more.</div>
+                </div>
+                ${attendanceHtml(games)}`;
+        }
+
+        function attendanceHtml(games) {
+            const rows = Insights.attendance(games).slice(0, 8);
+            if (!rows.length) return '';
+            return `
+                <div class="card">
+                    <h2>Showing up · ${rangeLabel()}</h2>
+                    ${rows.map(r => `
+                        <div class="hbar-row">
+                            <span class="hbar-name">${esc(r.name)}</span>
+                            <span class="hbar-track"><span class="hbar seq" style="width:${Math.round(r.pct * 100)}%"></span></span>
+                            <span class="hbar-value">${r.gp}/${games.length}${r.streak > 2 ? ` <span class="dim">· ${r.streak} straight</span>` : ''}</span>
+                        </div>`).join('')}
                 </div>`;
         }
 
@@ -210,14 +298,42 @@
                 sort = { key, desc: sort.key === key ? !sort.desc : key !== 'name' };
                 render();
             }));
-            const players = Stats.players(games);
+            const players = playerRows(games);
             table.querySelectorAll('tr.clickable').forEach(tr => tr.addEventListener('click', () =>
-                openPlayer(players.find(p => p.id === tr.dataset.id))));
+                openPlayer(players.find(p => p.id === tr.dataset.id), games)));
         }
 
-        function openPlayer(p) {
+        function openPlayer(p, games) {
             if (!p) return;
             const [n1, n2] = teamNames();
+            const pairs = Insights.playerPairs(games, p.id);
+            const style = Insights.scoring(games).find(s => s.id === p.id);
+            const att = Insights.attendance(games).find(a => a.id === p.id);
+            const rank = model.players.findIndex(m => m.id === p.id) + 1;
+
+            const pairList = (title, list, note) => list.length ? `
+                <div class="card">
+                    <h2>${title}</h2>
+                    ${list.map(r => `
+                        <div class="list-link">
+                            <span>${esc(r.bName)} <span class="dim">· ${r.wins}-${r.losses}</span></span>
+                            <span class="${r.avg > 0 ? 'win' : 'dim'}">${signed(r.avg, 1)}</span>
+                        </div>`).join('')}
+                    <div class="note">${note}</div>
+                </div>` : '';
+
+            const quarterBars = style?.quarterAvg ? (() => {
+                const max = Math.max(0.1, ...style.quarterAvg);
+                return `
+                    <div class="card">
+                        <h2>When they score · per game</h2>
+                        <div class="qbars">${style.quarterAvg.map((v, i) => `
+                            <div class="qbar"><span class="qv">${v.toFixed(1)}</span><span class="qfill" style="height:${Math.round(56 * v / max) + 4}px"></span><span class="ql">Q${i + 1}</span></div>`).join('')}
+                        </div>
+                        <div class="note">${style.games} tracked game${style.games === 1 ? '' : 's'} · ${Math.round(style.share * 100)}% of their team's points · best run ${style.streak} straight team baskets</div>
+                    </div>`;
+            })() : '';
+
             document.getElementById('sheet-body').innerHTML = `
                 <div class="topbar">
                     <h1>${esc(p.name)}</h1>
@@ -225,10 +341,13 @@
                 </div>
                 <div class="tiles">
                     <div class="tile"><div class="label">Record</div><div class="value">${p.wins}-${p.losses}</div><div class="sub">${Math.round(p.winPct * 100)}% wins${p.ties ? ` · ${p.ties} tied` : ''}</div></div>
-                    <div class="tile"><div class="label">+/- per game</div><div class="value">${signed(p.avgPlusMinus, 1)}</div><div class="sub">team margin</div></div>
+                    <div class="tile"><div class="label">Impact</div><div class="value">${signed(p.impact, 1)}</div><div class="sub">${rank ? `#${rank} of ${model.players.length} · all games` : 'no games yet'}</div></div>
                     <div class="tile"><div class="label">Points per game</div><div class="value">${p.ppg === null ? '–' : p.ppg.toFixed(1)}</div><div class="sub">${p.trackedGp} tracked game${p.trackedGp === 1 ? '' : 's'}</div></div>
-                    <div class="tile"><div class="label">High</div><div class="value">${p.high ? p.high.points : '–'}</div><div class="sub">${p.high ? formatDate(p.high.game.date) : 'no tracked games'}</div></div>
+                    <div class="tile"><div class="label">Showed up</div><div class="value">${att ? Math.round(att.pct * 100) : 0}%</div><div class="sub">${att ? `${att.gp} of ${games.length}${att.streak > 1 ? ` · ${att.streak} straight` : ''}` : ''}</div></div>
                 </div>
+                ${quarterBars}
+                ${pairList('Best with', pairs.teammates.slice(0, 3), 'Teammates, by average margin when on the same team (2+ games).')}
+                ${pairList('Toughest opponents', pairs.opponents.slice(-3).reverse(), `${esc(p.name)}'s team margin against these players (2+ games).`)}
                 <div class="card">
                     <h2>Games · ${p.gp}</h2>
                     <div class="table-wrap"><table>
@@ -252,8 +371,167 @@
             document.body.style.overflow = '';
         }
 
+        // ---------------- Insights ----------------
+
+        function insightsHtml(games) {
+            return impactHtml() + pairsHtml(games) + scoringHtml(games) + trendHtml(games) + closenessHtml(games);
+        }
+
+        function impactHtml() {
+            if (!model || model.n < 3) {
+                return `<div class="card"><h2>Player impact</h2><div class="note">Needs at least 3 games.</div></div>`;
+            }
+            const rows = model.players;
+            const max = Math.max(1, ...rows.map(r => Math.abs(r.impact)));
+            const bt = backtest;
+            const acc = bt.total ? Math.round(100 * bt.correct / bt.total) : null;
+            const verdict = acc === null ? 'Not enough games yet to test it.'
+                : acc >= 60 ? `Tested on past games (using only the games before each one), it picked the winner ${bt.correct} of ${bt.total} times (${acc}%).`
+                : `Tested on past games (using only the games before each one), it picked the winner ${bt.correct} of ${bt.total} times (${acc}%), so far not much better than a coin flip. It sharpens as games pile up.`;
+            return `
+                <div class="card">
+                    <h2>Player impact · all ${model.n} games</h2>
+                    <div class="diverge-legend"><span>← hurts margin</span><span>helps margin →</span></div>
+                    ${rows.map(r => {
+                        const w = Math.round(50 * Math.abs(r.impact) / max);
+                        const pos = r.impact >= 0;
+                        return `
+                        <div class="hbar-row" title="${esc(r.name)}: ${signed(r.impact, 1)} pts per game, ${r.gp} games">
+                            <span class="hbar-name">${esc(r.name)}</span>
+                            <span class="hbar-track diverging"><span class="hbar ${pos ? 'pos' : 'neg'}" style="width:${w}%;${pos ? 'left:50%' : `left:${50 - w}%`}"></span></span>
+                            <span class="hbar-value">${signed(r.impact, 1)} <span class="dim">· ${r.gp}g</span></span>
+                        </div>`;
+                    }).join('')}
+                    <div class="note">How many points a player adds to their team's final margin compared with an average player, after accounting for who they played with and against. It only needs who played and the final score, so team-score-only games count too. Recent games count more; players with few games are pulled toward 0.</div>
+                    <div class="note">${verdict} Typical miss: ${bt.mae === null ? '–' : bt.mae.toFixed(1)} points.</div>
+                </div>`;
+        }
+
+        function pairsHtml(games) {
+            const duos = Insights.duos(games).slice(0, 5);
+            const rivals = Insights.rivalries(games).slice(0, 5);
+            if (!duos.length && !rivals.length) return '';
+            return `
+                ${duos.length ? `
+                <div class="card">
+                    <h2>Best duos · ${rangeLabel()}</h2>
+                    ${duos.map(d => `
+                        <div class="list-link">
+                            <span>${esc(d.aName)} + ${esc(d.bName)} <span class="dim">· ${d.wins}-${d.losses}</span></span>
+                            <span class="win">${signed(d.avg, 1)}</span>
+                        </div>`).join('')}
+                    <div class="note">Average margin when on the same team, 3+ games together.</div>
+                </div>` : ''}
+                ${rivals.length ? `
+                <div class="card">
+                    <h2>Rivalries · ${rangeLabel()}</h2>
+                    ${rivals.map(r => `
+                        <div class="list-link">
+                            <span>${esc(r.aName)} <span class="dim">vs</span> ${esc(r.bName)}</span>
+                            <span><b>${r.wins}-${r.losses}</b> <span class="dim">${signed(r.avg, 1)}</span></span>
+                        </div>`).join('')}
+                    <div class="note">Most one-sided records when on opposite teams, 3+ games.</div>
+                </div>` : ''}`;
+        }
+
+        function scoringHtml(games) {
+            const rows = Insights.scoring(games).filter(r => r.games > 0).sort((a, b) => b.ppg - a.ppg);
+            if (!rows.length) return '';
+            const tracked = games.filter(g => g.tracked).length;
+            return `
+                <div class="card">
+                    <h2>Scoring · ${tracked} tracked game${tracked === 1 ? '' : 's'}</h2>
+                    <div class="table-wrap"><table>
+                        <thead><tr><th>Player</th><th>PPG</th><th title="Share of team points">Share</th><th title="Typical swing game to game">±</th><th title="Share of their points in Q4">Q4</th><th title="Most team baskets in a row">Run</th></tr></thead>
+                        <tbody>${rows.map(r => `
+                            <tr>
+                                <td class="name">${esc(r.name)}</td>
+                                <td>${r.ppg.toFixed(1)}</td>
+                                <td>${Math.round(r.share * 100)}%</td>
+                                <td class="dim">${r.sd.toFixed(1)}</td>
+                                <td>${r.q4Share === null ? '<span class="dim">–</span>' : Math.round(r.q4Share * 100) + '%'}</td>
+                                <td>${r.streak || '<span class="dim">–</span>'}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table></div>
+                    <div class="note">Share: of their team's points. ±: how much their scoring swings game to game. Q4: share of their points scored in the 4th quarter (25% is even). Run: most team baskets in a row.</div>
+                </div>`;
+        }
+
+        // Total points per game over time, with a tap/hover readout
+        function trendHtml(games) {
+            const pts = Insights.trend(games);
+            if (pts.length < 3) return '';
+            const W = 360, H = 170, L = 30, R = 10, T = 12, B = 22;
+            const vals = pts.map(p => p.total);
+            const lo = Math.max(0, Math.floor((Math.min(...vals) - 4) / 10) * 10);
+            const hi = Math.ceil((Math.max(...vals) + 4) / 10) * 10;
+            const x = i => L + (pts.length === 1 ? 0 : i * (W - L - R) / (pts.length - 1));
+            const y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo || 1));
+            const grid = [];
+            for (let v = lo; v <= hi; v += (hi - lo) / 2) {
+                grid.push(`<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L - 4}" y="${y(v) + 4}" text-anchor="end">${Math.round(v)}</text>`);
+            }
+            const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+            const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.total).toFixed(1)}`).join('');
+            const data = pts.map((p, i) => ({ x: x(i), y: y(p.total), label: `${formatDate(p.date)} · ${p.total} pts (${p.game.final[0]}–${p.game.final[1]})` }));
+            const recent = vals.slice(-5).reduce((s, v) => s + v, 0) / Math.min(5, vals.length);
+            const dir = recent > avg + 2 ? 'Recent games are higher scoring than usual.' : recent < avg - 2 ? 'Recent games are lower scoring than usual.' : 'Scoring has been steady.';
+            return `
+                <div class="card">
+                    <h2>Points per game · ${rangeLabel()}</h2>
+                    <div class="readout" id="trend-readout">Tap the chart for a game</div>
+                    <svg class="chart trend" id="trend" viewBox="0 0 ${W} ${H}" data-points='${esc(JSON.stringify(data))}'>
+                        ${grid.join('')}
+                        <line class="avgline" x1="${L}" x2="${W - R}" y1="${y(avg)}" y2="${y(avg)}"/>
+                        <path class="series" d="${path}"/>
+                        <circle class="focus" r="5" cx="-20" cy="-20"/>
+                        <text class="axis" x="${L}" y="${H - 6}">${esc(formatDate(pts[0].date))}</text>
+                        <text class="axis" x="${W - R}" y="${H - 6}" text-anchor="end">${esc(formatDate(pts[pts.length - 1].date))}</text>
+                    </svg>
+                    <div class="note">Both teams combined. Dashed line: average (${avg.toFixed(1)}). ${dir}</div>
+                </div>`;
+        }
+
+        function closenessHtml(games) {
+            const c = Insights.closeness(games);
+            const max = Math.max(1, ...c.buckets.map(b => b.count));
+            const close = c.buckets[0].count + c.buckets[1].count;
+            return `
+                <div class="card">
+                    <h2>How close are the games · ${rangeLabel()}</h2>
+                    ${c.buckets.map(b => `
+                        <div class="hbar-row">
+                            <span class="hbar-name">${b.label}</span>
+                            <span class="hbar-track"><span class="hbar seq" style="width:${Math.round(100 * b.count / max)}%"></span></span>
+                            <span class="hbar-value">${b.count} <span class="dim">· ${Math.round(100 * b.count / c.total)}%</span></span>
+                        </div>`).join('')}
+                    <div class="note">Final margin. ${Math.round(100 * close / c.total)}% of games were decided by 5 or fewer${c.ties ? `; ${c.ties} tied` : ''}.</div>
+                </div>`;
+        }
+
+        function bindCharts() {
+            const svg = document.getElementById('trend');
+            if (!svg) return;
+            const points = JSON.parse(svg.dataset.points);
+            const focus = svg.querySelector('.focus');
+            const readout = document.getElementById('trend-readout');
+            const show = e => {
+                const box = svg.getBoundingClientRect();
+                const vx = (e.clientX - box.left) * (svg.viewBox.baseVal.width / box.width);
+                const p = points.reduce((a, b) => Math.abs(b.x - vx) < Math.abs(a.x - vx) ? b : a);
+                focus.setAttribute('cx', p.x);
+                focus.setAttribute('cy', p.y);
+                readout.textContent = p.label;
+            };
+            svg.addEventListener('pointermove', show);
+            svg.addEventListener('pointerdown', show);
+        }
+
+        // ---------------- Games ----------------
+
         function historyHtml(games) {
-            let html = '<h2 class="month" style="margin-top:20px">Games</h2>';
+            let html = '';
             let month = '';
             for (const g of games) {
                 const m = g.date ? new Date(g.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'Undated';

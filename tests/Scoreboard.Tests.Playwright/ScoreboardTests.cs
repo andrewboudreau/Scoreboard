@@ -14,7 +14,7 @@ public class ScoreboardTests : PageTest
     private FakeApi _api = null!;
     private static readonly Regex Active = new(@"\bactive\b");
 
-    // Set the base URL via environment variable SCOREBOARD_BASE_URL, default to localhost:5000
+    // Set the base URL via environment variable SCOREBOARD_BASE_URL, default to localhost:5227
     private static string BaseUrl =>
         Environment.GetEnvironmentVariable("SCOREBOARD_BASE_URL") ?? "http://localhost:5227";
 
@@ -457,11 +457,14 @@ public class ScoreboardTests : PageTest
 
         // --- Dashboard ---
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats");
+        await Expect(Page.Locator(".card", new() { HasText = "Head to head" })).ToContainTextAsync("1 game");
+        await Page.Locator("#tabs button[data-tab=games]").ClickAsync();
         var row = Page.Locator(".game-row").First;
         await Expect(row).ToContainTextAsync("44");
         await Expect(row).ToContainTextAsync("42");
         await Expect(row).ToContainTextAsync("Player stats");
 
+        await Page.Locator("#tabs button[data-tab=players]").ClickAsync();
         var players = Page.Locator("#players-table");
         await Expect(players).ToContainTextAsync("Adams");
         await Expect(players).ToContainTextAsync("Foster");
@@ -521,12 +524,94 @@ public class ScoreboardTests : PageTest
         };
         _api.AddGame(JsonSerializer.Serialize(game));
 
-        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats");
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#games");
         await Expect(Page.Locator(".game-row").First).ToContainTextAsync("Team scores");
 
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id={game.id}");
         await Expect(Page.Locator(".hero")).ToContainTextAsync("WHITE won by 5");
         await Expect(Page.Locator(".card", new() { HasText = "Who played" })).ToContainTextAsync("Ann");
         await Expect(Page.Locator(".card", new() { HasText = "Box score" })).ToHaveCountAsync(0);
+    }
+
+    // Four games where Amy + Ben always beat Cal + Dee by 6
+    private void SeedLopsidedHistory()
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            var date = $"2026-03-{i + 1:00}";
+            var game = new
+            {
+                id = $"game-{date}-000{i}",
+                weekDate = date,
+                team1 = new { name = "BLACK", score = 30 },
+                team2 = new { name = "WHITE", score = 24 },
+                periodScores = new[] { "30 - 24" },
+                players = new[]
+                {
+                    new { id = 1, name = "Amy", team = "1", active = true, points = 0 },
+                    new { id = 2, name = "Ben", team = "1", active = true, points = 0 },
+                    new { id = 3, name = "Cal", team = "2", active = true, points = 0 },
+                    new { id = 4, name = "Dee", team = "2", active = true, points = 0 }
+                },
+                events = new object[] { new { ts = $"{date}T18:40:00Z", type = "period_end", period = 1, scores = new[] { 30, 24 } } },
+                lastUpdated = $"{date}T18:40:00Z"
+            };
+            _api.AddGame(JsonSerializer.Serialize(game));
+        }
+    }
+
+    private void SeedRoster(string amy, string ben, string cal, string dee)
+    {
+        var roster = new
+        {
+            team1Name = "BLACK",
+            team2Name = "WHITE",
+            players = new[]
+            {
+                new { id = 1, name = "Amy", team = amy, active = true, points = 0 },
+                new { id = 2, name = "Ben", team = ben, active = true, points = 0 },
+                new { id = 3, name = "Cal", team = cal, active = true, points = 0 },
+                new { id = 4, name = "Dee", team = dee, active = true, points = 0 }
+            }
+        };
+        _api.Docs["roster"] = JsonSerializer.Serialize(roster);
+    }
+
+    [Test]
+    public async Task StatsInsights_ImpactAndPrediction()
+    {
+        SeedLopsidedHistory();
+        SeedRoster("1", "1", "2", "2");
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#insights");
+        var impact = Page.Locator(".card", new() { HasText = "Player impact" });
+        await Expect(impact).ToContainTextAsync("all 4 games", new() { IgnoreCase = true });
+        // Winners rank above losers
+        var names = await impact.Locator(".hbar-name").AllTextContentsAsync();
+        Assert.That(names.Take(2), Is.EquivalentTo(new[] { "Amy", "Ben" }));
+        await Expect(Page.Locator(".card", new() { HasText = "Best duos" })).ToContainTextAsync("Amy + Ben");
+
+        await Page.Locator("#tabs button[data-tab=overview]").ClickAsync();
+        await Expect(Page.Locator("#matchup")).ToContainTextAsync("Predicted: BLACK by");
+    }
+
+    [Test]
+    public async Task TeamsPanel_BalanceSplitsTheStrongPair()
+    {
+        SeedLopsidedHistory();
+        SeedRoster("1", "1", "2", "2");
+        await _scoreboard.GotoAsync();
+        await _scoreboard.OpenPlayers();
+        await Expect(_scoreboard.PlayerRows).ToHaveCountAsync(4);
+        await Expect(Page.Locator("#team-prediction")).ToContainTextAsync("BLACK by");
+
+        await Page.Locator("#balance-btn").ClickAsync();
+        await Expect(Page.Locator("#team-prediction")).ToContainTextAsync("dead even");
+
+        var teams = await Page.EvaluateAsync<string>(
+            "() => window.scoreboardApp.playersList.slice().sort((a, b) => a.id - b.id).map(p => p.team).join('')");
+        // Amy and Ben end up on different teams, two a side
+        Assert.That(teams[0], Is.Not.EqualTo(teams[1]));
+        Assert.That(teams.Count(c => c == '1'), Is.EqualTo(2));
     }
 }

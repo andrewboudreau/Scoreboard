@@ -779,3 +779,11 @@ body {
         width: 100%;
     }
 }
+
+/* Teams panel: predicted result for the current teams */
+.team-prediction {
+    font-size: 0.95rem;
+    color: #ddd;
+    margin: -4px 0 10px;
+}
+.team-prediction.lopsided { color: #ffc078; }

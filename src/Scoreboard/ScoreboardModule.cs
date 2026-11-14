@@ -43,10 +43,10 @@ public class ScoreboardModule : IApplicationPartModule
 
     public void Configure(WebApplication app)
     {
-        app.MapGet("/Scoreboard/", () => Page("index.html"));
-        app.MapGet("/Scoreboard/docs", () => Page("docs.html"));
-        app.MapGet("/Scoreboard/game", () => Page("game.html"));
-        app.MapGet("/Scoreboard/stats", () => Page("stats.html"));
+        app.MapGet("/Scoreboard/", (HttpContext ctx) => Page(ctx, "index.html"));
+        app.MapGet("/Scoreboard/docs", (HttpContext ctx) => Page(ctx, "docs.html"));
+        app.MapGet("/Scoreboard/game", (HttpContext ctx) => Page(ctx, "game.html"));
+        app.MapGet("/Scoreboard/stats", (HttpContext ctx) => Page(ctx, "stats.html"));
         // The team builder now lives on the scoreboard itself.
         app.MapGet("/Scoreboard/ManagePlayers", () => Results.Redirect("/Scoreboard/#teams"));
 
@@ -62,8 +62,11 @@ public class ScoreboardModule : IApplicationPartModule
         typeof(ScoreboardModule).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
 
     // Serves an embedded HTML page from the module's wwwroot, or 404 if it is missing.
-    private static IResult Page(string fileName)
+    // Pages are tiny and always revalidated, so a phone never holds on to an old page
+    // that points at old script versions.
+    private static IResult Page(HttpContext context, string fileName)
     {
+        context.Response.Headers.CacheControl = "no-cache";
         using var stream = typeof(ScoreboardModule).Assembly.GetManifestResourceStream(PagePrefix + fileName);
         if (stream is null) return Results.NotFound();
 

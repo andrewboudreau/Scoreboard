@@ -458,7 +458,12 @@ class ScoreboardApp {
             try {
                 this.wakeLock = await navigator.wakeLock.request('screen');
                 console.log('Wake Lock is active');
-                document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+                // The browser drops the lock when the page is hidden; re-take it on return.
+                // Registered once: the handler itself checks the checkbox.
+                if (!this.wakeLockListener) {
+                    this.wakeLockListener = () => this.handleVisibilityChange();
+                    document.addEventListener('visibilitychange', this.wakeLockListener);
+                }
             } catch (err) {
                 console.error(`Failed to get wake lock: ${err.message}`);
             }
@@ -476,7 +481,6 @@ class ScoreboardApp {
                     console.log('Wake Lock has been released');
                     this.wakeLock = null;
                 });
-            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         }
     }
 
@@ -937,6 +941,8 @@ class Players {
         this.playerNameInput = document.getElementById('player-name-input');
         this.addPlayerBtn = document.getElementById('add-player-btn');
         this.shuffleBtn = document.getElementById('shuffle-btn');
+        this.balanceBtn = document.getElementById('balance-btn');
+        this.predictionEl = document.getElementById('team-prediction');
         this.allOutBtn = document.getElementById('all-out-btn');
         this.shareTeamsBtn = document.getElementById('share-teams-btn');
         this.editRosterBtn = document.getElementById('edit-roster-btn');
@@ -945,6 +951,8 @@ class Players {
         this.team2PlayersDisplay = document.getElementById('team2-players-display');
 
         this.pinned = new Set();   // player ids kept on their team when shuffling
+        this.model = null;         // impact model from past games (insights.js), for Balance
+        this.modelAt = 0;
         this.editing = false;      // edit mode: rename / photo / delete
         this.photoPlayerId = null;
 
@@ -968,6 +976,7 @@ class Players {
         });
 
         this.shuffleBtn.addEventListener('click', () => this.shuffle());
+        this.balanceBtn.addEventListener('click', () => this.balance());
         this.allOutBtn.addEventListener('click', () => this.allOut());
         this.shareTeamsBtn.addEventListener('click', () => this.shareTeams());
         this.editRosterBtn.addEventListener('click', () => {
@@ -992,6 +1001,78 @@ class Players {
     open() {
         this.playersPanel.classList.add('active');
         document.getElementById('settings-panel').classList.remove('active');
+        this.loadModel().then(() => this.renderPrediction());
+    }
+
+    // Fit the impact model on past games (refreshed at most every 10 minutes)
+    async loadModel(force = false) {
+        if (typeof Insights === 'undefined') return null;
+        if (!force && this.model && Date.now() - this.modelAt < 10 * 60 * 1000) return this.model;
+        try {
+            const games = await Stats.loadGames();
+            this.model = games.length >= 3 ? Insights.fit(games) : null;
+            this.modelAt = Date.now();
+        } catch {
+            // offline: keep whatever we had
+        }
+        return this.model;
+    }
+
+    // Who's in, as the model wants them
+    playingForModel() {
+        return this.app.playersList
+            .filter(p => Players.statusOf(p) !== 'out')
+            .map(p => ({ id: p.id, team: p.team, pinned: this.pinned.has(p.id) }));
+    }
+
+    // "BLACK by 1.4 · 58%" for the current teams
+    renderPrediction() {
+        const el = this.predictionEl;
+        const playing = this.playingForModel();
+        const t1 = playing.filter(p => p.team === '1').map(p => p.id);
+        const t2 = playing.filter(p => p.team === '2').map(p => p.id);
+        if (!el || !this.model || !t1.length || !t2.length) {
+            if (el) el.hidden = true;
+            return;
+        }
+        const { margin, p1 } = Insights.predict(this.model, t1, t2);
+        const name1 = this.app.teams.team1NameElement.textContent.trim();
+        const name2 = this.app.teams.team2NameElement.textContent.trim();
+        const fav = margin >= 0 ? name1 : name2;
+        const pct = Math.round(100 * (margin >= 0 ? p1 : 1 - p1));
+        el.textContent = Math.abs(margin) < 0.5
+            ? 'Prediction: dead even'
+            : `Prediction: ${fav} by ${Math.abs(margin).toFixed(1)} · ${pct}% to win`;
+        el.classList.toggle('lopsided', Math.abs(margin) >= 4);
+        el.hidden = false;
+    }
+
+    // Most even split of everyone who's in, using how past games went; pinned players stay put.
+    async balance() {
+        const playing = this.playingForModel();
+        if (playing.length < 2) return;
+        const model = await this.loadModel();
+        if (!model) {
+            alert('Balance needs at least 3 games of history. Using Shuffle instead.');
+            this.shuffle();
+            return;
+        }
+        const result = Insights.balance(model, playing);
+        if (!result) return;
+        // Don't reshuffle people for a sliver of a point
+        const t1 = playing.filter(p => p.team === '1').map(p => p.id);
+        const t2 = playing.filter(p => p.team === '2').map(p => p.id);
+        const current = Insights.predict(model, t1, t2).margin;
+        if (Math.abs(t1.length - t2.length) <= 1 && Math.abs(current) - Math.abs(result.margin) < 0.5) {
+            this.flash(this.balanceBtn, 'Already even');
+            return;
+        }
+        this.app.playersList.forEach(p => {
+            const team = result.teams.get(String(p.id));
+            if (team) p.team = team;
+        });
+        this.changed();
+        this.flash(this.balanceBtn, result.moves ? `Moved ${result.moves}` : 'Already even');
     }
 
     // ---- Roster state ----
@@ -1189,6 +1270,7 @@ class Players {
     render() {
         this.renderPanel();
         this.renderScoreboard();
+        this.renderPrediction();
     }
 
     renderPanel() {
