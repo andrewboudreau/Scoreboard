@@ -364,9 +364,15 @@
     (async () => {
         refreshConfig();
         try {
-            const res = await fetch('/Scoreboard/api/roster');
+            const [res, linksRes] = await Promise.all([
+                fetch('/Scoreboard/api/roster'),
+                fetch('/Scoreboard/api/player-links').catch(() => null)
+            ]);
             const roster = res.ok ? await res.json() : { players: [] };
-            players = (roster.players || []).filter(p => p && p.name)
+            // One person under two ids (see stats): list them once, under the id the link points to
+            const links = linksRes?.ok ? (await linksRes.json()).links || {} : {};
+            const ids = new Set((roster.players || []).map(p => String(p?.id)));
+            players = (roster.players || []).filter(p => p && p.name && !(links[p.id] != null && ids.has(String(links[p.id]))))
                 .sort((a, b) => a.name.localeCompare(b.name));
         } catch {
             fail("Couldn't load the player list. Check your connection and reload.");

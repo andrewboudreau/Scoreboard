@@ -700,8 +700,9 @@ public class ScoreboardTests : PageTest
     {
         _api.Docs["roster"] = """
             {"team1Name":"BLACK","team2Name":"WHITE","players":[
-              {"id":1,"name":"Zed","team":"1"},{"id":2,"name":"Amy","team":"2"}]}
+              {"id":1,"name":"Zed","team":"1"},{"id":2,"name":"Amy","team":"2"},{"id":3,"name":"Zed B","team":"1"}]}
             """;
+        _api.Docs["player-links"] = """{"links":{"3":"1"}}"""; // Zed B is Zed, listed once
         await Page.SetViewportSizeAsync(390, 844);
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/photo");
 
