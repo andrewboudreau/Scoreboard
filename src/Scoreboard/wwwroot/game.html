@@ -32,8 +32,10 @@
             const error = document.getElementById('error');
             try {
                 if (!id) throw new Error('No game specified.');
+                // "<id>~2" is an earlier night inside an old saved game (see Stats.gamesFromDoc)
+                const docId = id.split('~')[0];
                 const [res, current] = await Promise.all([
-                    fetch(`/Scoreboard/api/games/${encodeURIComponent(id)}`),
+                    fetch(`/Scoreboard/api/games/${encodeURIComponent(docId)}`),
                     fetch('/Scoreboard/api/current-game').then(r => r.status === 200 ? r.json() : null).catch(() => null)
                 ]);
                 if (!res.ok) throw new Error(res.status === 404 ? 'Game not found.' : `Error ${res.status}`);
@@ -41,7 +43,8 @@
                 const live = current?.id === id && isRecent(current);
                 if (json !== lastJson) {
                     lastJson = json;
-                    game = Stats.normalize(JSON.parse(json));
+                    game = Stats.gamesFromDoc(JSON.parse(json)).find(g => g.id === id);
+                    if (!game) throw new Error('Game not found.');
                     render(live);
                 }
                 loading.hidden = true;

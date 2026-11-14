@@ -673,4 +673,144 @@ public class ScoreboardTests : PageTest
         Assert.That(teams[0], Is.Not.EqualTo(teams[1]));
         Assert.That(teams.Count(c => c == '1'), Is.EqualTo(2));
     }
+
+    // Older versions kept adding to one saved game across weeks. Stats split it into nights,
+    // skip the tap-everything-back-to-zero wind-down, ignore a stray tap a week later,
+    // and leave tiny warm-up games out.
+    [Test]
+    public async Task StatsPage_OldSavedGames_SplitIntoNights()
+    {
+        var players = new[]
+        {
+            new { id = 1, name = "Amy", team = "1", active = true, points = 5 },
+            new { id = 2, name = "Ben", team = "2", active = true, points = 8 }
+        };
+        // Two nights in one document; night two starts by tapping the old scores back to 0
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-2026-04-02-cccc",
+            weekDate = "2026-04-16",
+            team1 = new { name = "BLACK", score = 5 },
+            team2 = new { name = "WHITE", score = 8 },
+            players,
+            events = new object[]
+            {
+                new { ts = "2026-04-02T18:01:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 12, 0 } },
+                new { ts = "2026-04-02T18:02:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 12, 10 } },
+                new { ts = "2026-04-02T18:30:00Z", type = "period_end", period = 1, scores = new[] { 12, 10 } },
+                new { ts = "2026-04-09T18:00:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "decrement", scores = new[] { 0, 10 } },
+                new { ts = "2026-04-09T18:00:01Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "decrement", scores = new[] { 0, 0 } },
+                new { ts = "2026-04-09T18:05:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 5, 0 } },
+                new { ts = "2026-04-09T18:06:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 5, 8 } },
+                new { ts = "2026-04-09T18:30:00Z", type = "period_end", period = 1, scores = new[] { 5, 8 } }
+            },
+            lastUpdated = "2026-04-16T18:00:00Z"
+        }));
+        // One night, then a single stray tap a week later
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-2026-03-05-dddd",
+            team1 = new { name = "BLACK", score = 20 },
+            team2 = new { name = "WHITE", score = 21 },
+            players,
+            events = new object[]
+            {
+                new { ts = "2026-03-05T18:01:00Z", type = "score", team = 1, action = "increment", scores = new[] { 21, 0 } },
+                new { ts = "2026-03-05T18:02:00Z", type = "score", team = 2, action = "increment", scores = new[] { 21, 21 } },
+                new { ts = "2026-03-12T17:00:00Z", type = "score", team = 1, action = "decrement", scores = new[] { 20, 21 } }
+            },
+            lastUpdated = "2026-03-12T17:00:00Z"
+        }));
+        // A warm-up
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-2026-03-05-eeee",
+            team1 = new { name = "BLACK", score = 3 },
+            team2 = new { name = "WHITE", score = 5 },
+            events = new object[] { new { ts = "2026-03-05T17:00:00Z", type = "score", team = 2, action = "increment", scores = new[] { 3, 5 } } },
+            lastUpdated = "2026-03-05T17:00:00Z"
+        }));
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#games");
+        var rows = Page.Locator(".game-row");
+        await Expect(rows).ToHaveCountAsync(3);
+        await Expect(rows.Nth(0)).ToContainTextAsync("Apr 9");
+        await Expect(rows.Nth(0).Locator(".score")).ToHaveTextAsync(new Regex(@"5\s*–\s*8"));
+        await Expect(rows.Nth(1)).ToContainTextAsync("Apr 2");
+        await Expect(rows.Nth(1).Locator(".score")).ToHaveTextAsync(new Regex(@"12\s*–\s*10"));
+        await Expect(rows.Nth(2)).ToContainTextAsync("Mar 5");
+        await Expect(rows.Nth(2).Locator(".score")).ToHaveTextAsync(new Regex(@"21\s*–\s*21"));
+        await Expect(Page.Locator(".note", new() { HasText = "Not counted" })).ToContainTextAsync("1 short game");
+
+        // The earlier night has its own page, with its own player points
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id=game-2026-04-02-cccc~1");
+        await Expect(Page.Locator(".hero")).ToContainTextAsync("12");
+        await Expect(Page.Locator("tr", new() { HasText = "Amy" }).First).ToContainTextAsync("12");
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id=game-2026-04-02-cccc");
+        await Expect(Page.Locator("tr", new() { HasText = "Ben" }).First).ToContainTextAsync("8");
+    }
+
+    // Whoever scores first on a new night gets a fresh game, without tapping New game
+    [Test]
+    public async Task StaleGame_FirstScoreOfTheNightStartsNewGame()
+    {
+        var lastWeek = DateTime.UtcNow.AddDays(-7).ToString("o");
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-old-night",
+            team1 = new { name = "BLACK", score = 30 },
+            team2 = new { name = "WHITE", score = 28 },
+            players = Array.Empty<object>(),
+            events = new object[] { new { ts = lastWeek, type = "score", team = 1, action = "increment", scores = new[] { 30, 28 } } },
+            lastUpdated = lastWeek
+        }));
+        _api.Docs["current-game"] = """{"gameId":"game-old-night"}""";
+
+        await _scoreboard.GotoAsync();
+        await Expect(_scoreboard.Team1Score).ToHaveTextAsync("30");
+        await Expect(_scoreboard.ScoreHistory).ToContainTextAsync("next score starts a new game");
+
+        // Taking points back doesn't touch last week's game
+        await _scoreboard.DecrementTeam1();
+        await Expect(_scoreboard.Team1Score).ToHaveTextAsync("30");
+
+        await _scoreboard.ClickTeam1Score();
+        await Expect(_scoreboard.Team1Score).ToHaveTextAsync("1");
+        await Expect(_scoreboard.Team2Score).ToHaveTextAsync("0");
+        await Expect(_scoreboard.ScoreHistory).Not.ToContainTextAsync("new game");
+
+        // The new game is saved and becomes the current game; last week's is untouched
+        for (var i = 0; i < 50 && (_api.Docs.GetValueOrDefault("current-game") ?? "").Contains("game-old-night"); i++)
+            await Task.Delay(200);
+        Assert.That(_api.Docs["current-game"], Does.Not.Contain("game-old-night"));
+        Assert.That(_api.Docs["games/game-old-night"], Does.Contain("\"score\":30"));
+    }
+
+    // A device's saved game whose id is already on the server, but with scores the server
+    // doesn't have, is uploaded as its own game instead of being dropped
+    [Test]
+    public async Task DeviceData_ConflictingGameIsKeptUnderNewId()
+    {
+        _api.AddGame("""{"id":"game-2026-04-03-ffff","team1":{"name":"BLACK","score":2},"team2":{"name":"WHITE","score":0},"events":[{"ts":"2026-04-03T01:00:00Z","type":"score","team":1,"scores":[2,0]}]}""");
+        await Page.EvaluateAsync("""
+            () => {
+                localStorage.setItem('currentGameId', 'game-2026-04-03-ffff');
+                localStorage.setItem('gameEvents', JSON.stringify([
+                    { ts: '2026-04-03T01:00:00Z', type: 'score', team: 1, scores: [2, 0] },
+                    { ts: '2026-05-15T01:00:00Z', type: 'score', team: 2, scores: [2, 7] }
+                ]));
+            }
+            """);
+        await _scoreboard.GotoAsync();
+
+        string DeviceCopy() => _api.Docs.Keys.FirstOrDefault(k => k.StartsWith("games/game-2026-04-03-ffff-device-")) ?? "";
+        for (var i = 0; i < 50 && DeviceCopy() == ""; i++)
+            await Task.Delay(200);
+        Assert.That(DeviceCopy(), Is.Not.Empty);
+        Assert.That(_api.Docs[DeviceCopy()], Does.Contain("2,7"));
+        Assert.That(_api.Docs["games/game-2026-04-03-ffff"], Does.Not.Contain("2,7"));
+        Assert.That(await Page.EvaluateAsync<string?>("() => localStorage.getItem('gameEvents')"), Is.Null);
+        Assert.That(await Page.EvaluateAsync<string?>("() => localStorage.getItem('oldDataBackup')"), Does.Contain("2,7"));
+    }
 }

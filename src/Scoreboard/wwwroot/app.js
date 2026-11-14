@@ -211,8 +211,19 @@ class ScoreboardApp {
         };
         const players = Array.isArray(read('playersList')) ? read('playersList') : [];
         const events = read('gameEvents') || read('scoreHistory');
-        const gameId = localStorage.getItem('currentGameId');
+        let gameId = localStorage.getItem('currentGameId');
         let ok = true;
+
+        // The server may already have a game with this id but not this device's copy of it
+        // (older versions kept adding to one game across weeks). Keep both: save ours under a new id.
+        if (Array.isArray(events) && events.length > 0 && gameId && /^[A-Za-z0-9_-]{1,80}$/.test(gameId)) {
+            const existing = await api.get(`games/${gameId}`);
+            const onServer = new Set((existing?.events || []).map(e => `${e.ts}|${e.type}`));
+            const hasMore = events.some(e => !onServer.has(`${e.ts}|${e.type}`));
+            if (existing && hasMore) {
+                gameId = `${gameId}-device-${Math.random().toString(36).slice(2, 6)}`;
+            }
+        }
 
         if (roster?.seeded && players.length > 0) {
             roster = {
@@ -247,7 +258,15 @@ class ScoreboardApp {
             }
         }
 
-        if (ok) keys.forEach(k => localStorage.removeItem(k));
+        if (ok) {
+            // Keep one untouched copy on the device in case anything above went wrong.
+            if (localStorage.getItem('oldDataBackup') === null) {
+                try {
+                    localStorage.setItem('oldDataBackup', JSON.stringify(Object.fromEntries(keys.map(k => [k, localStorage.getItem(k)]))));
+                } catch { /* storage full: the server copy is enough */ }
+            }
+            keys.forEach(k => localStorage.removeItem(k));
+        }
         return { roster, game };
     }
 
@@ -268,7 +287,9 @@ class ScoreboardApp {
 
     // Generate a unique game ID: date + random hex suffix
     generateGameId() {
-        const date = new Date().toISOString().split('T')[0];
+        // This device's calendar day: evening games in the US are already "tomorrow" in UTC
+        const now = new Date();
+        const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         const rand = Math.random().toString(16).slice(2, 6);
         return `game-${date}-${rand}`;
     }
@@ -313,6 +334,33 @@ class ScoreboardApp {
         };
     }
 
+    // When the last score is older than this, the game is from an earlier night.
+    // Matches SESSION_GAP_MS in stats-core.js.
+    static NEW_NIGHT_GAP_MS = 8 * 3600 * 1000;
+
+    // Time of the last thing recorded in the current game, or null.
+    lastEventTime() {
+        for (let i = this.events.length - 1; i >= 0; i--) {
+            const t = Date.parse(this.events[i].ts || '');
+            if (Number.isFinite(t)) return t;
+        }
+        return null;
+    }
+
+    // The game on screen was played on an earlier night.
+    isStale() {
+        const t = this.lastEventTime();
+        return t !== null && Date.now() - t >= ScoreboardApp.NEW_NIGHT_GAP_MS;
+    }
+
+    // First score of a new night: start a fresh game first, on whichever device scores,
+    // so weeks never pile up in one game. Returns true if it started one.
+    startNewNightIfStale() {
+        if (!this.isStale()) return false;
+        this.startNewGame();
+        return true;
+    }
+
     // Start a new game: the old game stays saved in history, scores reset
     startNewGame() {
         // Save the old game's final state under its own id before switching.
@@ -347,6 +395,7 @@ class ScoreboardApp {
 
     // Type in the score directly (team-only games). Returns false if nothing changed.
     setScores(team1, team2) {
+        this.startNewNightIfStale();
         if (team1 === this.teams.team1Points && team2 === this.teams.team2Points) return false;
         this.teams.team1Points = team1;
         this.teams.team2Points = team2;
@@ -368,6 +417,7 @@ class ScoreboardApp {
 
     // Capture score at end of timer
     captureScore() {
+        this.startNewNightIfStale();
         const period = this.periodScores.length + 1;
         this.periodScores.push(`${this.teams.team1Points} - ${this.teams.team2Points}`);
 
@@ -720,6 +770,7 @@ class Teams {
     }
 
     incrementScore(teamNumber) {
+        this.app.startNewNightIfStale();
         if (teamNumber == 1) {
             this.team1Points++;
         } else {
@@ -732,6 +783,7 @@ class Teams {
     }
 
     decrementScore(teamNumber) {
+        if (this.app.isStale()) return; // nothing to take back from tonight
         if (teamNumber == 1 && this.team1Points > 0) {
             this.team1Points--;
         } else if (teamNumber == 2 && this.team2Points > 0) {
@@ -1253,6 +1305,8 @@ class Players {
     changePlayerPoints(id, delta) {
         const player = this.find(id);
         if (!player || Players.statusOf(player) === 'out') return;
+        if (delta < 0 && this.app.isStale()) return;
+        this.app.startNewNightIfStale();
         if (delta < 0 && player.points <= 0) return;
 
         player.points += delta;
@@ -1468,6 +1522,15 @@ class UI {
 
     updateScoreHistory() {
         this.scoreHistoryElement.innerHTML = '';
+
+        // Last game is from an earlier night: say so, the next score starts a fresh one
+        if (this.app.isStale()) {
+            const note = document.createElement('span');
+            note.className = 'period-score stale-note';
+            const day = new Date(this.app.lastEventTime()).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            note.textContent = `Last game ${day} · next score starts a new game`;
+            this.scoreHistoryElement.appendChild(note);
+        }
 
         // Display each period score
         this.app.periodScores.forEach((score, index) => {

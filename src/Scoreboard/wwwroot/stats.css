@@ -61,6 +61,7 @@ body {
     margin-bottom: 10px;
 }
 .card .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.card .note a { color: inherit; }
 
 .loading, .error, .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
 .error { color: #c00; }
