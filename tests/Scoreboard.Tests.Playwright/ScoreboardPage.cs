@@ -245,6 +245,8 @@ public class ScoreboardPage
 
     public async Task<string> GetScoreFontSize()
     {
-        return await _page.Locator(".score").First.EvaluateAsync<string>("el => el.style.fontSize") ?? "";
+        // The slider sets a CSS variable that .score's font-size uses
+        return await _page.EvaluateAsync<string>(
+            "() => document.documentElement.style.getPropertyValue('--score-font-size')") ?? "";
     }
 }

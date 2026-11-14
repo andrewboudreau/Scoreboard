@@ -43,7 +43,7 @@ body {
     display: flex;
     justify-content: space-between;
     flex: 0 0 auto;
-    min-width: 500px;
+    min-width: min(500px, 100%);
 }
 
 .team-players-list {
@@ -162,7 +162,7 @@ body {
 }
 
 .score {
-    font-size: 10rem;
+    font-size: var(--score-font-size, 10rem);
     font-weight: bold;
     cursor: pointer;
     background: rgba(30, 30, 30, 0.85);
@@ -188,7 +188,7 @@ body {
 }
 
 .timer {
-    font-size: 14rem;
+    font-size: var(--timer-font-size, 14rem);
     font-weight: bold;
     cursor: pointer;
     background: radial-gradient(ellipse at center, rgba(15, 15, 15, 0.7) 0%, rgba(0, 0, 0, 0.5) 100%);
@@ -857,44 +857,206 @@ body {
     }
 }
 
-@media (max-width: 768px) {
+/* ---- Scoreboard on smaller screens ----
+   iPad landscape (the main setup) keeps the layout above: player lists down both sides,
+   scores and timer in the middle. Elsewhere the lists join the layout instead of floating
+   over it, and the font-size sliders become a maximum so nothing outgrows the screen. */
+
+/* Portrait (phones, iPad upright): scores, then the timer, then both teams side by side */
+@media (orientation: portrait) and (max-width: 1100px) {
+    body {
+        height: 100dvh;
+    }
+
+    .scoreboard {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-areas:
+            "scores scores"
+            "timer timer"
+            "p1 p2";
+        gap: 8px;
+        padding: calc(8px + env(safe-area-inset-top)) 8px calc(70px + env(safe-area-inset-bottom));
+        align-items: start;
+    }
+
+    /* Lists sit right under the timer and scroll inside their space when long */
+    .team-players-list {
+        max-height: 100%;
+    }
+
+    .scores-container { grid-area: scores; width: auto; }
+    .timer-container { grid-area: timer; width: auto; margin-top: 0; }
+    #team1-players-display { grid-area: p1; }
+    #team2-players-display { grid-area: p2; }
+
+    .scores {
+        min-width: 0;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .team { width: auto; flex: 1; min-width: 0; }
+
     .team-name {
-        font-size: 1.5rem;
+        font-size: clamp(1rem, 4.5vw, 2rem);
+        margin-bottom: 4px;
     }
 
     .score {
-        font-size: 5rem;
-        min-width: 120px;
-        padding: 10px 20px;
+        width: 100%;
+        min-width: 0;
+        padding: 4px 8px;
+        font-size: min(var(--score-font-size, 10rem), 28vw, 12vh);
+        line-height: 1.1;
     }
 
     .timer {
-        font-size: 6rem;
-        min-width: 280px;
-        padding: 10px 20px;
+        width: 100%;
+        min-width: 0;
+        padding: 4px 8px;
+        font-size: min(var(--timer-font-size, 14rem), 30vw, 13vh);
+        line-height: 1.1;
+    }
+
+    .score-history {
+        margin-top: 6px;
+        font-size: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .team-players-list {
+        position: static;
+        width: auto;
+        min-height: 0;
+        padding: 6px;
+    }
+
+    .control-buttons {
+        bottom: calc(10px + env(safe-area-inset-bottom));
+        right: 10px;
     }
 }
 
-/* Landscape mode for small screens (phones) */
+/* Phone on its side: teams down the left and right, scores + timer + buttons in the middle */
 @media (orientation: landscape) and (max-height: 600px) {
-    .scores-container {
-        flex-direction: column;
-        width: 60%;
+    body {
+        height: 100dvh;
     }
+
+    .scoreboard {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-areas:
+            "p1 scores p2"
+            "p1 timer p2"
+            "p1 . p2";
+        gap: 6px 8px;
+        padding: 6px max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+        align-items: start;
+    }
+
+    .team-players-list {
+        max-height: 100%;
+    }
+
+    .scores-container { grid-area: scores; width: auto; }
+    .timer-container { grid-area: timer; width: auto; margin-top: 0; }
+    #team1-players-display { grid-area: p1; }
+    #team2-players-display { grid-area: p2; }
 
     .scores {
-        flex-direction: column;
+        min-width: 0;
         width: 100%;
-        margin-bottom: 0;
+        gap: 8px;
     }
 
-    .team {
+    .team { width: auto; flex: 1; min-width: 0; }
+
+    .team-name {
+        font-size: 1rem;
+        margin-bottom: 2px;
+    }
+
+    .score {
         width: 100%;
-        margin-bottom: 20px;
+        min-width: 0;
+        padding: 2px 8px;
+        font-size: min(var(--score-font-size, 10rem), 20vh, 11vw);
+        line-height: 1.1;
     }
 
     .timer {
-        font-size: 8rem;
+        width: 100%;
+        min-width: 0;
+        padding: 2px 8px;
+        font-size: min(var(--timer-font-size, 14rem), 24vh, 12vw);
+        line-height: 1.1;
+    }
+
+    .score-history {
+        margin-top: 4px;
+        font-size: 0.9rem;
+        flex-wrap: wrap;
+    }
+
+    .team-players-list {
+        position: static;
+        width: auto;
+        min-height: 0;
+        padding: 6px;
+    }
+
+    /* Bottom of the middle column, clear of both team lists */
+    .control-buttons {
+        right: 50%;
+        transform: translateX(50%);
+        bottom: calc(8px + env(safe-area-inset-bottom));
+    }
+
+    #settings-panel {
+        bottom: 66px;
+    }
+}
+
+/* Compact player buttons wherever the lists sit in the layout: photo, name, points in one row */
+@media (orientation: portrait) and (max-width: 1100px), (orientation: landscape) and (max-height: 600px) {
+    .player-item-display {
+        gap: 8px;
+        padding: min(var(--player-button-padding, 15px), 10px) 8px;
+        margin-bottom: 6px;
+        min-height: 52px;
+    }
+
+    .player-identity {
+        flex-direction: row;
+        gap: 8px;
+    }
+
+    #team2-players-display .player-identity {
+        flex-direction: row-reverse;
+    }
+
+    .player-avatar,
+    .player-avatar-placeholder {
+        width: clamp(32px, 7vmin, 64px);
+        height: clamp(32px, 7vmin, 64px);
+        font-size: clamp(14px, 3vmin, 26px);
+    }
+
+    .player-name-display {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        font-size: clamp(0.9rem, 2.4vmin, 1.25rem);
+    }
+
+    .player-points-display {
+        min-width: 32px;
+        padding: 4px 6px;
+        font-size: 1.05em;
     }
 }
 

@@ -1562,17 +1562,16 @@ class UI {
         });
     }
 
+    // Font sizes are CSS variables, not inline styles, so on phones the layout can treat
+    // them as a maximum and shrink to fit (see "Scoreboard on smaller screens" in styles.css)
     updateScoreFontSize(value) {
-        const scoreElements = document.querySelectorAll('.score');
-        scoreElements.forEach(el => {
-            el.style.fontSize = `${value}rem`;
-        });
+        document.documentElement.style.setProperty('--score-font-size', `${value}rem`);
         document.getElementById('score-font-size-value').textContent = value;
         localStorage.setItem('scoreFontSize', value);
     }
 
     updateTimerFontSize(value) {
-        this.app.timer.timerDisplay.style.fontSize = `${value}rem`;
+        document.documentElement.style.setProperty('--timer-font-size', `${value}rem`);
         document.getElementById('timer-font-size-value').textContent = value;
         localStorage.setItem('timerFontSize', value);
     }
