@@ -937,6 +937,49 @@ public class ScoreboardTests : PageTest
         await Expect(Page.Locator("tr", new() { HasText = "Ben" }).First).ToContainTextAsync("8");
     }
 
+    // Seen on the iPad: a reset that wasn't logged, then player taps took the scores below zero,
+    // then team taps brought them back to 0-0. The night starts at that 0-0.
+    [Test]
+    public async Task StatsPage_NightAfterNegativeWindDown_StartsAtZero()
+    {
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-2026-08-21-ffff",
+            team1 = new { name = "BLACK", score = 4 },
+            team2 = new { name = "WHITE", score = 6 },
+            players = new[]
+            {
+                new { id = 1, name = "Amy", team = "1", active = true, points = 0 },
+                new { id = 2, name = "Ben", team = "2", active = true, points = 0 }
+            },
+            events = new object[]
+            {
+                new { ts = "2026-08-20T23:01:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 30, 0 } },
+                new { ts = "2026-08-20T23:02:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 30, 32 } },
+                new { ts = "2026-08-20T23:30:00Z", type = "period_end", period = 1, scores = new[] { 30, 32 } },
+                new { ts = "2026-08-27T23:00:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "decrement", scores = new[] { -3, 0 } },
+                new { ts = "2026-08-27T23:00:01Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "decrement", scores = new[] { -3, -2 } },
+                new { ts = "2026-08-27T23:00:05Z", type = "score", team = 1, action = "increment", scores = new[] { 0, -2 } },
+                new { ts = "2026-08-27T23:00:06Z", type = "score", team = 2, action = "increment", scores = new[] { 0, 0 } },
+                new { ts = "2026-08-27T23:05:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 4, 0 } },
+                new { ts = "2026-08-27T23:06:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 4, 6 } },
+                new { ts = "2026-08-27T23:30:00Z", type = "period_end", period = 1, scores = new[] { 4, 6 } }
+            },
+            lastUpdated = "2026-08-27T23:30:00Z"
+        }));
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#games");
+        var rows = Page.Locator(".game-row");
+        await Expect(rows).ToHaveCountAsync(2);
+        await Expect(rows.Nth(0)).ToContainTextAsync("Aug 27");
+        await Expect(rows.Nth(0).Locator(".score")).ToHaveTextAsync(new Regex(@"4\s*–\s*6"));
+        await Expect(rows.Nth(1)).ToContainTextAsync("Aug 20");
+        await Expect(rows.Nth(1).Locator(".score")).ToHaveTextAsync(new Regex(@"30\s*–\s*32"));
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id=game-2026-08-21-ffff");
+        await Expect(Page.Locator("tr", new() { HasText = "Ben" }).First).ToContainTextAsync("6");
+    }
+
     // Whoever scores first on a new night gets a fresh game, without tapping New game
     [Test]
     public async Task StaleGame_FirstScoreOfTheNightStartsNewGame()
