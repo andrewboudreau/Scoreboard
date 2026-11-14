@@ -1014,11 +1014,27 @@ body {
     box-shadow: 0 0 0 3px #1c7ed6, 0 0 0 200vmax rgba(0, 0, 0, 0.72);
 }
 
-#tour.tour-no-target .tour-spot { box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.72); }
+/* A soft pulse just outside the ring, so even a small button reads as "this one" */
+.tour-spot::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 14px;
+    animation: tour-pulse 1.4s ease-out infinite;
+}
 
-#tour.tour-moving .tour-spot,
+@keyframes tour-pulse {
+    from { box-shadow: 0 0 0 0 rgba(77, 171, 247, 0.85); }
+    to { box-shadow: 0 0 0 14px rgba(77, 171, 247, 0); }
+}
+
+#tour.tour-no-target .tour-spot { box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.72); }
+#tour.tour-no-target .tour-spot::after { display: none; }
+
+/* The spotlight jumps straight to each step (no glide), so it's never caught between targets;
+   only the card eases into place */
 #tour.tour-moving .tour-card {
-    transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+    transition: left 0.2s ease, top 0.2s ease;
 }
 
 .tour-card {
@@ -1111,6 +1127,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    #tour.tour-moving .tour-spot,
+    .tour-spot::after { animation: none; }
     #tour.tour-moving .tour-card { transition: none; }
 }

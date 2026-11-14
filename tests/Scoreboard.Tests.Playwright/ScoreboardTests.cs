@@ -715,18 +715,18 @@ public class ScoreboardTests : PageTest
 
         await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
         await Expect(_scoreboard.TourCard).ToBeVisibleAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 8");
         await Expect(_scoreboard.TourBackBtn).ToBeHiddenAsync();
         await Expect(Page).ToHaveURLAsync(PlainUrl);
 
         await _scoreboard.TourNextBtn.ClickAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 8");
         await Expect(_scoreboard.TourCard).ToContainTextAsync("All out");
         await _scoreboard.TourNextBtn.ClickAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("3 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("3 of 8");
         await Expect(_scoreboard.TourCard).ToContainTextAsync("BLACK / OUT / WHITE");
         await _scoreboard.TourBackBtn.ClickAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 8");
 
         await _scoreboard.TourSkipBtn.ClickAsync();
         await Expect(_scoreboard.Tour).ToHaveCountAsync(0);
@@ -743,7 +743,7 @@ public class ScoreboardTests : PageTest
         await _scoreboard.GotoAsync("?tour=1");
 
         await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 8");
         await Expect(Page).ToHaveURLAsync(PlainUrl);
     }
 
@@ -755,13 +755,13 @@ public class ScoreboardTests : PageTest
         await _scoreboard.GotoAsync("?players&tour");
         await Expect(_scoreboard.PlayerRows).ToHaveCountAsync(4);
 
-        for (var step = 1; step <= 9; step++)
+        for (var step = 1; step <= 8; step++)
         {
-            await Expect(_scoreboard.TourCount).ToHaveTextAsync($"{step} of 9");
+            await Expect(_scoreboard.TourCount).ToHaveTextAsync($"{step} of 8");
             // A tap on the dimmed page is swallowed: the panel stays open and the tour stays put
             await Page.Mouse.ClickAsync(3, 3);
             await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
-            if (step == 9) await Expect(_scoreboard.TourNextBtn).ToHaveTextAsync("Done");
+            if (step == 8) await Expect(_scoreboard.TourNextBtn).ToHaveTextAsync("Done");
             await _scoreboard.TourNextBtn.ClickAsync();
         }
 
@@ -782,11 +782,11 @@ public class ScoreboardTests : PageTest
         await _scoreboard.GotoAsync();
         await _scoreboard.OpenPlayers();
         await _scoreboard.TeamsHelpBtn.ClickAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 8");
 
         // Step 2 points at All out: the spotlight frames it and the card stays clear of it
         await _scoreboard.TourNextBtn.ClickAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 8");
         await Page.WaitForFunctionAsync("""
             () => {
                 const box = s => document.querySelector(s).getBoundingClientRect();
@@ -812,10 +812,10 @@ public class ScoreboardTests : PageTest
         await _scoreboard.TourNextBtn.ClickAsync();
         await _scoreboard.TourNextBtn.ClickAsync();
 
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("3 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("3 of 8");
         await Expect(_scoreboard.Tour).ToHaveClassAsync(new Regex(@"\btour-no-target\b"));
         await Expect(_scoreboard.TourCard).ToBeVisibleAsync();
         await _scoreboard.TourNextBtn.ClickAsync();
-        await Expect(_scoreboard.TourCount).ToHaveTextAsync("4 of 9");
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("4 of 8");
     }
 }

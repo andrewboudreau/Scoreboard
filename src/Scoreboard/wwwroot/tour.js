@@ -73,13 +73,7 @@
                 title: 'Fix a name, add a photo, remove a player',
                 body: '<b>Edit</b> switches to the player list: tap a name to rename it, tap the circle to add a photo, ' +
                     'or tap <b>Delete</b> twice to remove someone for good. Tap <b>Done</b> to come back.<br><br>' +
-                    'There’s also a direct link that opens straight into editing.'
-            },
-            {
-                target: '#teams-help-btn',
-                title: 'That’s it!',
-                body: 'Everything saves by itself, and everyone sees the same teams.<br><br>' +
-                    'Tap <b>?</b> any time to see this tour again.'
+                    'Everything saves by itself. Tap <b>?</b> any time to see this tour again.'
             }
         ];
     }
