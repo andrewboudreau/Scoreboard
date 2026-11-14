@@ -34,14 +34,14 @@ public static class PhotoBooth
     // Each prompt is appended to Identity, so every style keeps the person recognizable.
     public static readonly Style[] Styles =
     [
-        new("anime", "Anime", "modern anime character portrait, clean line art, cel shading, bright expressive eyes, simple soft gradient background."),
-        new("ghibli", "Ghibli vibes", "hand-painted anime film still, soft watercolor textures, warm gentle light, pastel colors, painted blue sky with fluffy clouds behind them."),
-        new("gangster", "Gangster", "classic mob movie boss portrait: pinstripe suit, fedora, gold chain, moody film-noir lighting, dark smoky background. Playful, not menacing."),
+        new("baller", "Basketball star", "pro basketball player game-day portrait: sleeveless jersey in plain colors, holding a basketball, bright arena lights and a blurred crowd behind them, sports photography look."),
+        new("retro", "Old-school baller", "1970s basketball legend portrait: terry-cloth headband, wristbands, retro jersey with stripes, warm faded film photo colors, old wooden gym behind them."),
+        new("card", "Trading card", "vintage 1980s basketball trading card portrait painting, airbrushed look, retro colors, gym background. No real team names or logos."),
+        new("bobblehead", "Bobblehead", "collectible sports bobblehead doll of them: oversized glossy painted head on a small body in a basketball uniform, on a little round base, clean studio backdrop."),
+        new("goth", "Goth", "dramatic goth portrait: black clothes, silver jewelry, dark eyeliner, moody purple and black lighting, gothic cathedral window behind them. Fun and stylish, not scary."),
         new("nerd", "Nerd", "affectionate nerd caricature: thick-rimmed glasses, sweater vest, pocket protector, bookshelf background, cartoon illustration style."),
         new("8bit", "8-bit", "8-bit pixel art sprite portrait, NES-style limited palette, big chunky pixels, plain solid background."),
-        new("16bit", "16-bit", "16-bit pixel art portrait, SNES-era detailed sprite shading, rich palette, plain background."),
         new("comic", "Comic book", "bold comic book cover art, heavy ink lines, halftone dots, dramatic colors, action burst background."),
-        new("card", "Trading card", "vintage 1980s basketball trading card portrait painting, airbrushed look, retro colors, gym background. No real team names or logos."),
         new("claymation", "Claymation", "stop-motion claymation figure, sculpted plasticine look with fingerprints, soft studio lighting, simple backdrop."),
     ];
 

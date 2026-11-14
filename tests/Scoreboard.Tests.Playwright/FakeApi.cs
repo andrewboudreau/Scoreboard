@@ -74,7 +74,7 @@ public partial class FakeApi
                 await Json(route, Docs.GetValueOrDefault("player-links") ?? """{"links":{}}""");
                 return;
             case "photo/config":
-                await Json(route, """{"ai":true,"reason":null,"styles":[{"id":"anime","label":"Anime"},{"id":"8bit","label":"8-bit"}],"remaining":10}""");
+                await Json(route, """{"ai":true,"reason":null,"styles":[{"id":"goth","label":"Goth"},{"id":"8bit","label":"8-bit"}],"remaining":10}""");
                 return;
             case "games":
                 var games = Docs.Where(d => GameKey().IsMatch(d.Key)).Select(d => d.Value);
