@@ -378,3 +378,21 @@ details summary { cursor: pointer; font-weight: 600; min-height: 32px; display: 
 .hero .roster { font-size: 13px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
 .hero .scoreline { align-items: flex-start; }
 .hero .dash { margin-top: 36px; }
+
+/* Same person? (player sheet) */
+.same-pick { display: flex; gap: 8px; margin-top: 8px; }
+.same-pick select {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    font: inherit;
+    font-size: 16px;
+    padding: 8px 10px;
+    border: 1px solid #d1d1d6;
+    border-radius: 12px;
+    background: #fff;
+    color: var(--text);
+}
+.btn:disabled { opacity: .5; cursor: default; }
+.check-list { display: flex; flex-wrap: wrap; gap: 0 14px; align-items: center; }
+.check-list .link-btn { min-height: 36px; padding: 4px 0; }

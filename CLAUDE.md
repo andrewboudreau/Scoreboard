@@ -63,6 +63,7 @@ All prefixed with `/Scoreboard/api/`:
 - `GET|PUT /current-game` - PUT `{gameId}` pointer; GET returns the game doc (204 if none)
 - `GET /games`, `GET|PUT /games/{id}` - game docs (events: `score`, `score_set`, `period_end`)
 - `GET|PUT /hidden-games` - `{ids}` of games removed from stats (test games, mistakes); reversible, game files stay
+- `GET|PUT /player-links` - `{links: {fromId: toId}}`: one person under two ids (each iPad used to keep its own player list); set from a player's stats page
 - `POST|GET /players/{id}/image` - player photos
 
 ### Data

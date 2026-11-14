@@ -118,6 +118,8 @@
             content.innerHTML = pages[tab]() + `<div class="footer"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
             bindPlayers(games);
             bindCharts();
+            document.querySelectorAll('#data-check [data-player]').forEach(b => b.addEventListener('click', () =>
+                openPlayer({ ...allTimeRow(b.dataset.player), impact: model.impact(b.dataset.player) }, allGames)));
         }
 
         // ---------------- Overview ----------------
@@ -390,9 +392,83 @@
                             </tr>`).join('')}
                         </tbody>
                     </table></div>
-                </div>`;
+                </div>
+                ${samePersonHtml(p)}`;
+            bindSamePerson(p);
             sheet.hidden = false;
             document.body.style.overflow = 'hidden';
+        }
+
+        // ---------------- One person, several ids ----------------
+        // Each iPad used to keep its own player list, so someone can show up twice. See Stats.linkPlayers.
+
+        const allTimeRow = id => Stats.players(allGames).find(r => r.id === id);
+        const gameIdsOf = id => new Set(allGames.filter(g => g.players.some(x => x.id === id)).map(g => g.id));
+
+        // Players who could be the same person: never in the same game
+        function sameCandidates(p) {
+            const mine = gameIdsOf(p.id);
+            return Stats.players(allGames)
+                .filter(r => r.id !== p.id && ![...gameIdsOf(r.id)].some(id => mine.has(id)))
+                .sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        function samePersonHtml(p) {
+            const me = allTimeRow(p.id) || p;
+            const sources = [...me.sources.values()];
+            const how = { name: 'same name, another iPad', link: 'linked', separate: 'kept separate' };
+            const action = s => s.how === 'name' ? 'Not the same' : s.how === 'link' || s.how === 'separate' ? 'Undo' : '';
+            const listed = sources.length > 1 || sources.some(s => how[s.how] || s.name !== me.name);
+            const candidates = sameCandidates(p);
+            const intro = me.onRoster
+                ? 'Played under another name or on another iPad? Pick that player and their games count here.'
+                : 'Not on the scoreboard’s player list, so probably from another iPad. If it’s someone on the list, pick them and these games count for them.';
+            return `
+                <div class="card same-person">
+                    <h2>Same person?</h2>
+                    ${listed ? sources.map(s => `
+                        <div class="list-link">
+                            <span>${esc(s.name)} <span class="dim">· ${s.gp} game${s.gp === 1 ? '' : 's'}${how[s.how] ? ` · ${how[s.how]}` : ''}</span></span>
+                            ${action(s) ? `<button class="link-btn" data-source="${esc(s.id)}" data-how="${s.how}">${action(s)}</button>` : ''}
+                        </div>`).join('') : ''}
+                    ${candidates.length ? `
+                    <div class="note">${intro}</div>
+                    <div class="same-pick">
+                        <select id="same-as" aria-label="Same person as">
+                            <option value="">Same person as…</option>
+                            ${candidates.map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${c.gp} game${c.gp === 1 ? '' : 's'}${c.onRoster ? '' : ' · not on the list'}</option>`).join('')}
+                        </select>
+                        <button class="btn" id="same-link" disabled>Link</button>
+                    </div>` : ''}
+                    <div class="note" id="same-status"></div>
+                </div>`;
+        }
+
+        function bindSamePerson(p) {
+            const status = document.getElementById('same-status');
+            const save = async changes => {
+                status.textContent = 'Saving…';
+                try {
+                    await Stats.setPlayerLinks(changes);
+                    status.textContent = 'Saved. Updating stats…';
+                    location.reload();
+                } catch (e) {
+                    status.textContent = e.message;
+                }
+            };
+            document.querySelectorAll('.same-person [data-source]').forEach(b => b.addEventListener('click', () =>
+                save({ [b.dataset.source]: b.dataset.how === 'name' ? b.dataset.source : null })));
+            const select = document.getElementById('same-as');
+            const link = document.getElementById('same-link');
+            if (!select) return;
+            select.addEventListener('change', () => link.disabled = !select.value);
+            link.addEventListener('click', () => {
+                const me = allTimeRow(p.id) || p, other = allTimeRow(select.value);
+                if (!other) return;
+                // Games move onto the player on the scoreboard's list
+                const [from, to] = me.onRoster && !other.onRoster ? [other, me] : [me, other];
+                save(Object.fromEntries([...from.sources.keys()].map(id => [id, to.id])));
+            });
         }
 
         function closeSheet() {
@@ -593,8 +669,33 @@
                 html += `<div class="card" id="removed-games"><div class="note">Removed from stats: ${hidden.map(g =>
                     `<a href="/Scoreboard/game?id=${encodeURIComponent(g.id)}">${esc(formatDate(g.date))} ${g.final[0]}–${g.final[1]}</a>`).join(' · ')}. Open one to put it back.</div></div>`;
             }
+            html += dataCheckHtml();
             html += `<div class="note center">Test game or a mistake? Open it and tap <b>Remove from stats</b>.</div>`;
             return html;
+        }
+
+        // Things worth a look as games come in: players that may be someone else under another id,
+        // and games where most points weren't credited to anyone. Uses every game, not just the range.
+        function dataCheckHtml() {
+            const rows = Stats.players(allGames);
+            const norm = s => s.trim().toLowerCase();
+            const sameName = rows.filter(r => rows.some(o => o !== r && norm(o.name) === norm(r.name)));
+            const offList = roster?.players?.length ? rows.filter(r => !r.onRoster && !sameName.includes(r)) : [];
+            const partial = allGames.filter(g => g.partial);
+            if (!sameName.length && !offList.length && !partial.length) return '';
+            const who = r => `<span><button class="link-btn" data-player="${esc(r.id)}">${esc(r.name)}</button> <span class="dim">${r.gp}g</span></span>`;
+            return `
+                <div class="card" id="data-check">
+                    <h2>Check the data</h2>
+                    ${sameName.length ? `<div class="subhead">Same name, different player</div>
+                        <div class="check-list">${sameName.sort((a, b) => a.name.localeCompare(b.name)).map(who).join('')}</div>
+                        <div class="note">Usually one person from two iPads. Tap one, then pick <b>Same person as…</b>. If they really are two people, rename one in the Teams panel.</div>` : ''}
+                    ${offList.length ? `<div class="subhead">Not on the player list</div>
+                        <div class="check-list">${offList.sort((a, b) => a.name.localeCompare(b.name)).map(who).join('')}</div>
+                        <div class="note">Played on another iPad, or since removed. If one is someone on the list under another name, tap them and pick <b>Same person as…</b>.</div>` : ''}
+                    ${partial.length ? `<div class="subhead">Few points credited to players</div>
+                        <div class="note" style="margin-top:0">${partial.map(g => `<a href="/Scoreboard/game?id=${encodeURIComponent(g.id)}">${esc(formatDate(g.date))}</a>`).join(' · ')}: counted as team-score games, so they don’t add to anyone’s points.</div>` : ''}
+                </div>`;
         }
     </script>
 </body>

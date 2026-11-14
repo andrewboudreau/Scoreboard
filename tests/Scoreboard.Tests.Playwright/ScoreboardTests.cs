@@ -939,13 +939,14 @@ public class ScoreboardTests : PageTest
 
     // Seen on the iPad: a reset that wasn't logged, then player taps took the scores below zero,
     // then team taps brought them back to 0-0. The night starts at that 0-0.
+    // Or just a reset that wasn't logged: the first basket of the night (0-1) still counts.
     [Test]
     public async Task StatsPage_NightAfterNegativeWindDown_StartsAtZero()
     {
         _api.AddGame(JsonSerializer.Serialize(new
         {
             id = "game-2026-08-21-ffff",
-            team1 = new { name = "BLACK", score = 4 },
+            team1 = new { name = "BLACK", score = 5 },
             team2 = new { name = "WHITE", score = 6 },
             players = new[]
             {
@@ -963,21 +964,85 @@ public class ScoreboardTests : PageTest
                 new { ts = "2026-08-27T23:00:06Z", type = "score", team = 2, action = "increment", scores = new[] { 0, 0 } },
                 new { ts = "2026-08-27T23:05:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 4, 0 } },
                 new { ts = "2026-08-27T23:06:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 4, 6 } },
-                new { ts = "2026-08-27T23:30:00Z", type = "period_end", period = 1, scores = new[] { 4, 6 } }
+                new { ts = "2026-08-27T23:30:00Z", type = "period_end", period = 1, scores = new[] { 4, 6 } },
+                new { ts = "2026-09-03T23:01:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 0, 1 } },
+                new { ts = "2026-09-03T23:02:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 5, 1 } },
+                new { ts = "2026-09-03T23:03:00Z", type = "score", team = 2, playerId = 2, player = "Ben", action = "increment", scores = new[] { 5, 6 } },
+                new { ts = "2026-09-03T23:30:00Z", type = "period_end", period = 1, scores = new[] { 5, 6 } }
             },
-            lastUpdated = "2026-08-27T23:30:00Z"
+            lastUpdated = "2026-09-03T23:30:00Z"
         }));
 
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#games");
         var rows = Page.Locator(".game-row");
-        await Expect(rows).ToHaveCountAsync(2);
-        await Expect(rows.Nth(0)).ToContainTextAsync("Aug 27");
-        await Expect(rows.Nth(0).Locator(".score")).ToHaveTextAsync(new Regex(@"4\s*–\s*6"));
-        await Expect(rows.Nth(1)).ToContainTextAsync("Aug 20");
-        await Expect(rows.Nth(1).Locator(".score")).ToHaveTextAsync(new Regex(@"30\s*–\s*32"));
+        await Expect(rows).ToHaveCountAsync(3);
+        await Expect(rows.Nth(0)).ToContainTextAsync("Sep 3");
+        await Expect(rows.Nth(0).Locator(".score")).ToHaveTextAsync(new Regex(@"5\s*–\s*6"));
+        await Expect(rows.Nth(1)).ToContainTextAsync("Aug 27");
+        await Expect(rows.Nth(1).Locator(".score")).ToHaveTextAsync(new Regex(@"4\s*–\s*6"));
+        await Expect(rows.Nth(2)).ToContainTextAsync("Aug 20");
+        await Expect(rows.Nth(2).Locator(".score")).ToHaveTextAsync(new Regex(@"30\s*–\s*32"));
 
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id=game-2026-08-21-ffff~2");
+        await Expect(Page.Locator("tr", new() { HasText = "Ben" }).First).ToContainTextAsync("6");
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id=game-2026-08-21-ffff");
         await Expect(Page.Locator("tr", new() { HasText = "Ben" }).First).ToContainTextAsync("6");
+    }
+
+    // Each iPad kept its own player list, so one person can have two ids. Same name as a roster
+    // player counts as them; anyone else can be linked by hand from their stats page.
+    [Test]
+    public async Task StatsPlayers_SamePersonFromAnotherIpad_CountsOnce()
+    {
+        _api.Docs["roster"] = JsonSerializer.Serialize(new
+        {
+            team1Name = "BLACK",
+            team2Name = "WHITE",
+            players = new[]
+            {
+                new { id = 10, name = "Amy", team = "1", active = true },
+                new { id = 20, name = "Ben", team = "2", active = true }
+            }
+        });
+        object Game(string id, string date, int amyId, int benId, string benName) => new
+        {
+            id,
+            team1 = new { name = "BLACK", score = 6 },
+            team2 = new { name = "WHITE", score = 5 },
+            players = new[]
+            {
+                new { id = amyId, name = "Amy", team = "1", active = true, points = 6 },
+                new { id = benId, name = benName, team = "2", active = true, points = 5 }
+            },
+            events = new object[]
+            {
+                new { ts = $"{date}T23:01:00Z", type = "score", team = 1, playerId = amyId, player = "Amy", action = "increment", scores = new[] { 6, 0 } },
+                new { ts = $"{date}T23:02:00Z", type = "score", team = 2, playerId = benId, player = benName, action = "increment", scores = new[] { 6, 5 } }
+            },
+            lastUpdated = $"{date}T23:30:00Z"
+        };
+        _api.AddGame(JsonSerializer.Serialize(Game("game-2026-03-05-aaaa", "2026-03-05", 10, 20, "Ben")));
+        _api.AddGame(JsonSerializer.Serialize(Game("game-2026-09-03-bbbb", "2026-09-03", 11, 21, "Benny")));
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#players");
+        var table = Page.Locator("#players-table");
+        var gp = (string name) => table.Locator("tr.clickable", new() { Has = Page.Locator("td.name", new() { HasTextRegex = new Regex($"^{name}$") }) }).Locator("td").Nth(1);
+        await Expect(gp("Amy")).ToHaveTextAsync("2");
+        await Expect(gp("Ben")).ToHaveTextAsync("1");
+        await Expect(gp("Benny")).ToHaveTextAsync("1");
+
+        await Page.Locator("#tabs button[data-tab=games]").ClickAsync();
+        await Expect(Page.Locator("#data-check")).ToContainTextAsync("Benny");
+
+        await Page.Locator("#data-check [data-player]", new() { HasText = "Benny" }).ClickAsync();
+        await Page.Locator("#same-as").SelectOptionAsync(new SelectOptionValue { Label = "Ben · 1 game" });
+        await Page.Locator("#same-link").ClickAsync();
+        await Expect(Page.Locator("#sheet")).ToBeHiddenAsync(); // the page reloads after saving
+
+        Assert.That(_api.Docs["player-links"], Does.Contain("\"21\":\"20\""));
+        await Page.Locator("#tabs button[data-tab=players]").ClickAsync();
+        await Expect(gp("Ben")).ToHaveTextAsync("2");
+        await Expect(table.Locator("td.name", new() { HasTextRegex = new Regex("^Benny$") })).ToHaveCountAsync(0);
     }
 
     // Whoever scores first on a new night gets a fresh game, without tapping New game
