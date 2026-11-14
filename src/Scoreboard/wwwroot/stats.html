@@ -97,9 +97,8 @@
             return allGames;
         }
 
-        // Team names as stored on the latest game (they're BLACK and WHITE)
         function teamNames() {
-            return allGames[0]?.names || ['BLACK', 'WHITE'];
+            return ['BLACK', 'WHITE'];
         }
 
         function rangeLabel() {
@@ -180,9 +179,35 @@
                             <span class="dim">${formatDate(c.game.date)} · ${c.game.final[0]}–${c.game.final[1]}</span>
                         </a>`).join('')}
                 </div>` : ''}
-                ${tracked < games.length ? `<div class="card note" style="margin-top:0">
+                ${streaksHtml(s, n1, n2)}
+                ${s.otherNames.length ? `
+                <div class="card">
+                    <h2>Team names</h2>
+                    <div class="note" style="margin-top:0">Teams are always shown as ${esc(n1)} and ${esc(n2)}. Other names typed on the scoreboard:</div>
+                    ${s.otherNames.map(o => `
+                        <a href="/Scoreboard/game?id=${encodeURIComponent(o.last.id)}" class="list-link">
+                            <span>${teamChip(o.team, o.team === 1 ? n1 : n2)} as “${esc(o.name)}”</span>
+                            <span class="dim">${o.games} game${o.games === 1 ? '' : 's'} · last ${formatDate(o.last.date)}</span>
+                        </a>`).join('')}
+                </div>` : ''}
+                ${tracked < games.length ? `<div class="card"><div class="note" style="margin-top:0">
                     Player points were tracked in ${tracked} of ${games.length} games. Team results, records and +/- use every game; points per game only use the tracked ones.
-                </div>` : ''}`;
+                </div></div>` : ''}`;
+        }
+
+        function streaksHtml(s, n1, n2) {
+            if (!s.longest[0] && !s.longest[1]) return '';
+            const row = (t, name) => {
+                const l = s.longest[t - 1];
+                if (!l) return `<div class="list-link"><span>${teamChip(t, name)}</span><span class="dim">no wins yet</span></div>`;
+                const when = l.count === 1 ? formatDate(l.from.date) : `${formatDate(l.from.date)} – ${formatDate(l.to.date)}`;
+                return `<div class="list-link"><span>${teamChip(t, name)} ${l.count} straight</span><span class="dim">${when}</span></div>`;
+            };
+            return `
+                <div class="card">
+                    <h2>Longest win streak</h2>
+                    ${row(1, n1)}${row(2, n2)}
+                </div>`;
         }
 
         function quartersHtml(games) {
@@ -242,6 +267,7 @@
             { key: 'winPct', label: 'Win%', fmt: r => Math.round(r.winPct * 100) },
             { key: 'avgPlusMinus', label: '+/-', fmt: r => signed(r.avgPlusMinus, 1) },
             { key: 'impact', label: 'Impact', fmt: r => signed(r.impact, 1) },
+            { key: 'points', label: 'Pts', fmt: r => r.trackedGp ? `${r.points}${r.trackedGp < r.gp ? `<span class="dim small"> in ${r.trackedGp}</span>` : ''}` : '<span class="dim">–</span>', value: r => r.trackedGp ? r.points : -1 },
             { key: 'ppg', label: 'PPG', fmt: r => r.ppg === null ? '<span class="dim">–</span>' : r.ppg.toFixed(1) },
             { key: 'high', label: 'High', fmt: r => r.high ? r.high.points : '<span class="dim">–</span>', value: r => r.high?.points ?? -1 }
         ];
@@ -270,7 +296,7 @@
                         <thead><tr>${COLUMNS.map(c => `<th class="sortable${sort.key === c.key ? ' sorted' : ''}" data-key="${c.key}">${c.label}${sort.key === c.key ? (sort.desc ? ' ▾' : ' ▴') : ''}</th>`).join('')}</tr></thead>
                         <tbody>${rows.map(r => `<tr class="clickable" data-id="${esc(r.id)}">${COLUMNS.map(c => `<td class="${c.cls || ''}">${c.fmt(r)}</td>`).join('')}</tr>`).join('')}</tbody>
                     </table></div>
-                    <div class="note">GP, W-L, Win% and +/- (team's average margin) count every game played. Impact is the model's estimate of how many points a player adds to their team's margin, using every game (see Insights). PPG and High only count games where player points were tracked. Tap a player for more.</div>
+                    <div class="note">GP, W-L, Win% and +/- (team's average margin) count every game played. Impact is the model's estimate of how many points a player adds to their team's margin, using every game (see Insights). Pts, PPG and High only count games where player points were tracked (“in 6” = points from 6 tracked games). Tap a player for more.</div>
                 </div>
                 ${attendanceHtml(games)}`;
         }
@@ -544,7 +570,7 @@
                     <a class="game-row" href="/Scoreboard/game?id=${encodeURIComponent(g.id)}">
                         <div class="top">
                             <span class="date">${formatDate(g.date)}</span>
-                            ${g.tracked ? '<span class="badge">Player stats</span>' : '<span class="badge team-only">Team scores</span>'}
+                            ${g.tracked ? '<span class="badge">Player stats</span>' : g.partial ? '<span class="badge team-only">Team scores · some players</span>' : '<span class="badge team-only">Team scores</span>'}
                         </div>
                         <div class="score">
                             ${teamChip(1, g.names[0])}<span class="n ${cls(1)}">${g.final[0]}</span>

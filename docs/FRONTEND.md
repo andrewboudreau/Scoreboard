@@ -200,8 +200,10 @@ Breakpoints: ≤ 768px shrinks scores/timer; landscape with height ≤ 600px sta
 
 - `Stats.normalize(raw)` turns any stored game into one shape: `date`, `names`, `final`, `winner`, `margin`, `quarters` (per-quarter points and cumulative totals, from `period_end` events or `periodScores`), `unfinished` (score moved after the last quarter), `players` (in, on a team), `tracked`, `coverage`, `unattributed` (per-team points not credited to a player), `scoreEvents`.
   It handles **fully tracked** games (every basket credited), **partially tracked** games (some points uncredited), and **team-only** games (just quarter scores; `tracked` is false).
+  A game counts as `tracked` only when at least half its points are credited to players; below that it is `partial` and season player stats skip it. If `players[].points` are all zero, points are rebuilt from credited `score` events.
+  `names` is always `['BLACK', 'WHITE']`; whatever was typed is kept in `recordedNames` and listed in the Overview's **Team names** card.
 - `Stats.loadGames()` fetches `/Scoreboard/api/games`, normalizes, drops unplayed games (`isPlayed`), sorts newest first.
-- `summarize(games)`: wins, ties, points, closest/biggest game, current streak, comebacks (won after trailing at half), per-quarter averages and quarters won.
+- `summarize(games)`: wins, ties, points, closest/biggest game, current and longest win streaks, other team names typed, comebacks (won after trailing at half), per-quarter averages and quarters won.
 - `players(games)`: per player GP, W-L-T, win %, average +/- (team margin) from every game; PPG and high only from tracked games; a per-game log.
 - `flow(g)`: lead changes, ties, biggest lead per team. `chartSvg(g)`: score-over-time SVG (per event, or per quarter for team-only games).
 - Helpers: `esc`, `formatDate`, `formatTime`, `signed`, `teamChip`, `shareText`, `share`.

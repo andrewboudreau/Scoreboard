@@ -22,6 +22,25 @@ const Stats = (() => {
         });
     }
 
+    const TRACKED_COVERAGE = 0.5;
+
+    // Points per player id from credited score events (each event carries the running score).
+    function eventPoints(events) {
+        const pts = new Map();
+        let prev = [0, 0];
+        for (const e of events) {
+            if (!Array.isArray(e.scores)) continue;
+            const now = [num(e.scores[0]), num(e.scores[1])];
+            const t = Number(e.team);
+            if (e.type === 'score' && e.playerId != null && (t === 1 || t === 2)) {
+                const key = String(e.playerId);
+                pts.set(key, (pts.get(key) || 0) + now[t - 1] - prev[t - 1]);
+            }
+            prev = now;
+        }
+        return pts;
+    }
+
     // Turn a stored game document into one shape the pages can rely on.
     function normalize(raw) {
         const events = Array.isArray(raw.events) ? raw.events : [];
@@ -42,14 +61,25 @@ const Stats = (() => {
             .filter(p => p && p.active !== false && (p.team === '1' || p.team === '2'))
             .map(p => ({ id: p.id ?? p.name, name: p.name || '?', team: p.team === '1' ? 1 : 2, points: num(p.points) }));
 
+        // Some saved games have zeroed players[].points but credited score events; fall back to those.
+        if (!players.some(p => p.points > 0)) {
+            const fromEvents = eventPoints(events);
+            for (const p of players) p.points = Math.max(0, fromEvents.get(String(p.id)) || 0);
+        }
+
         const attributed = players.reduce((s, p) => s + p.points, 0);
         const total = final[0] + final[1];
-        const tracked = attributed > 0 || events.some(e => e.type === 'score' && e.playerId);
+        const coverage = total ? Math.min(1, attributed / total) : 0;
+        // Player stats only count games where most of the points were credited to someone.
+        // A game with a basket or two credited is really a team-scores game.
+        const tracked = coverage >= TRACKED_COVERAGE;
 
         return {
             id: raw.id,
             date,
-            names: [raw.team1?.name || 'BLACK', raw.team2?.name || 'WHITE'],
+            // Always BLACK and WHITE; whatever was typed is kept for the team-name history.
+            names: ['BLACK', 'WHITE'],
+            recordedNames: [String(raw.team1?.name || 'BLACK').trim(), String(raw.team2?.name || 'WHITE').trim()],
             final,
             winner: final[0] > final[1] ? 1 : final[1] > final[0] ? 2 : 0,
             margin: Math.abs(final[0] - final[1]),
@@ -57,7 +87,8 @@ const Stats = (() => {
             unfinished,
             players,
             tracked,
-            coverage: total ? Math.min(1, attributed / total) : 0,
+            partial: !tracked && attributed > 0,
+            coverage,
             unattributed: [
                 Math.max(0, final[0] - players.filter(p => p.team === 1).reduce((s, p) => s + p.points, 0)),
                 Math.max(0, final[1] - players.filter(p => p.team === 2).reduce((s, p) => s + p.points, 0))
@@ -99,6 +130,7 @@ const Stats = (() => {
             closest: null, biggest: null,
             streak: { team: 0, count: 0 },
             comebacks: [],
+            otherNames: [], // names typed for a team other than BLACK/WHITE: { team, name, games, last }
             quarters: [] // per quarter index: { games, points: [a,b], won: [a,b] }
         };
 
@@ -113,7 +145,15 @@ const Stats = (() => {
             s.streak = { team, count };
         }
 
+        const otherNames = new Map();
         for (const g of games) {
+            g.recordedNames.forEach((name, i) => {
+                if (!name || name.toUpperCase() === g.names[i]) return;
+                const key = `${i + 1}:${name.toUpperCase()}`;
+                const row = otherNames.get(key) || { team: i + 1, name, games: 0, last: g };
+                row.games++;
+                otherNames.set(key, row);
+            });
             if (g.winner) s.wins[g.winner - 1]++; else s.ties++;
             s.points[0] += g.final[0];
             s.points[1] += g.final[1];
@@ -137,6 +177,16 @@ const Stats = (() => {
                 else if (q.points[1] > q.points[0]) row.won[1]++;
             });
         }
+        // Longest win streak per team (oldest to newest; a tie breaks it)
+        s.longest = [null, null];
+        let run = null;
+        for (const g of [...games].reverse()) {
+            if (run && g.winner === run.team) { run.count++; run.to = g; }
+            else run = g.winner ? { team: g.winner, count: 1, from: g, to: g } : null;
+            if (run && (!s.longest[run.team - 1] || run.count > s.longest[run.team - 1].count)) s.longest[run.team - 1] = { ...run };
+        }
+
+        s.otherNames = [...otherNames.values()].sort((a, b) => a.team - b.team || b.games - a.games);
         return s;
     }
 
