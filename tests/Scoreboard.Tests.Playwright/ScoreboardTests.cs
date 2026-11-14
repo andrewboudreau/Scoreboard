@@ -696,6 +696,61 @@ public class ScoreboardTests : PageTest
     }
 
     [Test]
+    public async Task PhotoPage_PickNameCropStyleAndSave()
+    {
+        _api.Docs["roster"] = """
+            {"team1Name":"BLACK","team2Name":"WHITE","players":[
+              {"id":1,"name":"Zed","team":"1"},{"id":2,"name":"Amy","team":"2"}]}
+            """;
+        await Page.SetViewportSizeAsync(390, 844);
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/photo");
+
+        // Names are sorted and searchable
+        await Expect(Page.Locator(".person .name")).ToHaveTextAsync(["Amy", "Zed"]);
+        await Page.Locator("#search").FillAsync("ze");
+        await Expect(Page.Locator(".person")).ToHaveCountAsync(1);
+        await Page.Locator(".person").ClickAsync();
+        await Expect(Page.Locator("#me-pick")).ToContainTextAsync("Zed");
+
+        // A wide photo, made in the browser
+        var png = await Page.EvaluateAsync<string>("""
+            () => { const c = document.createElement('canvas'); c.width = 600; c.height = 300;
+                    const x = c.getContext('2d'); x.fillStyle = '#c00'; x.fillRect(0, 0, 300, 300);
+                    x.fillStyle = '#00c'; x.fillRect(300, 0, 300, 300);
+                    return c.toDataURL('image/png').split(',')[1]; }
+            """);
+        await Page.Locator("#file").SetInputFilesAsync(new FilePayload
+        {
+            Name = "me.png", MimeType = "image/png", Buffer = Convert.FromBase64String(png)
+        });
+        await Expect(Page.Locator("#step-crop")).ToBeVisibleAsync();
+
+        // Zoom in, then drag
+        await Page.Locator("#zoom").FillAsync("2");
+        var box = (await Page.Locator("#stage").BoundingBoxAsync())!;
+        await Page.Mouse.MoveAsync(box.X + box.Width / 2, box.Y + box.Height / 2);
+        await Page.Mouse.DownAsync();
+        await Page.Mouse.MoveAsync(box.X + box.Width / 2 + 60, box.Y + box.Height / 2, new() { Steps = 5 });
+        await Page.Mouse.UpAsync();
+        await Page.Locator("#crop-done").ClickAsync();
+
+        // Styles from the server; the fake hands the photo back
+        await Expect(Page.Locator(".style-chip")).ToHaveTextAsync(["Original", "Anime", "8-bit"]);
+        await Page.Locator(".style-chip", new() { HasText = "Anime" }).ClickAsync();
+        await Expect(Page.Locator(".style-chip.selected")).ToHaveTextAsync("Anime");
+        await Expect(Page.Locator("#remaining")).ToContainTextAsync("9 AI tries left");
+        var stylize = JsonDocument.Parse(_api.Docs["photo/stylize"]).RootElement;
+        Assert.That(stylize.GetProperty("playerId").GetInt64(), Is.EqualTo(1));
+        Assert.That(stylize.GetProperty("device").GetString(), Is.Not.Empty);
+
+        await Page.Locator("#save").ClickAsync();
+        await Expect(Page.Locator("#done-title")).ToHaveTextAsync("Looking good, Zed!");
+        var save = JsonDocument.Parse(_api.Docs["photo/save"]).RootElement;
+        Assert.That(save.GetProperty("style").GetString(), Is.EqualTo("anime"));
+        Assert.That(save.GetProperty("image").GetString(), Does.StartWith("data:image/jpeg;base64,"));
+    }
+
+    [Test]
     public async Task TeamsPanel_BalanceSplitsTheStrongPair()
     {
         SeedLopsidedHistory();

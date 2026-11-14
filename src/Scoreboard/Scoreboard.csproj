@@ -19,7 +19,7 @@
 		<PackageReference Include="SharedTools.Web" Version="3.0.0" ExcludeAssets="runtime" PrivateAssets="all" />
 
 		<PackageReference Include="Azure.Storage.Blobs" Version="12.28.0-beta.1" />
-		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+		<PackageReference Include="SixLabors.ImageSharp" Version="3.2.0" />
 	</ItemGroup>
 
 	<!-- wwwroot ships as files in the drop; the host serves it at /_content/Scoreboard/. -->
