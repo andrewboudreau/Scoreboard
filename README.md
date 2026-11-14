@@ -150,8 +150,8 @@ set SCOREBOARD_BASE_URL=http://localhost:5227  # different host
 
 ## Deploying
 
-- Pushes to `master` bump the patch version in `Directory.Build.props` (`ci.yml`); `/Scoreboard/api/info` reports it.
-- `./deploy.ps1` publishes `src/Scoreboard` to `out/`, zips it, uploads it to the module host (default https://modules.blogfor.net, id `scoreboard`) and waits until the host reports the drop as loaded. A drop that fails to load is rolled back to the previous one.
+- Pushes to `master` bump the patch version in `Directory.Build.props`, then deploy the bumped commit with `deploy.ps1` (`ci.yml`); `/Scoreboard/api/info` reports the version. The deploy job uses the `production` environment, whose `MODULE_UPLOAD_KEY` secret is only available to `master`.
+- `./deploy.ps1` can also be run locally to deploy the working tree. It publishes `src/Scoreboard` to `out/`, zips it, uploads it to the module host (default https://modules.blogfor.net, id `scoreboard`) and waits until the host reports the drop as loaded. A drop that fails to load is rolled back to the previous one.
 - The upload key is `MODULE_UPLOAD_KEY`, from the environment or a gitignored `.env` at the repo root. It lets the holder run code on the host: never commit or share it.
 - The module is no longer published to NuGet.org.
 
