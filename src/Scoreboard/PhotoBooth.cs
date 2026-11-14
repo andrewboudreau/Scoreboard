@@ -1,0 +1,415 @@
+using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+using Scoreboard.Services;
+
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
+
+namespace SharedTools.Scoreboard;
+
+/// <summary>
+/// The photo page (/Scoreboard/photo): friends pick their name, crop a photo, optionally run it
+/// through an AI style, and save it as their scoreboard avatar.
+///   GET  /api/photo/config   which styles are available to this phone, tries left today
+///   POST /api/photo/stylize  cropped photo + style -> styled photo (OpenAI image edit; key stays here)
+///   POST /api/photo/save     cropped (maybe styled) photo -> players/{id}.png + roster imageUrl
+///   GET  /api/photo/usage    who used it and how much (X-Admin-Key)
+///   POST /api/photo/block    block or unblock a phone or IP (X-Admin-Key)
+/// </summary>
+public static class PhotoBooth
+{
+    public sealed record Style(string Id, string Label, string Prompt);
+
+    // Each prompt is appended to Identity, so every style keeps the person recognizable.
+    public static readonly Style[] Styles =
+    [
+        new("anime", "Anime", "modern anime character portrait, clean line art, cel shading, bright expressive eyes, simple soft gradient background."),
+        new("ghibli", "Ghibli vibes", "hand-painted anime film still, soft watercolor textures, warm gentle light, pastel colors, painted blue sky with fluffy clouds behind them."),
+        new("gangster", "Gangster", "classic mob movie boss portrait: pinstripe suit, fedora, gold chain, moody film-noir lighting, dark smoky background. Playful, not menacing."),
+        new("nerd", "Nerd", "affectionate nerd caricature: thick-rimmed glasses, sweater vest, pocket protector, bookshelf background, cartoon illustration style."),
+        new("8bit", "8-bit", "8-bit pixel art sprite portrait, NES-style limited palette, big chunky pixels, plain solid background."),
+        new("16bit", "16-bit", "16-bit pixel art portrait, SNES-era detailed sprite shading, rich palette, plain background."),
+        new("comic", "Comic book", "bold comic book cover art, heavy ink lines, halftone dots, dramatic colors, action burst background."),
+        new("card", "Trading card", "vintage 1980s basketball trading card portrait painting, airbrushed look, retro colors, gym background. No real team names or logos."),
+        new("claymation", "Claymation", "stop-motion claymation figure, sculpted plasticine look with fingerprints, soft studio lighting, simple backdrop."),
+    ];
+
+    private const string Identity =
+        "Restyle the person in this photo. Keep them recognizable to their friends: same face shape, hairstyle, " +
+        "skin tone, facial hair, glasses and expression. Square head-and-shoulders portrait with the face centered " +
+        "and filling most of the frame, so it reads well as a small round avatar. No text, no logos, no watermarks. Style: ";
+
+    private const int MaxImageChars = 8 * 1024 * 1024;
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(3) };
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+
+    public static void Map(WebApplication app)
+    {
+        var api = app.MapGroup("/Scoreboard/api/photo");
+        api.MapGet("/config", Config);
+        api.MapPost("/stylize", Stylize).DisableAntiforgery();
+        api.MapPost("/save", Save).DisableAntiforgery();
+        api.MapGet("/usage", Usage);
+        api.MapPost("/block", Block).DisableAntiforgery();
+    }
+
+    public sealed record StylizeRequest(long PlayerId, string? Style, string? Image, string? Device, string? Code);
+    public sealed record SaveRequest(long PlayerId, string? Style, string? Image, string? Device);
+    public sealed record BlockRequest(string? Key, bool Blocked);
+
+    private static async Task<IResult> Config(HttpContext ctx, IOptions<ScoreboardOptions> options, PhotoUsage usage, string? device, string? code)
+    {
+        var o = options.Value;
+        var reason = AiUnavailable(o, code);
+        var dev = Clean(device);
+        var (byDevice, _, total) = await usage.TodayAsync(dev, ClientIp(ctx));
+        return Results.Json(new
+        {
+            ai = reason is null,
+            reason,
+            styles = Styles.Select(s => new { s.Id, s.Label }),
+            remaining = Math.Max(0, Math.Min(o.PhotoDailyLimitPerDevice - byDevice, o.PhotoDailyLimitTotal - total))
+        });
+    }
+
+    private static string? AiUnavailable(ScoreboardOptions o, string? code)
+    {
+        if (string.IsNullOrEmpty(o.OpenAIKey)) return "AI styles aren't set up yet.";
+        if (!string.IsNullOrEmpty(o.PhotoLinkCode) && !FixedEquals(code, o.PhotoLinkCode))
+            return "AI styles need the link from the group chat.";
+        return null;
+    }
+
+    private static async Task<IResult> Stylize(StylizeRequest req, HttpContext ctx, IOptions<ScoreboardOptions> options,
+        PhotoUsage usage, ScoreboardStore store, ILogger<PhotoUsageLog> logger)
+    {
+        var o = options.Value;
+        var device = Clean(req.Device);
+        var ip = ClientIp(ctx);
+        var style = Styles.FirstOrDefault(s => s.Id == req.Style);
+        var player = await PlayerNameAsync(store, req.PlayerId);
+
+        PhotoUsageEntry Entry(string action, bool ok, string? error, long ms = 0) =>
+            new(DateTimeOffset.UtcNow, action, device, ip, req.PlayerId.ToString(), player, req.Style, ok, error, (int)ms);
+
+        if (AiUnavailable(o, req.Code) is { } why) return Problem(403, why);
+        if (style is null) return Problem(400, "Unknown style.");
+        if (player is null) return Problem(400, "Pick your name first.");
+        if (await usage.IsBlockedAsync(device, ip))
+        {
+            await usage.AddAsync(Entry("blocked", false, "blocked"));
+            return Problem(429, "AI styles are switched off for this phone. Ask the commissioner.");
+        }
+
+        var (byDevice, byIp, total) = await usage.TodayAsync(device, ip);
+        if (byDevice >= o.PhotoDailyLimitPerDevice || byIp >= 2 * o.PhotoDailyLimitPerDevice || total >= o.PhotoDailyLimitTotal)
+        {
+            await usage.AddAsync(Entry("limited", false, "daily limit"));
+            return Problem(429, total >= o.PhotoDailyLimitTotal
+                ? "The group used up today's AI styles. Try again tomorrow."
+                : "That's all the AI styles for this phone today. Try again tomorrow.");
+        }
+
+        byte[] png;
+        try
+        {
+            using var img = LoadSquare(req.Image);
+            img.Mutate(x => x.Resize(1024, 1024));
+            using var ms = new MemoryStream();
+            await img.SaveAsPngAsync(ms);
+            png = ms.ToArray();
+        }
+        catch (Exception e) when (e is FormatException or UnknownImageFormatException or InvalidImageContentException or ArgumentException)
+        {
+            return Problem(400, "Couldn't read that photo.");
+        }
+
+        var clock = Stopwatch.StartNew();
+        try
+        {
+            using var form = new MultipartFormDataContent
+            {
+                { new StringContent(o.OpenAIImageModel), "model" },
+                { new StringContent(Identity + style.Prompt), "prompt" },
+                { new StringContent("1024x1024"), "size" },
+                { new StringContent(o.OpenAIImageQuality), "quality" },
+                { new StringContent("1"), "n" }
+            };
+            var file = new ByteArrayContent(png);
+            file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(file, "image", "photo.png");
+
+            using var call = new HttpRequestMessage(HttpMethod.Post, $"{o.OpenAIBaseUrl.TrimEnd('/')}/images/edits") { Content = form };
+            call.Headers.Authorization = new AuthenticationHeaderValue("Bearer", o.OpenAIKey);
+            using var res = await Http.SendAsync(call, ctx.RequestAborted);
+            var body = await res.Content.ReadAsStringAsync(ctx.RequestAborted);
+
+            if (!res.IsSuccessStatusCode)
+            {
+                var (code, message) = OpenAIError(body);
+                logger.LogWarning("OpenAI image edit failed: {Status} {Code} {Message}", (int)res.StatusCode, code, message);
+                await usage.AddAsync(Entry("stylize", false, $"{(int)res.StatusCode} {code ?? message}", clock.ElapsedMilliseconds));
+                return Problem(502, code == "moderation_blocked"
+                    ? "The AI wouldn't style that photo. Try another photo, or keep the original."
+                    : "The AI couldn't style it this time. Try again, or keep the original.");
+            }
+
+            var b64 = JsonNode.Parse(body)?["data"]?[0]?["b64_json"]?.GetValue<string>()
+                ?? throw new InvalidOperationException("No image in the response");
+            using var styled = Image.Load(Convert.FromBase64String(b64));
+            styled.Mutate(x => x.Resize(768, 768));
+            using var jpg = new MemoryStream();
+            await styled.SaveAsJpegAsync(jpg, new JpegEncoder { Quality = 90 });
+
+            await usage.AddAsync(Entry("stylize", true, null, clock.ElapsedMilliseconds));
+            var after = await usage.TodayAsync(device, ip);
+            return Results.Json(new
+            {
+                image = "data:image/jpeg;base64," + Convert.ToBase64String(jpg.ToArray()),
+                remaining = Math.Max(0, Math.Min(o.PhotoDailyLimitPerDevice - after.ByDevice, o.PhotoDailyLimitTotal - after.Total))
+            });
+        }
+        catch (Exception e) when (e is not OperationCanceledException || !ctx.RequestAborted.IsCancellationRequested)
+        {
+            logger.LogWarning(e, "OpenAI image edit failed");
+            await usage.AddAsync(Entry("stylize", false, e.GetType().Name, clock.ElapsedMilliseconds));
+            return Problem(502, "The AI couldn't style it this time. Try again, or keep the original.");
+        }
+    }
+
+    private static async Task<IResult> Save(SaveRequest req, HttpContext ctx, PhotoUsage usage, ScoreboardStore store)
+    {
+        var player = await PlayerNameAsync(store, req.PlayerId);
+        if (player is null) return Problem(400, "Pick your name first.");
+
+        Image img;
+        try { img = LoadSquare(req.Image); }
+        catch (Exception e) when (e is FormatException or UnknownImageFormatException or InvalidImageContentException or ArgumentException)
+        {
+            return Problem(400, "Couldn't read that photo.");
+        }
+
+        using (img)
+        {
+            var style = Styles.FirstOrDefault(s => s.Id == req.Style)?.Id ?? "original";
+            var stamp = DateTimeOffset.UtcNow;
+
+            // Keep a bigger copy of every saved photo, in case we want them later
+            using (var archive = img.Clone(x => x.Resize(512, 512)))
+            using (var jpg = new MemoryStream())
+            {
+                await archive.SaveAsJpegAsync(jpg, new JpegEncoder { Quality = 90 });
+                await store.WriteAsync($"photo-archive/{req.PlayerId}/{stamp:yyyyMMdd-HHmmss}-{style}.jpg", new BinaryData(jpg.ToArray()));
+            }
+
+            img.Mutate(x => x.Resize(ScoreboardApi.AvatarSize, ScoreboardApi.AvatarSize));
+            using var png = new MemoryStream();
+            await img.SaveAsPngAsync(png);
+            await store.WriteAsync($"players/{req.PlayerId}.png", new BinaryData(png.ToArray()));
+
+            var imageUrl = $"/Scoreboard/api/players/{req.PlayerId}/image?v={stamp.ToUnixTimeSeconds()}";
+            await SetRosterImageAsync(store, req.PlayerId, imageUrl);
+            await usage.AddAsync(new(stamp, "save", Clean(req.Device), ClientIp(ctx), req.PlayerId.ToString(), player, style, true, null, 0));
+            return Results.Json(new { imageUrl });
+        }
+    }
+
+    private static async Task<IResult> Usage(HttpContext ctx, IOptions<ScoreboardOptions> options, PhotoUsage usage, string? month)
+    {
+        if (!IsAdmin(ctx, options.Value)) return Problem(401, "Wrong or missing admin key.");
+        return Results.Json(await usage.ReportAsync(month), Web);
+    }
+
+    private static async Task<IResult> Block(BlockRequest req, HttpContext ctx, IOptions<ScoreboardOptions> options, PhotoUsage usage)
+    {
+        if (!IsAdmin(ctx, options.Value)) return Problem(401, "Wrong or missing admin key.");
+        if (string.IsNullOrWhiteSpace(req.Key)) return Problem(400, "Nothing to block.");
+        await usage.SetBlockedAsync(req.Key.Trim(), req.Blocked);
+        return Results.NoContent();
+    }
+
+    // ---- helpers ----
+
+    private static bool IsAdmin(HttpContext ctx, ScoreboardOptions o) =>
+        !string.IsNullOrEmpty(o.PhotoAdminKey) && FixedEquals(ctx.Request.Headers["X-Admin-Key"].ToString(), o.PhotoAdminKey);
+
+    private static bool FixedEquals(string? a, string b) =>
+        a is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
+
+    private static IResult Problem(int status, string error) => Results.Json(new { error }, statusCode: status);
+
+    // A data URL or bare base64 image, center-cropped to a square (the page already crops it).
+    private static Image LoadSquare(string? data)
+    {
+        if (string.IsNullOrEmpty(data) || data.Length > MaxImageChars) throw new ArgumentException("No image");
+        var comma = data.IndexOf(',');
+        var img = Image.Load(Convert.FromBase64String(comma >= 0 ? data[(comma + 1)..] : data));
+        img.Mutate(x => x.AutoOrient());
+        var size = Math.Min(img.Width, img.Height);
+        if (img.Width != img.Height)
+            img.Mutate(x => x.Crop(new Rectangle((img.Width - size) / 2, (img.Height - size) / 2, size, size)));
+        return img;
+    }
+
+    private static (string? Code, string? Message) OpenAIError(string body)
+    {
+        try
+        {
+            var err = JsonNode.Parse(body)?["error"];
+            return (err?["code"]?.GetValue<string>(), err?["message"]?.GetValue<string>());
+        }
+        catch (JsonException) { return (null, body.Length > 200 ? body[..200] : body); }
+    }
+
+    // The proxy in front of the module puts the phone's address in X-Forwarded-For.
+    private static string ClientIp(HttpContext ctx)
+    {
+        var forwarded = ctx.Request.Headers["X-Forwarded-For"].ToString();
+        var ip = forwarded.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return ip ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "?";
+    }
+
+    private static string Clean(string? device) =>
+        string.IsNullOrWhiteSpace(device) ? "unknown" : new string(device.Where(c => char.IsLetterOrDigit(c) || c == '-').Take(64).ToArray());
+
+    private static bool SameId(JsonNode? id, long playerId) =>
+        id is JsonValue v && (v.TryGetValue<long>(out var n) ? n == playerId : v.TryGetValue<string>(out var s) && s == playerId.ToString());
+
+    private static async Task<JsonNode?> RosterAsync(ScoreboardStore store)
+    {
+        var data = await store.ReadAsync("roster.json");
+        return data is null ? null : JsonNode.Parse(data.ToString());
+    }
+
+    private static async Task<string?> PlayerNameAsync(ScoreboardStore store, long playerId)
+    {
+        var players = (await RosterAsync(store))?["players"]?.AsArray();
+        var p = players?.FirstOrDefault(p => SameId(p?["id"], playerId));
+        return p is null ? null : p["name"]?.GetValue<string>() ?? "?";
+    }
+
+    private static async Task SetRosterImageAsync(ScoreboardStore store, long playerId, string imageUrl)
+    {
+        var roster = await RosterAsync(store);
+        var p = roster?["players"]?.AsArray().FirstOrDefault(p => SameId(p?["id"], playerId));
+        if (roster is null || p is null) return;
+        p["imageUrl"] = imageUrl;
+        await store.WriteAsync("roster.json", new BinaryData(roster.ToJsonString()));
+    }
+}
+
+/// <summary>Logger category for the photo page.</summary>
+public sealed class PhotoUsageLog;
+
+public sealed record PhotoUsageEntry(DateTimeOffset Ts, string Action, string Device, string Ip,
+    string? PlayerId, string? Player, string? Style, bool Ok, string? Error, int Ms);
+
+/// <summary>
+/// Every AI style attempt and photo save, one JSON file per month (photo-usage/yyyy-MM.json),
+/// plus a block list (photo-blocked.json) of phone ids and IPs. One server, so a lock is enough.
+/// </summary>
+public sealed class PhotoUsage(ScoreboardStore store)
+{
+    private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+    private readonly SemaphoreSlim _lock = new(1, 1);
+    private List<PhotoUsageEntry>? _entries;
+    private string? _month;
+    private HashSet<string>? _blocked;
+
+    private static string MonthOf(DateTimeOffset t) => t.ToString("yyyy-MM");
+
+    private async Task LoadAsync()
+    {
+        var month = MonthOf(DateTimeOffset.UtcNow);
+        if (_entries is null || _month != month)
+        {
+            _entries = await ReadMonthAsync(month);
+            _month = month;
+        }
+        if (_blocked is null)
+        {
+            var b = await store.ReadAsync("photo-blocked.json");
+            _blocked = b is null ? [] : JsonSerializer.Deserialize<HashSet<string>>(b, Web) ?? [];
+        }
+    }
+
+    private async Task<List<PhotoUsageEntry>> ReadMonthAsync(string month)
+    {
+        var data = await store.ReadAsync($"photo-usage/{month}.json");
+        return data is null ? [] : JsonSerializer.Deserialize<List<PhotoUsageEntry>>(data, Web) ?? [];
+    }
+
+    private async Task<T> Locked<T>(Func<Task<T>> work)
+    {
+        await _lock.WaitAsync();
+        try { await LoadAsync(); return await work(); }
+        finally { _lock.Release(); }
+    }
+
+    /// <summary>AI style calls today (UTC) by this phone, by this IP, and by everyone.</summary>
+    public Task<(int ByDevice, int ByIp, int Total)> TodayAsync(string device, string ip) => Locked(() =>
+    {
+        var today = DateTimeOffset.UtcNow.Date;
+        var calls = _entries!.Where(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today).ToList();
+        return Task.FromResult((calls.Count(e => e.Device == device), calls.Count(e => e.Ip == ip), calls.Count));
+    });
+
+    public Task<bool> IsBlockedAsync(string device, string ip) =>
+        Locked(() => Task.FromResult(_blocked!.Contains(device) || _blocked.Contains(ip)));
+
+    public Task AddAsync(PhotoUsageEntry entry) => Locked(async () =>
+    {
+        _entries!.Add(entry);
+        await store.WriteAsync($"photo-usage/{_month}.json", new BinaryData(JsonSerializer.SerializeToUtf8Bytes(_entries, Web)));
+        return true;
+    });
+
+    public Task SetBlockedAsync(string key, bool blocked) => Locked(async () =>
+    {
+        if (blocked) _blocked!.Add(key); else _blocked!.Remove(key);
+        await store.WriteAsync("photo-blocked.json", new BinaryData(JsonSerializer.SerializeToUtf8Bytes(_blocked, Web)));
+        return true;
+    });
+
+    /// <summary>Per-phone totals plus the latest entries, for the usage page.</summary>
+    public Task<object> ReportAsync(string? month) => Locked<object>(async () =>
+    {
+        var m = month is { Length: 7 } ? month : _month!;
+        var entries = m == _month ? _entries! : await ReadMonthAsync(m);
+        var today = DateTimeOffset.UtcNow.Date;
+        var devices = entries.GroupBy(e => e.Device).Select(g => new
+        {
+            device = g.Key,
+            ips = g.Select(e => e.Ip).Distinct().ToArray(),
+            players = g.Where(e => e.Player is not null).Select(e => e.Player).Distinct().ToArray(),
+            styles = g.Count(e => e.Action == "stylize"),
+            stylesToday = g.Count(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today),
+            failed = g.Count(e => e.Action == "stylize" && !e.Ok),
+            refused = g.Count(e => e.Action is "limited" or "blocked"),
+            saves = g.Count(e => e.Action == "save"),
+            last = g.Max(e => e.Ts),
+            blocked = _blocked!.Contains(g.Key)
+        }).OrderByDescending(d => d.last).ToArray();
+        return new
+        {
+            month = m,
+            styles = entries.Count(e => e.Action == "stylize"),
+            stylesToday = entries.Count(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today),
+            saves = entries.Count(e => e.Action == "save"),
+            devices,
+            blocked = _blocked!.ToArray(),
+            recent = entries.AsEnumerable().Reverse().Take(100)
+        };
+    });
+}

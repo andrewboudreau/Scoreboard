@@ -43,6 +43,7 @@ public class ScoreboardModule : IApplicationPartModule
         });
 
         services.AddSingleton<ScoreboardStore>();
+        services.AddSingleton<PhotoUsage>();
     }
 
     public void Configure(WebApplication app)
@@ -56,7 +57,12 @@ public class ScoreboardModule : IApplicationPartModule
         // The team builder now lives on the scoreboard itself.
         app.MapGet("/Scoreboard/ManagePlayers", () => Results.Redirect("/Scoreboard/#teams"));
 
+        // Photo page for the group chat: pick your name, crop a photo, optional AI style (PhotoBooth.cs)
+        app.MapGet("/Scoreboard/photo", (HttpContext ctx) => Page(ctx, webRoot, version, "photo.html"));
+        app.MapGet("/Scoreboard/photo/usage", (HttpContext ctx) => Page(ctx, webRoot, version, "photo-usage.html"));
+
         ScoreboardApi.Map(app);
+        PhotoBooth.Map(app);
     }
 
     public void ConfigureApplicationParts(ApplicationPartManager partManager)

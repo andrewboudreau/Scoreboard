@@ -24,6 +24,9 @@ public static partial class ScoreboardApi
 {
     private const string Json = "application/json";
 
+    /// <summary>Saved player photos are this many pixels square (sharp on retina screens at avatar sizes).</summary>
+    public const int AvatarSize = 256;
+
     public static void Map(WebApplication app)
     {
         var api = app.MapGroup("/Scoreboard/api");
@@ -142,7 +145,7 @@ public static partial class ScoreboardApi
             img.Mutate(x => x
                 .AutoOrient()
                 .Crop(new Rectangle((img.Width - size) / 2, (img.Height - size) / 2, size, size))
-                .Resize(96, 96));
+                .Resize(AvatarSize, AvatarSize));
 
             using var png = new MemoryStream();
             await img.SaveAsPngAsync(png);

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Add your photo — MDL Scoreboard</title>
+    <meta name="theme-color" content="#111111">
+    <link rel="stylesheet" href="/_content/Scoreboard/photo.css?v={{v}}">
+</head>
+<body>
+    <main class="wrap">
+        <header class="head">
+            <div class="logo">🏀</div>
+            <h1 id="title">Add your photo</h1>
+            <p class="lead" id="lead">It shows next to your name on the scoreboard.</p>
+        </header>
+
+        <!-- 1. Who are you? -->
+        <section id="step-who" class="step">
+            <input id="search" class="search" type="search" placeholder="Find your name" autocomplete="off" enterkeyhint="search" aria-label="Find your name">
+            <div id="people" class="people" role="list"></div>
+            <p id="people-empty" class="hint" hidden>No one by that name. Ask the commissioner to add you.</p>
+        </section>
+
+        <!-- 2. Pick a photo -->
+        <section id="step-pick" class="step" hidden>
+            <div class="me" id="me-pick"></div>
+            <label class="big-btn" for="file">
+                <span class="big-btn-icon">📷</span>
+                <span>Choose a photo</span>
+                <small>Take one or pick from your library</small>
+            </label>
+            <input id="file" type="file" accept="image/*" hidden>
+            <button class="link" data-back="who">Not you? Pick another name</button>
+        </section>
+
+        <!-- 3. Crop -->
+        <section id="step-crop" class="step" hidden>
+            <p class="hint">Drag to move · pinch or slide to zoom</p>
+            <div class="stage" id="stage">
+                <canvas id="crop-canvas"></canvas>
+                <div class="ring" aria-hidden="true"></div>
+            </div>
+            <div class="zoom-row">
+                <span aria-hidden="true">−</span>
+                <input id="zoom" type="range" min="1" max="5" step="0.01" value="1" aria-label="Zoom">
+                <span aria-hidden="true">+</span>
+                <button id="rotate" class="icon-btn" aria-label="Rotate">⟳</button>
+            </div>
+            <div class="actions">
+                <button class="btn secondary" id="crop-change">Different photo</button>
+                <button class="btn" id="crop-done">Looks good</button>
+            </div>
+        </section>
+
+        <!-- 4. Style + save -->
+        <section id="step-style" class="step" hidden>
+            <div class="preview-wrap">
+                <img id="preview" class="preview" alt="Your photo">
+                <div class="working" id="working" hidden>
+                    <div class="spinner"></div>
+                    <div id="working-text">Painting…</div>
+                </div>
+            </div>
+            <div id="styles-area">
+                <div class="styles-title">Try a style <span class="dim" id="remaining"></span></div>
+                <div class="styles" id="styles"></div>
+                <p class="hint" id="ai-note" hidden></p>
+            </div>
+            <p class="error" id="style-error" hidden></p>
+            <div class="actions">
+                <button class="btn secondary" id="recrop">Re-crop</button>
+                <button class="btn" id="save">Save my photo</button>
+            </div>
+        </section>
+
+        <!-- 5. Done -->
+        <section id="step-done" class="step" hidden>
+            <img id="done-img" class="preview done" alt="Your new photo">
+            <h2 id="done-title">Looking good!</h2>
+            <p class="lead">You're on the scoreboard with your new photo.</p>
+            <div class="actions stack">
+                <a class="btn" href="/Scoreboard/">See the scoreboard</a>
+                <button class="btn secondary" id="again">Change it again</button>
+                <button class="link" data-back="who">Add a photo for someone else</button>
+            </div>
+        </section>
+
+        <p class="error" id="error" hidden></p>
+    </main>
+
+    <script src="/_content/Scoreboard/photo.js?v={{v}}"></script>
+</body>
+</html>

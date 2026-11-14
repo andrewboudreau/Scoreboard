@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex">
+    <title>Photo page usage — MDL Scoreboard</title>
+    <link rel="stylesheet" href="/_content/Scoreboard/photo.css?v={{v}}">
+    <style>
+        .wrap { max-width: 900px; }
+        .card { background: var(--card); border-radius: 16px; padding: 14px 16px; margin-top: 14px; }
+        .card h3 { font-size: 16px; margin-bottom: 8px; }
+        .row { display: flex; gap: 8px; }
+        .row .search { margin: 0; }
+        .row .btn { flex: 0 0 auto; }
+        .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+        .tile { background: var(--card); border-radius: 14px; padding: 12px; text-align: center; }
+        .tile b { display: block; font-size: 26px; }
+        .tile span { color: var(--muted); font-size: 13px; }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; }
+        th { color: var(--muted); font-weight: 600; font-size: 12px; }
+        td.num, th.num { text-align: right; }
+        .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+        .wrapcell { white-space: normal; min-width: 120px; }
+        .bad { color: var(--danger); font-weight: 700; }
+        .small-btn { font: inherit; font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+        .small-btn.danger { color: var(--danger); border-color: var(--danger); }
+        .chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #eee; margin: 0 4px 4px 0; }
+        .chip button { border: none; background: none; color: var(--danger); font-weight: 800; cursor: pointer; margin-left: 4px; }
+    </style>
+</head>
+<body>
+    <main class="wrap">
+        <header class="head">
+            <div class="logo">📷</div>
+            <h1>Photo page usage</h1>
+            <p class="lead">Who's using the AI styles, and how much. Phones are a random id saved on each phone.</p>
+        </header>
+
+        <div class="card">
+            <div class="row">
+                <input id="key" class="search" type="password" placeholder="Admin key" autocomplete="current-password" aria-label="Admin key">
+                <input id="month" class="search" type="month" aria-label="Month" style="max-width:170px">
+                <button id="load" class="btn">Load</button>
+            </div>
+            <p class="error" id="error" hidden></p>
+        </div>
+
+        <div id="report" hidden>
+            <div class="tiles" style="margin-top:14px">
+                <div class="tile"><b id="t-today">0</b><span>AI styles today</span></div>
+                <div class="tile"><b id="t-month">0</b><span>AI styles this month</span></div>
+                <div class="tile"><b id="t-saves">0</b><span>photos saved</span></div>
+                <div class="tile"><b id="t-devices">0</b><span>phones</span></div>
+            </div>
+
+            <div class="card">
+                <h3>Phones</h3>
+                <div class="table-wrap"><table id="devices"></table></div>
+            </div>
+
+            <div class="card" id="blocked-card">
+                <h3>Blocked</h3>
+                <div id="blocked"></div>
+                <div class="row" style="margin-top:8px">
+                    <input id="block-key" class="search" placeholder="Phone id or IP to block" aria-label="Phone id or IP to block">
+                    <button id="block-add" class="btn secondary">Block</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Latest 100</h3>
+                <div class="table-wrap"><table id="recent"></table></div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        (() => {
+            const $ = id => document.getElementById(id);
+            const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+            const when = t => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            const short = d => d.length > 13 ? d.slice(0, 8) + '…' : d;
+
+            $('key').value = localStorage.getItem('photoAdminKey') || '';
+            $('month').value = new Date().toISOString().slice(0, 7);
+
+            async function load() {
+                const key = $('key').value.trim();
+                $('error').hidden = true;
+                if (!key) return;
+                const res = await fetch(`/Scoreboard/api/photo/usage?month=${encodeURIComponent($('month').value)}`, { headers: { 'X-Admin-Key': key } });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    $('error').textContent = data.error || `Couldn't load (${res.status})`;
+                    $('error').hidden = false;
+                    $('report').hidden = true;
+                    return;
+                }
+                localStorage.setItem('photoAdminKey', key);
+                render(data);
+            }
+
+            async function block(target, blocked) {
+                const res = await fetch('/Scoreboard/api/photo/block', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': $('key').value.trim() },
+                    body: JSON.stringify({ key: target, blocked })
+                });
+                if (!res.ok) {
+                    $('error').textContent = `Couldn't ${blocked ? 'block' : 'unblock'} (${res.status})`;
+                    $('error').hidden = false;
+                }
+                load();
+            }
+
+            function render(d) {
+                $('report').hidden = false;
+                $('t-today').textContent = d.stylesToday;
+                $('t-month').textContent = d.styles;
+                $('t-saves').textContent = d.saves;
+                $('t-devices').textContent = d.devices.length;
+
+                $('devices').innerHTML = `
+                    <tr><th>Phone</th><th>Names</th><th class="num">AI today</th><th class="num">AI month</th><th class="num">Failed</th><th class="num">Refused</th><th class="num">Saves</th><th>IPs</th><th>Last</th><th></th></tr>
+                    ${d.devices.map(x => `
+                    <tr>
+                        <td class="mono" title="${esc(x.device)}">${esc(short(x.device))}</td>
+                        <td class="wrapcell">${esc(x.players.join(', '))}</td>
+                        <td class="num${x.stylesToday >= 10 ? ' bad' : ''}">${x.stylesToday}</td>
+                        <td class="num">${x.styles}</td>
+                        <td class="num">${x.failed || ''}</td>
+                        <td class="num${x.refused ? ' bad' : ''}">${x.refused || ''}</td>
+                        <td class="num">${x.saves}</td>
+                        <td class="mono wrapcell">${x.ips.map(esc).join('<br>')}</td>
+                        <td>${when(x.last)}</td>
+                        <td><button class="small-btn${x.blocked ? '' : ' danger'}" data-device="${esc(x.device)}" data-blocked="${x.blocked}">${x.blocked ? 'Unblock' : 'Block'}</button></td>
+                    </tr>`).join('') || '<tr><td colspan="10" class="dim">Nobody yet.</td></tr>'}`;
+
+                $('blocked').innerHTML = d.blocked.length
+                    ? d.blocked.map(b => `<span class="chip mono">${esc(b)}<button data-unblock="${esc(b)}" aria-label="Unblock">×</button></span>`).join('')
+                    : '<p class="dim">Nobody is blocked.</p>';
+
+                $('recent').innerHTML = `
+                    <tr><th>When</th><th>What</th><th>Name</th><th>Style</th><th>Result</th><th class="num">Secs</th><th>Phone</th><th>IP</th></tr>
+                    ${d.recent.map(e => `
+                    <tr>
+                        <td>${when(e.ts)}</td>
+                        <td>${esc(e.action)}</td>
+                        <td>${esc(e.player)}</td>
+                        <td>${esc(e.style)}</td>
+                        <td class="${e.ok ? '' : 'bad'}">${e.ok ? 'ok' : esc(e.error || 'failed')}</td>
+                        <td class="num">${e.ms ? (e.ms / 1000).toFixed(1) : ''}</td>
+                        <td class="mono" title="${esc(e.device)}">${esc(short(e.device))}</td>
+                        <td class="mono">${esc(e.ip)}</td>
+                    </tr>`).join('') || '<tr><td colspan="8" class="dim">Nothing yet.</td></tr>'}`;
+            }
+
+            document.addEventListener('click', e => {
+                const t = e.target.closest('button');
+                if (!t) return;
+                if (t.dataset.device) block(t.dataset.device, t.dataset.blocked !== 'true');
+                else if (t.dataset.unblock) block(t.dataset.unblock, false);
+            });
+            $('load').addEventListener('click', load);
+            $('key').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+            $('month').addEventListener('change', load);
+            $('block-add').addEventListener('click', () => {
+                const v = $('block-key').value.trim();
+                if (v) { $('block-key').value = ''; block(v, true); }
+            });
+            load();
+        })();
+    </script>
+</body>
+</html>

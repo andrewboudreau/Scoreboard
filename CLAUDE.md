@@ -45,7 +45,8 @@ A dynamically loadable ASP.NET Core module implementing `IApplicationPartModule`
 - **ScoreboardModule.cs**: Entry point - registers services, serves the embedded HTML pages (`Page()` replaces `{{v}}` with the build id for cache busting)
 - **ScoreboardApi.cs**: JSON API. The server is the single source of truth; there is no auth (private friend group) and no groups/share codes
 - **Services/ScoreboardStore.cs**: Reads/writes JSON blobs in one container under a data folder
-- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA; `tour.js` is the guided tour of the Teams panel, started by its "?" button or a `?players&tour` link. `?players` / `?players=edit` open the panel / roster editing), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `stats.css`)
+- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA; `tour.js` is the guided tour of the Teams panel, started by its "?" button or a `?players&tour` link. `?players` / `?players=edit` open the panel / roster editing), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `stats.css`), `photo.html` + `photo.js` + `photo.css` (phone page for the group chat: pick your name, crop a photo, optional AI style, save) and `photo-usage.html` (admin view of who used the AI styles)
+- **PhotoBooth.cs**: API behind the photo page. AI styles call OpenAI's image edit endpoint with the server-side key; each phone sends a random device id (localStorage) so usage is logged and limited per phone, per IP and in total per day
 
 ### Scoreboard.WebApp (src/Scoreboard.WebApp/) - The Host
 Minimal ASP.NET Core app that loads and hosts modules. Program.cs explicitly loads `SharedTools.Scoreboard` and `SharedTools.ModuleManagement` from NuGet.
@@ -64,7 +65,9 @@ All prefixed with `/Scoreboard/api/`:
 - `GET /games`, `GET|PUT /games/{id}` - game docs (events: `score`, `score_set`, `period_end`)
 - `GET|PUT /hidden-games` - `{ids}` of games removed from stats (test games, mistakes); reversible, game files stay
 - `GET|PUT /player-links` - `{links: {fromId: toId}}`: one person under two ids (each iPad used to keep its own player list); set from a player's stats page
-- `POST|GET /players/{id}/image` - player photos
+- `POST|GET /players/{id}/image` - player photos (256px PNG)
+- `GET /photo/config`, `POST /photo/stylize`, `POST /photo/save` - photo page (`/Scoreboard/photo`, `?k=<code>` unlocks AI styles, `?p=<playerId>` skips the name list). Save writes `players/{id}.png`, sets the roster `imageUrl` and keeps a copy in `photo-archive/`
+- `GET /photo/usage`, `POST /photo/block` - usage report and block list, `X-Admin-Key` header (page: `/Scoreboard/photo/usage`). Log in `photo-usage/yyyy-MM.json`, blocks in `photo-blocked.json`
 
 ### Data
 - Blob container from `BlobStorage:ContainerName` (prod: `scoreboard`), connection from `BlobStorage:ConnectionString`
@@ -87,6 +90,7 @@ Assets embedded in module assembly, served from `/_content/Scoreboard/*` via `St
 
 - **Directory.Build.props**: Centralized versioning (VersionPrefix)
 - **nuget.config**: NuGet sources (C:\LocalNuGet for local dev, nuget.org for releases)
+- **Photo page secrets** (module host env, never in the repo): `Modules__Scoreboard__OpenAIKey` (AI styles off when unset), `Modules__Scoreboard__PhotoAdminKey` (usage page off when unset), `Modules__Scoreboard__PhotoLinkCode` (optional `?k=` code). Also `OpenAIImageModel` (gpt-image-2), `OpenAIImageQuality` (low), `OpenAIBaseUrl`, `PhotoDailyLimitPerDevice` (10, an IP gets 2x), `PhotoDailyLimitTotal` (80)
 - **appsettings.json**: Blob storage connection (uses Azure Storage Emulator by default: `UseDevelopmentStorage=true`)
 
 ## CI/CD

@@ -36,6 +36,17 @@ public partial class FakeApi
             return;
         }
 
+        // Photo page: stylize hands the photo back, save records the request
+        if (request.Method == "POST" && path is "photo/save" or "photo/stylize")
+        {
+            Docs[path] = request.PostData ?? "";
+            var image = JsonDocument.Parse(Docs[path]).RootElement.GetProperty("image").GetString();
+            await Json(route, path == "photo/save"
+                ? """{"imageUrl":"/Scoreboard/api/players/1/image?v=1"}"""
+                : JsonSerializer.Serialize(new { image, remaining = 9 }));
+            return;
+        }
+
         if (request.Method != "GET")
         {
             await route.FulfillAsync(new() { Status = 404 });
@@ -61,6 +72,9 @@ public partial class FakeApi
                 return;
             case "player-links":
                 await Json(route, Docs.GetValueOrDefault("player-links") ?? """{"links":{}}""");
+                return;
+            case "photo/config":
+                await Json(route, """{"ai":true,"reason":null,"styles":[{"id":"anime","label":"Anime"},{"id":"8bit","label":"8-bit"}],"remaining":10}""");
                 return;
             case "games":
                 var games = Docs.Where(d => GameKey().IsMatch(d.Key)).Select(d => d.Value);
