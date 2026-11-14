@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 using Scoreboard.Services;
 
@@ -16,24 +17,27 @@ public class ScoreboardModule : IApplicationPartModule
 {
     public string Name => "Scoreboard";
 
-    // The module's wwwroot is embedded in this assembly; HTML pages are served from here.
-    private static readonly string PagePrefix =
-        $"{typeof(ScoreboardModule).Assembly.GetName().Name}.wwwroot.";
-
     public void ConfigureServices(IServiceCollection services)
     {
+        // Modules:Scoreboard:* from the module host; the old root BlobStorage:* keys still work.
+        services.AddModuleOptions<ScoreboardOptions>(Name)
+            .PostConfigure<IConfiguration>((o, config) =>
+            {
+                if (string.IsNullOrEmpty(o.ConnectionString)) o.ConnectionString = config["BlobStorage:ConnectionString"];
+                if (string.IsNullOrEmpty(o.ContainerName)) o.ContainerName = config["BlobStorage:ContainerName"];
+                if (string.IsNullOrEmpty(o.DataFolder)) o.DataFolder = config["BlobStorage:DataFolder"];
+            });
+
         services.AddSingleton(provider =>
         {
-            var configuration = provider.GetRequiredService<IConfiguration>();
-            var connectionString = configuration["BlobStorage:ConnectionString"];
-            var containerName = configuration["BlobStorage:ContainerName"];
-
-            if (string.IsNullOrEmpty(connectionString) || string.IsNullOrEmpty(containerName))
+            var options = provider.GetRequiredService<IOptions<ScoreboardOptions>>().Value;
+            if (string.IsNullOrEmpty(options.ConnectionString) || string.IsNullOrEmpty(options.ContainerName))
             {
-                throw new InvalidOperationException("Blob storage connection string or container name is not configured.");
+                throw new InvalidOperationException(
+                    "Scoreboard blob storage is not configured. Set Modules:Scoreboard:ConnectionString and ContainerName.");
             }
 
-            var container = new BlobContainerClient(connectionString, containerName);
+            var container = new BlobContainerClient(options.ConnectionString, options.ContainerName);
             container.CreateIfNotExists();
             return container;
         });
@@ -43,10 +47,11 @@ public class ScoreboardModule : IApplicationPartModule
 
     public void Configure(WebApplication app)
     {
-        app.MapGet("/Scoreboard/", (HttpContext ctx) => Page(ctx, "index.html"));
-        app.MapGet("/Scoreboard/docs", (HttpContext ctx) => Page(ctx, "docs.html"));
-        app.MapGet("/Scoreboard/game", (HttpContext ctx) => Page(ctx, "game.html"));
-        app.MapGet("/Scoreboard/stats", (HttpContext ctx) => Page(ctx, "stats.html"));
+        var webRoot = this.WebRoot();
+        app.MapGet("/Scoreboard/", (HttpContext ctx) => Page(ctx, webRoot, "index.html"));
+        app.MapGet("/Scoreboard/docs", (HttpContext ctx) => Page(ctx, webRoot, "docs.html"));
+        app.MapGet("/Scoreboard/game", (HttpContext ctx) => Page(ctx, webRoot, "game.html"));
+        app.MapGet("/Scoreboard/stats", (HttpContext ctx) => Page(ctx, webRoot, "stats.html"));
         // The team builder now lives on the scoreboard itself.
         app.MapGet("/Scoreboard/ManagePlayers", () => Results.Redirect("/Scoreboard/#teams"));
 
@@ -61,16 +66,18 @@ public class ScoreboardModule : IApplicationPartModule
     private static readonly string BuildVersion =
         typeof(ScoreboardModule).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
 
-    // Serves an embedded HTML page from the module's wwwroot, or 404 if it is missing.
+    // Serves an HTML page from the drop's wwwroot, or 404 if it is missing.
     // Pages are tiny and always revalidated, so a phone never holds on to an old page
     // that points at old script versions.
-    private static IResult Page(HttpContext context, string fileName)
+    // Synchronous on purpose: a (HttpContext) => Task lambda binds to MapGet's RequestDelegate
+    // overload, which would discard the returned IResult and send an empty page.
+    private static IResult Page(HttpContext context, string webRoot, string fileName)
     {
-        context.Response.Headers.CacheControl = "no-cache";
-        using var stream = typeof(ScoreboardModule).Assembly.GetManifestResourceStream(PagePrefix + fileName);
-        if (stream is null) return Results.NotFound();
+        var path = Path.Combine(webRoot, fileName);
+        if (!File.Exists(path)) return Results.NotFound();
 
-        var html = new StreamReader(stream).ReadToEnd().Replace("{{v}}", BuildVersion);
+        context.Response.Headers.CacheControl = "no-cache";
+        var html = File.ReadAllText(path).Replace("{{v}}", BuildVersion);
         return Results.Content(html, "text/html; charset=utf-8");
     }
 }

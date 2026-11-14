@@ -4,8 +4,10 @@ using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+using SharedTools.Scoreboard;
 
 namespace Scoreboard.Services;
 
@@ -13,7 +15,7 @@ namespace Scoreboard.Services;
 /// All scoreboard data lives in one blob folder: roster.json, current-game.json and games/{id}.json.
 /// There are no groups or access codes; the folder is fixed per deployment.
 /// </summary>
-public sealed class ScoreboardStore(BlobContainerClient container, IConfiguration config, ILogger<ScoreboardStore> logger)
+public sealed class ScoreboardStore(BlobContainerClient container, IOptions<ScoreboardOptions> options, ILogger<ScoreboardStore> logger)
 {
     private readonly SemaphoreSlim _prefixLock = new(1, 1);
     private string? _prefix;
@@ -72,7 +74,7 @@ public sealed class ScoreboardStore(BlobContainerClient container, IConfiguratio
 
     private BlobClient Blob(string prefix, string path) => container.GetBlobClient($"{prefix}/{path}");
 
-    // The data folder is BlobStorage:DataFolder if set. Otherwise it is the folder of the old
+    // The data folder is Modules:Scoreboard:DataFolder (or BlobStorage:DataFolder) if set. Otherwise it is the folder of the old
     // group with the most games (so existing history carries over), or "main" on a fresh install.
     private async Task<string> PrefixAsync()
     {
@@ -81,7 +83,7 @@ public sealed class ScoreboardStore(BlobContainerClient container, IConfiguratio
         await _prefixLock.WaitAsync();
         try
         {
-            _prefix ??= config["BlobStorage:DataFolder"] is { Length: > 0 } configured
+            _prefix ??= options.Value.DataFolder is { Length: > 0 } configured
                 ? configured
                 : await FindLegacyGroupFolderAsync() ?? "main";
             logger.LogInformation("Scoreboard data folder: {Folder}", _prefix);

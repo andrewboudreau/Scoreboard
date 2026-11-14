@@ -2,37 +2,29 @@
 
 	<PropertyGroup>
 		<AssemblyName>SharedTools.Scoreboard</AssemblyName>
-		<PackageId>SharedTools.Scoreboard</PackageId>
 		<RootNamespace>SharedTools.Scoreboard</RootNamespace>
-		<TargetFramework>net10.0</TargetFramework>
-		
+		<TargetFramework>net11.0</TargetFramework>
+
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		
-		<GeneratePackageOnBuild Condition="'$(CI)' != 'true'">true</GeneratePackageOnBuild>
+
+		<!-- Ships as a module drop (`dotnet publish -o out`, zipped and uploaded by deploy.ps1), not a NuGet package. -->
+		<IsPackable>false</IsPackable>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<!-- Framework reference for ASP.NET Core -->
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 
-		<PackageReference Include="SharedTools.Web" Version="1.4.4">
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
+		<!-- Compile against the contract; the module host supplies SharedTools.Web at runtime. -->
+		<PackageReference Include="SharedTools.Web" Version="3.0.0" ExcludeAssets="runtime" PrivateAssets="all" />
 
-		<!-- Your other dependencies (will be included in package) -->
 		<PackageReference Include="Azure.Storage.Blobs" Version="12.28.0-beta.1" />
 		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 	</ItemGroup>
 
-	<!-- Include static assets as embedded resources -->
+	<!-- wwwroot ships as files in the drop; the host serves it at /_content/Scoreboard/. -->
 	<ItemGroup>
-		<EmbeddedResource Include="wwwroot\**\*" />
+		<Content Include="wwwroot\**" CopyToPublishDirectory="PreserveNewest" />
 	</ItemGroup>
-
-	<!-- Local NuGet feed for development -->
-	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
-		<PackageOutputPath>C:\LocalNuGet</PackageOutputPath>
-	</PropertyGroup>
 
 </Project>

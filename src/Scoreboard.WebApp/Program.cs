@@ -1,23 +1,25 @@
+using SharedTools.ModuleManagement;
 using SharedTools.Web.Modules;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Razor Pages support
 builder.Services.AddRazorPages();
 
-await builder.AddApplicationPartModules([
-    "SharedTools.Scoreboard",
-    "SharedTools.ModuleManagement"
-]);
+// Loads module drops: everything under Modules:Root plus each Modules:Paths entry.
+// appsettings.json points "scoreboard" at bin/drops/scoreboard, which the build publishes.
+builder.AddModules();
+
+// Module hub at /_modules: what loaded, which drop is serving, what failed.
+builder.AddModule<ModuleManagementModule>();
 
 var app = builder.Build();
 
-// Use Razor Pages
+app.UseStaticFiles();
 app.MapRazorPages();
 
-app.UseApplicationPartModules();
+// Serves /_content/{Name}/ from each drop's wwwroot, then calls each module's Configure.
+app.UseModules();
 
-// Add a simple home page that redirects to the Scoreboard module
 app.MapGet("/", () => Results.Redirect("/Scoreboard/"));
 
 app.Run();

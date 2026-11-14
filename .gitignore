@@ -372,3 +372,6 @@ FodyWeavers.xsd
 .claude/settings.local.json
 /nul
 /*.png
+# Module drop output and the upload key (deploy.ps1)
+out/
+.env
