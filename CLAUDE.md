@@ -45,7 +45,7 @@ A dynamically loadable ASP.NET Core module implementing `IApplicationPartModule`
 - **ScoreboardModule.cs**: Entry point - registers services, serves the embedded HTML pages (`Page()` replaces `{{v}}` with the build id for cache busting)
 - **ScoreboardApi.cs**: JSON API. The server is the single source of truth; there is no auth (private friend group) and no groups/share codes
 - **Services/ScoreboardStore.cs**: Reads/writes JSON blobs in one container under a data folder
-- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `stats.css`)
+- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA; `tour.js` is the guided tour of the Teams panel, started by its "?" button or a `?players&tour` link. `?players` / `?players=edit` open the panel / roster editing), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `stats.css`)
 
 ### Scoreboard.WebApp (src/Scoreboard.WebApp/) - The Host
 Minimal ASP.NET Core app that loads and hosts modules. Program.cs explicitly loads `SharedTools.Scoreboard` and `SharedTools.ModuleManagement` from NuGet.

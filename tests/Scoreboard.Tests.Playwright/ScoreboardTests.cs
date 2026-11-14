@@ -673,4 +673,149 @@ public class ScoreboardTests : PageTest
         Assert.That(teams[0], Is.Not.EqualTo(teams[1]));
         Assert.That(teams.Count(c => c == '1'), Is.EqualTo(2));
     }
+
+    // ---- Deep links and the guided tour ----
+
+    private static readonly Regex Editing = new(@"\bediting\b");
+    private static readonly Regex PlainUrl = new(@"/Scoreboard/$");
+
+    [Test]
+    public async Task DeepLink_Players_OpensTeamsPanel()
+    {
+        SeedRoster("1", "1", "2", "2");
+        await _scoreboard.GotoAsync("?players");
+
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+        await Expect(_scoreboard.PlayersPanel).Not.ToHaveClassAsync(Editing);
+        await Expect(_scoreboard.PlayerRows).ToHaveCountAsync(4);
+        await Expect(_scoreboard.Tour).ToHaveCountAsync(0);
+        // The param is stripped so a refresh is a plain load
+        await Expect(Page).ToHaveURLAsync(PlainUrl);
+    }
+
+    [Test]
+    public async Task DeepLink_PlayersEdit_OpensEditMode()
+    {
+        SeedRoster("1", "1", "2", "2");
+        await _scoreboard.GotoAsync("?players=edit");
+
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Editing);
+        await Expect(_scoreboard.EditRosterBtn).ToHaveTextAsync("Done");
+        await Expect(_scoreboard.PlayerRows.Locator(".remove-player")).ToHaveCountAsync(4);
+        await Expect(_scoreboard.TeamsHelpBtn).ToBeHiddenAsync();
+        await Expect(Page).ToHaveURLAsync(PlainUrl);
+    }
+
+    [Test]
+    public async Task DeepLink_Tour_ShowsStepsAndSkipCloses()
+    {
+        SeedRoster("1", "1", "2", "2");
+        await _scoreboard.GotoAsync("?players&tour");
+
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+        await Expect(_scoreboard.TourCard).ToBeVisibleAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 9");
+        await Expect(_scoreboard.TourBackBtn).ToBeHiddenAsync();
+        await Expect(Page).ToHaveURLAsync(PlainUrl);
+
+        await _scoreboard.TourNextBtn.ClickAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 9");
+        await Expect(_scoreboard.TourCard).ToContainTextAsync("All out");
+        await _scoreboard.TourNextBtn.ClickAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("3 of 9");
+        await Expect(_scoreboard.TourCard).ToContainTextAsync("BLACK / OUT / WHITE");
+        await _scoreboard.TourBackBtn.ClickAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 9");
+
+        await _scoreboard.TourSkipBtn.ClickAsync();
+        await Expect(_scoreboard.Tour).ToHaveCountAsync(0);
+        // Skipping leaves you on the teams panel, and a refresh doesn't replay the tour
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+        await Page.ReloadAsync();
+        await Expect(_scoreboard.PlayerRows).ToHaveCountAsync(4);
+        await Expect(_scoreboard.Tour).ToHaveCountAsync(0);
+    }
+
+    [Test]
+    public async Task DeepLink_TourAlone_OpensThePanelToo()
+    {
+        await _scoreboard.GotoAsync("?tour=1");
+
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 9");
+        await Expect(Page).ToHaveURLAsync(PlainUrl);
+    }
+
+    [Test]
+    public async Task Tour_WalkedToTheEnd_ChangesNothing()
+    {
+        SeedRoster("1", "1", "2", "2");
+        var roster = _api.Docs["roster"];
+        await _scoreboard.GotoAsync("?players&tour");
+        await Expect(_scoreboard.PlayerRows).ToHaveCountAsync(4);
+
+        for (var step = 1; step <= 9; step++)
+        {
+            await Expect(_scoreboard.TourCount).ToHaveTextAsync($"{step} of 9");
+            // A tap on the dimmed page is swallowed: the panel stays open and the tour stays put
+            await Page.Mouse.ClickAsync(3, 3);
+            await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+            if (step == 9) await Expect(_scoreboard.TourNextBtn).ToHaveTextAsync("Done");
+            await _scoreboard.TourNextBtn.ClickAsync();
+        }
+
+        await Expect(_scoreboard.Tour).ToHaveCountAsync(0);
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+        await Expect(_scoreboard.PlayersPanel).Not.ToHaveClassAsync(Editing);
+        // Nothing was saved and nobody moved
+        Assert.That(_api.Docs["roster"], Is.EqualTo(roster));
+        var teams = await Page.EvaluateAsync<string>(
+            "() => window.scoreboardApp.playersList.slice().sort((a, b) => a.id - b.id).map(p => p.team + (p.active ? '' : 'x')).join('')");
+        Assert.That(teams, Is.EqualTo("1122"));
+    }
+
+    [Test]
+    public async Task Tour_HelpButtonStartsIt_SpotlightFollowsTheRealButton()
+    {
+        SeedRoster("1", "1", "2", "2");
+        await _scoreboard.GotoAsync();
+        await _scoreboard.OpenPlayers();
+        await _scoreboard.TeamsHelpBtn.ClickAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("1 of 9");
+
+        // Step 2 points at All out: the spotlight frames it and the card stays clear of it
+        await _scoreboard.TourNextBtn.ClickAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("2 of 9");
+        await Page.WaitForFunctionAsync("""
+            () => {
+                const box = s => document.querySelector(s).getBoundingClientRect();
+                const btn = box('#all-out-btn'), spot = box('.tour-spot'), card = box('#tour-card');
+                const framed = spot.left <= btn.left && spot.top <= btn.top && spot.right >= btn.right && spot.bottom >= btn.bottom
+                    && spot.width < btn.width + 20 && spot.height < btn.height + 20;
+                const clear = card.top >= spot.bottom || card.bottom <= spot.top || card.left >= spot.right || card.right <= spot.left;
+                const onScreen = card.left >= 0 && card.top >= 0 && card.right <= innerWidth && card.bottom <= innerHeight;
+                return framed && clear && onScreen;
+            }
+            """);
+
+        // Escape closes the tour but not the panel
+        await Page.Keyboard.PressAsync("Escape");
+        await Expect(_scoreboard.Tour).ToHaveCountAsync(0);
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
+    }
+
+    [Test]
+    public async Task Tour_NoPlayersYet_ShowsTheCardWithoutASpotlight()
+    {
+        await _scoreboard.GotoAsync("?players&tour");
+        await _scoreboard.TourNextBtn.ClickAsync();
+        await _scoreboard.TourNextBtn.ClickAsync();
+
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("3 of 9");
+        await Expect(_scoreboard.Tour).ToHaveClassAsync(new Regex(@"\btour-no-target\b"));
+        await Expect(_scoreboard.TourCard).ToBeVisibleAsync();
+        await _scoreboard.TourNextBtn.ClickAsync();
+        await Expect(_scoreboard.TourCount).ToHaveTextAsync("4 of 9");
+    }
 }

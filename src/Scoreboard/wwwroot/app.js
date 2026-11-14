@@ -104,10 +104,28 @@ class ScoreboardApp {
         setInterval(() => {
             if (document.visibilityState === 'visible') this.refresh();
         }, 15 * 1000);
-        if (window.location.hash === '#teams') {
-            history.replaceState(null, '', window.location.pathname);
-            this.players.open();
-        }
+        this.handleDeepLink();
+    }
+
+    // Links that open straight into the team builder:
+    //   #teams or ?players   the Teams panel
+    //   ?players=edit        the panel on roster editing (rename / photo / delete)
+    //   &tour (or ?tour)     also starts the guided tour (tour.js)
+    // The params are stripped afterwards so a refresh doesn't replay them.
+    handleDeepLink() {
+        const params = new URLSearchParams(window.location.search);
+        const tour = params.has('tour') && !['0', 'false'].includes(params.get('tour'));
+        const edit = (params.get('players') || '').toLowerCase() === 'edit';
+        if (!tour && !params.has('players') && window.location.hash !== '#teams') return;
+
+        params.delete('players');
+        params.delete('tour');
+        const rest = params.toString();
+        history.replaceState(null, '', window.location.pathname + (rest ? '?' + rest : ''));
+
+        this.players.open();
+        if (tour && window.TeamsTour) window.TeamsTour.start();
+        else if (edit) this.players.setEditing(true);
     }
 
     // Device preferences (font sizes, screen wake lock). Everything else lives on the server.
@@ -983,11 +1001,8 @@ class Players {
         this.balanceBtn.addEventListener('click', () => this.balance());
         this.allOutBtn.addEventListener('click', () => this.allOut());
         this.shareTeamsBtn.addEventListener('click', () => this.shareTeams());
-        this.editRosterBtn.addEventListener('click', () => {
-            this.editing = !this.editing;
-            this.confirmDeleteId = null;
-            this.render();
-        });
+        this.editRosterBtn.addEventListener('click', () => this.setEditing(!this.editing));
+        document.getElementById('teams-help-btn').addEventListener('click', () => window.TeamsTour?.start());
         this.photoInput.addEventListener('change', () => this.uploadPhoto());
         document.getElementById('close-teams-btn').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1003,13 +1018,15 @@ class Players {
         }
     }
 
+    setEditing(editing) {
+        this.editing = editing;
+        this.confirmDeleteId = null;
+        this.render();
+    }
+
     open() {
         // Always open on the teams view, never stuck in edit mode from last time
-        if (this.editing) {
-            this.editing = false;
-            this.confirmDeleteId = null;
-            this.render();
-        }
+        if (this.editing) this.setEditing(false);
         this.playersPanel.classList.add('active');
         document.getElementById('settings-panel').classList.remove('active');
         this.loadModel().then(() => this.renderPrediction());
