@@ -580,6 +580,11 @@
                         ${g.quarters.length ? `<div class="quarters">${g.quarters.map((q, i) => `Q${i + 1} ${q.points[0]}-${q.points[1]}`).join(' · ')}</div>` : ''}
                     </a>`;
             }
+            const short = allGames.shortGames || [];
+            if (short.length) {
+                html += `<div class="card"><div class="note">Not counted: ${short.length} short game${short.length === 1 ? '' : 's'} (under ${Stats.MIN_POINTS} points) · ${short.map(g =>
+                    `<a href="/Scoreboard/game?id=${encodeURIComponent(g.id)}">${esc(formatDate(g.date))} ${g.final[0]}–${g.final[1]}</a>`).join(' · ')}</div></div>`;
+            }
             return html;
         }
     </script>

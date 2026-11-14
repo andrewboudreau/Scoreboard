@@ -48,10 +48,11 @@ public class ScoreboardModule : IApplicationPartModule
     public void Configure(WebApplication app)
     {
         var webRoot = this.WebRoot();
-        app.MapGet("/Scoreboard/", (HttpContext ctx) => Page(ctx, webRoot, "index.html"));
-        app.MapGet("/Scoreboard/docs", (HttpContext ctx) => Page(ctx, webRoot, "docs.html"));
-        app.MapGet("/Scoreboard/game", (HttpContext ctx) => Page(ctx, webRoot, "game.html"));
-        app.MapGet("/Scoreboard/stats", (HttpContext ctx) => Page(ctx, webRoot, "stats.html"));
+        var version = ContentVersion(webRoot);
+        app.MapGet("/Scoreboard/", (HttpContext ctx) => Page(ctx, webRoot, version, "index.html"));
+        app.MapGet("/Scoreboard/docs", (HttpContext ctx) => Page(ctx, webRoot, version, "docs.html"));
+        app.MapGet("/Scoreboard/game", (HttpContext ctx) => Page(ctx, webRoot, version, "game.html"));
+        app.MapGet("/Scoreboard/stats", (HttpContext ctx) => Page(ctx, webRoot, version, "stats.html"));
         // The team builder now lives on the scoreboard itself.
         app.MapGet("/Scoreboard/ManagePlayers", () => Results.Redirect("/Scoreboard/#teams"));
 
@@ -62,22 +63,35 @@ public class ScoreboardModule : IApplicationPartModule
     {
     }
 
-    // Changes with every build, so phones pick up new app.js/styles.css instead of cached copies.
-    private static readonly string BuildVersion =
-        typeof(ScoreboardModule).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
+    // A hash of everything in wwwroot (plus the assembly), so any change to app.js/styles.css
+    // gives pages new script URLs and phones drop their cached copies.
+    private static string ContentVersion(string webRoot)
+    {
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        hash.AppendData(typeof(ScoreboardModule).Assembly.ManifestModule.ModuleVersionId.ToByteArray());
+        if (Directory.Exists(webRoot))
+        {
+            foreach (var file in Directory.EnumerateFiles(webRoot, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                hash.AppendData(System.Text.Encoding.UTF8.GetBytes(Path.GetRelativePath(webRoot, file)));
+                hash.AppendData(File.ReadAllBytes(file));
+            }
+        }
+        return Convert.ToHexStringLower(hash.GetHashAndReset())[..8];
+    }
 
     // Serves an HTML page from the drop's wwwroot, or 404 if it is missing.
     // Pages are tiny and always revalidated, so a phone never holds on to an old page
     // that points at old script versions.
     // Synchronous on purpose: a (HttpContext) => Task lambda binds to MapGet's RequestDelegate
     // overload, which would discard the returned IResult and send an empty page.
-    private static IResult Page(HttpContext context, string webRoot, string fileName)
+    private static IResult Page(HttpContext context, string webRoot, string version, string fileName)
     {
         var path = Path.Combine(webRoot, fileName);
         if (!File.Exists(path)) return Results.NotFound();
 
         context.Response.Headers.CacheControl = "no-cache";
-        var html = File.ReadAllText(path).Replace("{{v}}", BuildVersion);
+        var html = File.ReadAllText(path).Replace("{{v}}", version);
         return Results.Content(html, "text/html; charset=utf-8");
     }
 }
