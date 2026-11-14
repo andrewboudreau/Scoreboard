@@ -976,3 +976,141 @@ body {
         width: 100%;
     }
 }
+
+/* ---- Guided tour of the teams panel (tour.js) ---- */
+
+/* "?" in the title bar: quieter than Edit, gone while editing */
+.help-btn {
+    padding: 0;
+    color: #bbb;
+    font-weight: 800;
+}
+
+.teams-panel.editing .help-btn { display: none; }
+
+/* Above the full-screen panel (200) and the sync banner (300) */
+#tour {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+#tour > * { position: fixed; }
+
+/* Only measured: gives tour.js the safe-area insets as numbers */
+.tour-safe {
+    inset: 0;
+    visibility: hidden;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* Invisible tap-catchers around the spotlight */
+.tour-block { pointer-events: auto; }
+
+/* The spotlight: a ring whose huge shadow dims everything else. Taps go through it. */
+.tour-spot {
+    border-radius: 12px;
+    box-shadow: 0 0 0 3px #1c7ed6, 0 0 0 200vmax rgba(0, 0, 0, 0.72);
+}
+
+#tour.tour-no-target .tour-spot { box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.72); }
+
+#tour.tour-moving .tour-spot,
+#tour.tour-moving .tour-card {
+    transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+
+.tour-card {
+    box-sizing: border-box;
+    padding: 10px 16px 14px;
+    border: 1px solid #4a4a4a;
+    border-radius: 10px;
+    background: #2b2b2b;
+    color: #fff;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    pointer-events: auto;
+    text-align: left;
+}
+
+.tour-top {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-right: -10px;
+}
+
+.tour-count {
+    color: #8ab4f8;
+    font-size: 0.85rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.tour-title {
+    margin: 0 0 6px;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.tour-body {
+    margin: 0 0 12px;
+    color: #ddd;
+    font-size: 1rem;
+    line-height: 1.45;
+}
+
+.tour-body b { color: #fff; }
+
+.tour-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.tour-card button {
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.tour-skip {
+    padding: 0 10px;
+    border: none;
+    background: transparent;
+    color: #aaa;
+}
+
+.tour-back {
+    padding: 0 18px;
+    border: 1px solid #555;
+    background: #3d3d3d;
+    color: #fff;
+}
+
+.tour-card .tour-next {
+    min-width: 110px;
+    padding: 0 22px;
+    border: 1px solid #1c7ed6;
+    background: #1c7ed6;
+    color: #fff;
+    font-weight: 800;
+}
+
+.tour-card button:focus-visible { outline: 2px solid #8ab4f8; outline-offset: 2px; }
+
+@media (hover: hover) {
+    .tour-card button:hover { filter: brightness(1.2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #tour.tour-moving .tour-spot,
+    #tour.tour-moving .tour-card { transition: none; }
+}

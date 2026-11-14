@@ -18,9 +18,10 @@ public class ScoreboardPage
     }
 
     // Navigation
-    public async Task GotoAsync()
+    // query: a deep link such as "?players", "?players=edit" or "?players&tour"
+    public async Task GotoAsync(string query = "")
     {
-        await _page.GotoAsync($"{_baseUrl}/Scoreboard/");
+        await _page.GotoAsync($"{_baseUrl}/Scoreboard/{query}");
         await _page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
     }
 
@@ -181,6 +182,15 @@ public class ScoreboardPage
     // Roster rows are sorted alphabetically by name
     public ILocator PlayerRows => PlayersList.Locator(".roster-row");
     public ILocator EditRosterBtn => _page.Locator("#edit-roster-btn");
+
+    // Guided tour of the teams panel (tour.js)
+    public ILocator TeamsHelpBtn => _page.Locator("#teams-help-btn");
+    public ILocator Tour => _page.Locator("#tour");
+    public ILocator TourCard => _page.Locator("#tour-card");
+    public ILocator TourCount => TourCard.Locator(".tour-count");
+    public ILocator TourNextBtn => TourCard.Locator(".tour-next");
+    public ILocator TourBackBtn => TourCard.Locator(".tour-back");
+    public ILocator TourSkipBtn => TourCard.Locator(".tour-skip");
 
     public async Task<int> GetPlayerRowCount()
     {
