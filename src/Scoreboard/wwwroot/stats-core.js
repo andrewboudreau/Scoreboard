@@ -2,7 +2,8 @@
 // Games come in two flavors and everything here works for both:
 //   - player-tracked: score events carry playerId and players[].points add up
 //   - team-only: just team scores, usually captured at the end of each quarter
-// Teams are 1 (BLACK) and 2 (WHITE).
+// Teams are 1 (BLACK) and 2 (WHITE). They're reshuffled every week and the colors are picked
+// at random, so colors only name the two sides of one game: nothing adds them up across games.
 
 const Stats = (() => {
     const DATE_IN_ID = /^game-(\d{4}-\d{2}-\d{2})/;
@@ -41,11 +42,129 @@ const Stats = (() => {
         return pts;
     }
 
+    // Events this far apart belong to different nights. Matches NEW_NIGHT_GAP_MS in app.js.
+    const SESSION_GAP_MS = 8 * 3600 * 1000;
+    // Games with fewer total points than this are warm-ups or tests; stats leave them out.
+    const MIN_POINTS = 10;
+
+    const pad2 = n => String(n).padStart(2, '0');
+
+    // YYYY-MM-DD on this device's calendar. Games are evenings, so the UTC date is often a day late.
+    function localDate(ts) {
+        const d = new Date(ts);
+        return isNaN(d) ? '' : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    }
+
+    // Older versions kept adding to the same saved game until someone tapped New game, so one
+    // saved game can hold several nights. Split it at long gaps between events. The newest
+    // night keeps the saved id; earlier ones become "<id>~1", "<id>~2", ...
+    function splitNights(raw) {
+        const all = Array.isArray(raw.events) ? raw.events : [];
+        const nights = [];
+        let cur = [], lastT = null;
+        for (const e of all) {
+            const t = Date.parse(e?.ts || '');
+            if (Number.isFinite(t)) {
+                if (lastT !== null && t - lastT >= SESSION_GAP_MS && cur.length) { nights.push(cur); cur = []; }
+                lastT = t;
+            }
+            cur.push(e);
+        }
+        if (cur.length) nights.push(cur);
+        if (nights.length < 2) return [raw];
+
+        // A night of nothing but taps back down (someone fiddling with an old game) isn't a game.
+        const played = evs => evs.some(e => e?.type === 'period_end' || e?.type === 'score_set'
+            || (e?.type === 'score' && e.action !== 'decrement'));
+        const newestPlayed = played(nights[nights.length - 1]);
+        const kept = nights.filter(played);
+        if (!kept.length) return [raw];
+
+        const roster = new Map((raw.players || []).filter(Boolean).map(p => [String(p.id ?? p.name), p]));
+        const scoresOf = e => [num(e.scores[0]), num(e.scores[1])];
+        let carried = [0, 0]; // running score when the previous night ended
+
+        return kept.map((night, i) => {
+            const newest = i === kept.length - 1;
+            let evs = night;
+            let base = carried;
+            if (i > 0) {
+                // Instead of starting a new game, people often tapped every score back down to zero.
+                // Skip that wind-down: the night starts where the score bottoms out before the first
+                // quarter ends. If the score just kept running, the base is where last night ended.
+                const firstEnd = evs.findIndex(e => e?.type === 'period_end');
+                const lead = firstEnd < 0 ? evs.length : firstEnd;
+                let low = carried[0] + carried[1], lowAt = -1;
+                for (let k = 0; k < lead; k++) {
+                    if (!Array.isArray(evs[k]?.scores)) continue;
+                    const sc = scoresOf(evs[k]);
+                    if (sc[0] + sc[1] <= low) { low = sc[0] + sc[1]; lowAt = k; base = sc; }
+                }
+                evs = evs.slice(lowAt + 1);
+            }
+            const withScores = evs.filter(e => Array.isArray(e?.scores));
+            const end = withScores.length ? scoresOf(withScores[withScores.length - 1]) : base;
+            carried = end;
+
+            let final = [Math.max(0, end[0] - base[0]), Math.max(0, end[1] - base[1])];
+            if (newest && newestPlayed) {
+                const saved = [num(raw.team1?.score), num(raw.team2?.score)];
+                if (saved[0] >= base[0] && saved[1] >= base[1]) final = [saved[0] - base[0], saved[1] - base[1]];
+            }
+
+            // Saved player points cover every night, so recount from this night's events
+            // (normalize falls back to events when all points are zero). Players keep the team they scored for.
+            const players = newest ? (raw.players || []).filter(Boolean).map(p => ({ ...p, points: 0 })) : [];
+            for (const e of evs) {
+                const team = Number(e?.team);
+                if (e?.type !== 'score' || e.playerId == null || (team !== 1 && team !== 2)) continue;
+                const key = String(e.playerId);
+                let p = players.find(x => String(x.id ?? x.name) === key);
+                if (!p) {
+                    const r = roster.get(key);
+                    p = { id: r?.id ?? e.playerId, name: r?.name || e.player || e.playerName || '?', active: true, points: 0 };
+                    players.push(p);
+                }
+                p.team = String(team);
+            }
+
+            return {
+                ...raw,
+                id: newest ? raw.id : `${raw.id}~${i + 1}`,
+                splitFrom: raw.id,
+                weekDate: undefined,
+                team1: { ...raw.team1, score: final[0] },
+                team2: { ...raw.team2, score: final[1] },
+                periodScores: [],
+                players,
+                events: evs.map(e => Array.isArray(e?.scores)
+                    ? { ...e, scores: [num(e.scores[0]) - base[0], num(e.scores[1]) - base[1]] } : e),
+                lastUpdated: newest && newestPlayed ? raw.lastUpdated : (evs[evs.length - 1]?.ts || raw.lastUpdated)
+            };
+        });
+    }
+
+    // Every game in one saved document (usually one; more for old documents that span nights).
+    function gamesFromDoc(raw) {
+        return splitNights(raw).map(normalize);
+    }
+
     // Turn a stored game document into one shape the pages can rely on.
     function normalize(raw) {
         const events = Array.isArray(raw.events) ? raw.events : [];
         const final = [num(raw.team1?.score), num(raw.team2?.score)];
-        const date = raw.weekDate || raw.id?.match(DATE_IN_ID)?.[1] || (raw.lastUpdated || '').split('T')[0] || '';
+        // The night it was played: the first event on this device's calendar, else the saved date.
+        const firstTs = events.find(e => Number.isFinite(Date.parse(e?.ts || '')))?.ts;
+        const idDate = raw.id?.match(DATE_IN_ID)?.[1];
+        let date = firstTs ? localDate(firstTs) : '';
+        if (!date && idDate) {
+            // No event times. Older ids hold the UTC day the game was created, and older saves set
+            // lastUpdated when the NEXT game started. If it was saved the same UTC day, use that time;
+            // otherwise assume an evening start (01:30 UTC is mid-evening across the US).
+            const saved = raw.lastUpdated || '';
+            date = localDate(saved.startsWith(idDate) ? saved : `${idDate}T01:30:00Z`);
+        }
+        date = date || raw.weekDate || (raw.lastUpdated || '').split('T')[0] || '';
 
         const totals = quarterTotals(raw);
         const quarters = totals.map((t, i) => {
@@ -121,73 +240,64 @@ const Stats = (() => {
         return { leadChanges, ties, biggest };
     }
 
-    // Team-level summary. Works for every game, tracked or not.
+    // Game-level summary. Teams are reshuffled every week and the colors are picked at random,
+    // so nothing here adds up BLACK or WHITE across games: it's winners vs losers instead.
     function summarize(games) {
         const s = {
             games: games.length,
-            wins: [0, 0], ties: 0,
-            points: [0, 0],
+            ties: 0,
+            points: { winner: 0, loser: 0, decided: 0 },
             closest: null, biggest: null,
-            streak: { team: 0, count: 0 },
             comebacks: [],
-            otherNames: [], // names typed for a team other than BLACK/WHITE: { team, name, games, last }
-            quarters: [] // per quarter index: { games, points: [a,b], won: [a,b] }
+            halfLeader: { won: 0, games: 0 }, // team ahead at half went on to win
+            quarters: [] // per quarter: { games, winner, loser (points), taken (quarters the winner won) }
         };
 
-        // games are newest first; the streak counts back from the latest game
-        if (games[0]?.winner) {
-            const team = games[0].winner;
-            let count = 0;
-            for (const g of games) {
-                if (g.winner !== team) break;
-                count++;
-            }
-            s.streak = { team, count };
-        }
-
-        const otherNames = new Map();
         for (const g of games) {
-            g.recordedNames.forEach((name, i) => {
-                if (!name || name.toUpperCase() === g.names[i]) return;
-                const key = `${i + 1}:${name.toUpperCase()}`;
-                const row = otherNames.get(key) || { team: i + 1, name, games: 0, last: g };
-                row.games++;
-                otherNames.set(key, row);
-            });
-            if (g.winner) s.wins[g.winner - 1]++; else s.ties++;
-            s.points[0] += g.final[0];
-            s.points[1] += g.final[1];
+            if (!g.winner) { s.ties++; } else {
+                const w = g.winner - 1;
+                s.points.decided++;
+                s.points.winner += g.final[w];
+                s.points.loser += g.final[1 - w];
+            }
             if (g.winner && (!s.closest || g.margin < s.closest.margin)) s.closest = g;
             if (!s.biggest || g.margin > s.biggest.margin) s.biggest = g;
 
-            // Won after trailing at half (or after Q3 if that's all we have)
             const half = g.quarters[1] || null;
             if (g.winner && half) {
                 const [a, b] = half.total;
                 const trailing = g.winner === 1 ? a < b : b < a;
                 if (trailing) s.comebacks.push({ game: g, deficit: Math.abs(a - b) });
+                if (a !== b) {
+                    s.halfLeader.games++;
+                    if (!trailing) s.halfLeader.won++;
+                }
             }
 
+            if (!g.winner) continue;
+            const w = g.winner - 1;
             g.quarters.forEach((q, i) => {
-                const row = s.quarters[i] ||= { games: 0, points: [0, 0], won: [0, 0] };
+                const row = s.quarters[i] ||= { games: 0, winner: 0, loser: 0, taken: 0 };
                 row.games++;
-                row.points[0] += q.points[0];
-                row.points[1] += q.points[1];
-                if (q.points[0] > q.points[1]) row.won[0]++;
-                else if (q.points[1] > q.points[0]) row.won[1]++;
+                row.winner += q.points[w];
+                row.loser += q.points[1 - w];
+                if (q.points[w] > q.points[1 - w]) row.taken++;
             });
         }
-        // Longest win streak per team (oldest to newest; a tie breaks it)
-        s.longest = [null, null];
-        let run = null;
-        for (const g of [...games].reverse()) {
-            if (run && g.winner === run.team) { run.count++; run.to = g; }
-            else run = g.winner ? { team: g.winner, count: 1, from: g, to: g } : null;
-            if (run && (!s.longest[run.team - 1] || run.count > s.longest[run.team - 1].count)) s.longest[run.team - 1] = { ...run };
-        }
-
-        s.otherNames = [...otherNames.values()].sort((a, b) => a.team - b.team || b.games - a.games);
         return s;
+    }
+
+    // How to name one team of one game. Colors only mean something for that night, so name
+    // the side after its top scorer, or list who was on it.
+    function teamLabel(g, t) {
+        const list = g.players.filter(p => p.team === t);
+        if (!list.length) return g.names[t - 1];
+        if (g.tracked) {
+            const top = [...list].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+            if (top[0].points > top[1]?.points || (top.length === 1 && top[0].points > 0)) return `Team ${top[0].name}`;
+        }
+        const names = list.map(p => p.name).sort((a, b) => a.localeCompare(b));
+        return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length - 2}` : names.join(' & ');
     }
 
     // Per-player numbers. Games played, record and +/- come from team results, so they
@@ -219,10 +329,27 @@ const Stats = (() => {
         }
         return [...byId.values()].map(r => ({
             ...r,
+            ...winStreaks(r.log),
             winPct: r.gp ? (r.wins + r.ties / 2) / r.gp : 0,
+            // For ranking by win%: two phantom games at 50% keep 2-0 from topping 9-3
+            winPctSort: (r.wins + r.ties / 2 + 1) / (r.gp + 2),
             avgPlusMinus: r.gp ? r.plusMinus / r.gp : 0,
             ppg: r.trackedGp ? r.points / r.trackedGp : null
         }));
+    }
+
+    // A player's wins in a row, counting only games they played. log: newest first.
+    // streak: current run of wins; best: longest run { count, from, to } (oldest to newest).
+    function winStreaks(log) {
+        let streak = 0;
+        while (streak < log.length && log[streak].result === 'W') streak++;
+        let best = null, run = null;
+        for (const l of [...log].reverse()) {
+            if (l.result !== 'W') { run = null; continue; }
+            run = run ? { ...run, count: run.count + 1, to: l.game } : { count: 1, from: l.game, to: l.game };
+            if (!best || run.count > best.count) best = run;
+        }
+        return { streak, bestStreak: best };
     }
 
     // ---- formatting ----
@@ -340,13 +467,49 @@ const Stats = (() => {
     }
 
     async function loadGames() {
-        const res = await fetch('/Scoreboard/api/games');
+        const [res, hidden] = await Promise.all([fetch('/Scoreboard/api/games'), hiddenIds()]);
         if (!res.ok) throw new Error(`Couldn't load games (${res.status})`);
-        return (await res.json())
-            .map(normalize)
+        const all = (await res.json())
+            .flatMap(gamesFromDoc)
             .filter(isPlayed)
             .sort((a, b) => (b.date + (b.raw.lastUpdated || '')).localeCompare(a.date + (a.raw.lastUpdated || '')));
+        const played = all.filter(g => !hidden.has(g.id));
+        const games = played.filter(g => !isShort(g));
+        games.shortGames = played.filter(isShort);
+        games.hiddenGames = all.filter(g => hidden.has(g.id));
+        return games;
     }
 
-    return { normalize, isPlayed, flow, summarize, players, esc, formatDate, formatTime, signed, teamChip, shareText, share, chartSvg, loadGames };
+    // ---- games removed from stats (tests, mistakes); see /api/hidden-games ----
+
+    async function hiddenIds() {
+        try {
+            const res = await fetch('/Scoreboard/api/hidden-games', { cache: 'no-store' });
+            const doc = res.ok ? await res.json() : null;
+            return new Set(Array.isArray(doc?.ids) ? doc.ids.map(String) : []);
+        } catch {
+            return new Set();
+        }
+    }
+
+    // Reads the latest list first so two people removing games don't undo each other.
+    async function setHidden(id, hide) {
+        const ids = await hiddenIds();
+        if (hide) ids.add(id); else ids.delete(id);
+        const res = await fetch('/Scoreboard/api/hidden-games', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [...ids] })
+        });
+        if (!res.ok) throw new Error(`Couldn't save (${res.status})`);
+    }
+
+    // A finished warm-up or test: too few points to count in the stats. Its game page still works.
+    // A game still being played tonight is never short.
+    function isShort(g) {
+        const age = Date.now() - Date.parse(g.raw.lastUpdated || '');
+        return g.final[0] + g.final[1] < MIN_POINTS && !(age < SESSION_GAP_MS);
+    }
+
+    return { normalize, gamesFromDoc, isShort, MIN_POINTS, isPlayed, flow, summarize, players, teamLabel, hiddenIds, setHidden, esc, formatDate, formatTime, signed, teamChip, shareText, share, chartSvg, loadGames };
 })();

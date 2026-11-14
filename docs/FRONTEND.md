@@ -17,7 +17,7 @@ Everything lives in `src/Scoreboard/wwwroot/` as plain HTML/CSS/JS. No build ste
 
 `/Scoreboard/ManagePlayers` redirects to `/Scoreboard/#teams`, which opens the teams panel.
 
-HTML pages are files in the drop's `wwwroot/`, served by `Page()` in `ScoreboardModule.cs` with `Cache-Control: no-cache`. It replaces `{{v}}` with a per-build id, so `app.js?v={{v}}` and friends are cache-busted on every deploy. Static assets (JS, CSS, icons, audio) are served from `/_content/Scoreboard/`.
+HTML pages are files in the drop's `wwwroot/`, served by `Page()` in `ScoreboardModule.cs` with `Cache-Control: no-cache`. It replaces `{{v}}` with a hash of the wwwroot files (plus the assembly id), so `app.js?v={{v}}` and friends are cache-busted on every deploy. Static assets (JS, CSS, icons, audio) are served from `/_content/Scoreboard/`.
 
 ---
 
@@ -106,13 +106,15 @@ Until the first successful load (`loaded`), `saveRoster()` refuses to write, so 
 Older versions kept data in the browser. On first load, if any of `playersList`, `gameEvents`, `currentGameId`, `scoreHistory`, `groupCode`, `lastUploadAttempt` exist in localStorage:
 
 - `playersList` is uploaded as the roster **only** if the server roster is still the seeded default (`seeded: true`).
-- `gameEvents` (or `scoreHistory`) + `currentGameId` are rebuilt into a game document and uploaded if that game isn't on the server yet; it becomes the current game if there is none.
-- If every upload succeeded, all those keys are removed.
+- `gameEvents` (or `scoreHistory`) + `currentGameId` are rebuilt into a game document and uploaded if that game isn't on the server yet; it becomes the current game if there is none. If the server already has that id but lacks some of the device's events (matched by `ts` + `type`), the device copy is saved as `{id}-device-xxxx` instead of being dropped.
+- If every upload succeeded, one untouched copy of those keys is kept in `oldDataBackup` (first time only) and the keys are removed.
 
 ### Saving the game
 
 - `recordScoreChange()`, `captureScore()`, `correctPeriodScore()`, `setScores()` all end in `syncGame()`, which saves `games/{id}` and the `current-game` pointer (3s debounce).
 - `startNewGame()` (the **New Game** button) saves the old game under its own id (only if it has events), makes a new id, zeroes scores/points/periods/events, and saves immediately. The old game stays in history.
+- **New night, new game:** if the last event of the current game is 8+ hours old (`isStale()`), the first increment, typed score or quarter end on any device calls `startNewGame()` first, so weeks never pile up in one game. Decrements on a stale game do nothing. While stale, the score history shows "Last game … · next score starts a new game".
+- New game ids use the device's local date (`game-YYYY-MM-DD-xxxx`).
 - `shareGame()` (**Copy Results Link**) forces a save and copies `/Scoreboard/game?id={gameId}`.
 
 ### Timer
@@ -202,7 +204,9 @@ Breakpoints: ≤ 768px shrinks scores/timer; landscape with height ≤ 600px sta
   It handles **fully tracked** games (every basket credited), **partially tracked** games (some points uncredited), and **team-only** games (just quarter scores; `tracked` is false).
   A game counts as `tracked` only when at least half its points are credited to players; below that it is `partial` and season player stats skip it. If `players[].points` are all zero, points are rebuilt from credited `score` events.
   `names` is always `['BLACK', 'WHITE']`; whatever was typed is kept in `recordedNames` and listed in the Overview's **Team names** card.
-- `Stats.loadGames()` fetches `/Scoreboard/api/games`, normalizes, drops unplayed games (`isPlayed`), sorts newest first.
+- `date` is the local calendar day of the first event. Documents without events fall back to the id's date, read as an evening start (the id holds the UTC creation day, and older saves set `lastUpdated` when the *next* game began).
+- `Stats.gamesFromDoc(raw)` splits a document that spans several nights (older versions kept one game going until someone tapped New game) at 8h+ gaps between events. The newest night keeps the id; earlier ones are `{id}~1`, `{id}~2`, … For each later night it skips the wind-down where people tapped the old scores back to 0 (everything up to where the score bottoms out before the first quarter ends), rebuilds player points from that night's events, and gives scorers the team they scored for. A night of nothing but decrements (a stray tap on an old game) is dropped.
+- `Stats.loadGames()` fetches `/Scoreboard/api/games`, splits with `gamesFromDoc`, drops unplayed games (`isPlayed`), sorts newest first, and leaves out finished games under 10 points (`isShort`; listed on `games.shortGames` and in a "Not counted" note under History).
 - `summarize(games)`: wins, ties, points, closest/biggest game, current and longest win streaks, other team names typed, comebacks (won after trailing at half), per-quarter averages and quarters won.
 - `players(games)`: per player GP, W-L-T, win %, average +/- (team margin) from every game; PPG and high only from tracked games; a per-game log.
 - `flow(g)`: lead changes, ties, biggest lead per team. `chartSvg(g)`: score-over-time SVG (per event, or per quarter for team-only games).
@@ -231,7 +235,7 @@ The model and back-test always use every game; the range filter only changes wha
 
 ### game.html
 
-Loads `games/{id}` and `current-game` together. Shows a hero scoreline with **Share result**, a quarters table (with a "Now" column if unfinished), the score chart with lead changes / biggest leads / longest scoring run, a box score (or **Who played** for team-only games, with "Not credited" for uncredited points), and a collapsible play-by-play.
+Loads `games/{id}` and `current-game` together. For `{id}~n` it loads `{id}` and picks that night from `gamesFromDoc`. Shows a hero scoreline with **Share result**, a quarters table (with a "Now" column if unfinished), the score chart with lead changes / biggest leads / longest scoring run, a box score (or **Who played** for team-only games, with "Not credited" for uncredited points), and a collapsible play-by-play.
 
 If the game is the current game and was updated in the last 3 hours it shows **LIVE** and reloads every 15s.
 

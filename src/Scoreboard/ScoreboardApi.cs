@@ -17,6 +17,7 @@ namespace SharedTools.Scoreboard;
 ///   roster.json        { team1Name, team2Name, players: [...] }
 ///   current-game.json  { gameId }
 ///   games/{id}.json    full game state
+///   hidden-games.json  { ids: [...] } games left out of stats
 /// </summary>
 public static partial class ScoreboardApi
 {
@@ -38,6 +39,12 @@ public static partial class ScoreboardApi
         api.MapGet("/games/{id}", GetGame);
         api.MapPut("/games/{id}", (string id, HttpRequest req, ScoreboardStore store) =>
             ValidId(id) ? SaveJson(req, store, $"games/{id}.json") : Task.FromResult(Results.BadRequest()));
+
+        // Games removed from stats (tests, mistakes): { ids: [...] }. A list instead of deleting the
+        // game files, so a removal can be undone and a device holding an old copy can't bring it back.
+        api.MapGet("/hidden-games", async (ScoreboardStore store) =>
+            await store.ReadAsync("hidden-games.json") is { } doc ? Results.Bytes(doc.ToArray(), Json) : Results.Json(new { ids = Array.Empty<string>() }));
+        api.MapPut("/hidden-games", (HttpRequest req, ScoreboardStore store) => SaveJson(req, store, "hidden-games.json"));
 
         api.MapPost("/players/{id:long}/image", UploadPlayerImage).DisableAntiforgery();
         api.MapGet("/players/{id:long}/image", GetPlayerImage);

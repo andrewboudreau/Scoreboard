@@ -56,6 +56,9 @@ public partial class FakeApi
                 else
                     await route.FulfillAsync(new() { Status = 204 });
                 return;
+            case "hidden-games":
+                await Json(route, Docs.GetValueOrDefault("hidden-games") ?? """{"ids":[]}""");
+                return;
             case "games":
                 var games = Docs.Where(d => GameKey().IsMatch(d.Key)).Select(d => d.Value);
                 await Json(route, "[" + string.Join(",", games) + "]");

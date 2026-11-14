@@ -24,6 +24,7 @@
         const id = new URLSearchParams(location.search).get('id');
         let game = null;
         let lastJson = '';
+        let hidden = false;  // removed from stats (see Stats.setHidden)
 
         load();
 
@@ -32,16 +33,21 @@
             const error = document.getElementById('error');
             try {
                 if (!id) throw new Error('No game specified.');
-                const [res, current] = await Promise.all([
-                    fetch(`/Scoreboard/api/games/${encodeURIComponent(id)}`),
-                    fetch('/Scoreboard/api/current-game').then(r => r.status === 200 ? r.json() : null).catch(() => null)
+                // "<id>~2" is an earlier night inside an old saved game (see Stats.gamesFromDoc)
+                const docId = id.split('~')[0];
+                const [res, current, hiddenIds] = await Promise.all([
+                    fetch(`/Scoreboard/api/games/${encodeURIComponent(docId)}`),
+                    fetch('/Scoreboard/api/current-game').then(r => r.status === 200 ? r.json() : null).catch(() => null),
+                    Stats.hiddenIds()
                 ]);
                 if (!res.ok) throw new Error(res.status === 404 ? 'Game not found.' : `Error ${res.status}`);
                 const json = await res.text();
                 const live = current?.id === id && isRecent(current);
-                if (json !== lastJson) {
+                if (json !== lastJson || hiddenIds.has(id) !== hidden) {
                     lastJson = json;
-                    game = Stats.normalize(JSON.parse(json));
+                    hidden = hiddenIds.has(id);
+                    game = Stats.gamesFromDoc(JSON.parse(json)).find(g => g.id === id);
+                    if (!game) throw new Error('Game not found.');
                     render(live);
                 }
                 loading.hidden = true;
@@ -72,14 +78,18 @@
                     <div class="date">${formatDate(g.date, { weekday: 'long', month: 'long', day: 'numeric' })}
                         ${live ? ' · <span class="badge live">LIVE</span>' : ''}</div>
                     <div class="scoreline">
-                        <div class="team">${teamChip(1, n1)}<div class="big ${g.winner === 2 ? 'lost' : ''}">${g.final[0]}</div></div>
+                        <div class="team">${teamChip(1, n1)}<div class="big ${g.winner === 2 ? 'lost' : ''}">${g.final[0]}</div>${roster(g, 1)}</div>
                         <div class="dash">–</div>
-                        <div class="team">${teamChip(2, n2)}<div class="big ${g.winner === 1 ? 'lost' : ''}">${g.final[1]}</div></div>
+                        <div class="team">${teamChip(2, n2)}<div class="big ${g.winner === 1 ? 'lost' : ''}">${g.final[1]}</div>${roster(g, 2)}</div>
                     </div>
                     <div class="result">${result}</div>
                     <div class="actions">
                         <button class="btn" id="share-btn">Share result</button>
+                        ${live ? '' : hidden
+                            ? '<button class="btn secondary" id="hide-btn">Put back in stats</button>'
+                            : '<button class="btn danger" id="hide-btn">Remove from stats</button>'}
                     </div>
+                    ${hidden ? '<div class="removed-banner">Removed from stats. It doesn’t count toward any records, streaks or the team balancer.</div>' : ''}
                 </div>`;
 
             html += quartersCard(g) + chartCard(g) + boxScore(g) + playByPlay(g);
@@ -91,6 +101,35 @@
                     setTimeout(() => e.target.textContent = 'Share result', 1500);
                 }
             });
+            document.getElementById('hide-btn')?.addEventListener('click', toggleHidden);
+        }
+
+        // Test games and mistakes: take a game out of the stats, or put it back. Removing asks for a second tap.
+        let armTimer = null;
+        async function toggleHidden(e) {
+            const btn = e.currentTarget;
+            if (!hidden && !btn.classList.contains('armed')) {
+                btn.classList.add('armed');
+                btn.textContent = 'Tap again to remove';
+                armTimer = setTimeout(() => { btn.classList.remove('armed'); btn.textContent = 'Remove from stats'; }, 3000);
+                return;
+            }
+            clearTimeout(armTimer);
+            btn.disabled = true;
+            try {
+                await Stats.setHidden(id, !hidden);
+                hidden = !hidden;
+                render(false);
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = err.message;
+            }
+        }
+
+        // Who played, under each score
+        function roster(g, t) {
+            const names = g.players.filter(p => p.team === t).map(p => p.name).sort((a, b) => a.localeCompare(b));
+            return names.length ? `<div class="roster">${names.map(esc).join('<br>')}</div>` : '';
         }
 
         function quartersCard(g) {

@@ -249,6 +249,15 @@ body {
     border-color: #69db7c;
 }
 
+.stale-note,
+.stale-note:hover {
+    cursor: default;
+    border-style: dashed;
+    border-color: gray;
+    color: #ccc;
+    font-size: 0.85em;
+}
+
 .period-score-active {
     border-color: #69db7c;
     box-shadow: 0 0 8px rgba(105, 219, 124, 0.5);

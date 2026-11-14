@@ -62,12 +62,13 @@ All prefixed with `/Scoreboard/api/`:
 - `GET|PUT /roster` - players, team names, who's in
 - `GET|PUT /current-game` - PUT `{gameId}` pointer; GET returns the game doc (204 if none)
 - `GET /games`, `GET|PUT /games/{id}` - game docs (events: `score`, `score_set`, `period_end`)
+- `GET|PUT /hidden-games` - `{ids}` of games removed from stats (test games, mistakes); reversible, game files stay
 - `POST|GET /players/{id}/image` - player photos
 
 ### Data
 - Blob container from `BlobStorage:ContainerName` (prod: `scoreboard`), connection from `BlobStorage:ConnectionString`
 - Data folder: `BlobStorage:DataFolder`, else the legacy group folder with the most games, else `main`
-- Teams are BLACK (`'1'`) and WHITE (`'2'`). Games may have per-player points, or only team scores typed per quarter; stats handle both
+- Teams are BLACK (`'1'`) and WHITE (`'2'`), reshuffled weekly with colors picked at random: stats never add up BLACK vs WHITE across games, only per player (records, streaks, impact). Games may have per-player points, or only team scores typed per quarter; stats handle both
 - Clients poll the server every 15s; localStorage only holds device prefs (old keys are migrated to the server once)
 
 ### Static Assets
