@@ -533,6 +533,65 @@ public class ScoreboardTests : PageTest
         await Expect(Page.Locator(".card", new() { HasText = "Box score" })).ToHaveCountAsync(0);
     }
 
+    [Test]
+    public async Task StatsPage_MixedGames_PlayerStatsOnlyFromTrackedGames()
+    {
+        // Fully tracked: every point credited
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-2026-04-04-aaaa",
+            weekDate = "2026-04-04",
+            team1 = new { name = "BLACK", score = 20 },
+            team2 = new { name = "WHITE", score = 18 },
+            periodScores = new[] { "20 - 18" },
+            players = new[]
+            {
+                new { id = 1, name = "Amy", team = "1", active = true, points = 20 },
+                new { id = 2, name = "Ben", team = "2", active = true, points = 18 }
+            },
+            events = new object[] { new { ts = "2026-04-04T18:40:00Z", type = "period_end", period = 1, scores = new[] { 20, 18 } } },
+            lastUpdated = "2026-04-04T18:40:00Z"
+        }));
+        // Team scores typed per quarter, one basket credited, team typed as "DARK"
+        _api.AddGame(JsonSerializer.Serialize(new
+        {
+            id = "game-2026-04-11-bbbb",
+            weekDate = "2026-04-11",
+            team1 = new { name = "DARK", score = 30 },
+            team2 = new { name = "WHITE", score = 35 },
+            periodScores = new[] { "30 - 35" },
+            players = new[]
+            {
+                new { id = 1, name = "Amy", team = "1", active = true, points = 0 },
+                new { id = 2, name = "Ben", team = "2", active = true, points = 0 }
+            },
+            events = new object[]
+            {
+                new { ts = "2026-04-11T18:01:00Z", type = "score", team = 1, playerId = 1, player = "Amy", action = "increment", scores = new[] { 2, 0 } },
+                new { ts = "2026-04-11T18:40:00Z", type = "period_end", period = 1, scores = new[] { 30, 35 } }
+            },
+            lastUpdated = "2026-04-11T18:40:00Z"
+        }));
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#overview");
+        await Expect(Page.Locator(".card", new() { HasText = "Team names" })).ToContainTextAsync("DARK");
+        await Expect(Page.Locator(".card", new() { HasText = "Head to head" })).Not.ToContainTextAsync("DARK");
+        await Expect(Page.Locator(".card", new() { HasText = "Longest win streak" })).ToBeVisibleAsync();
+
+        // Amy played 2 games, but points only count the tracked one: 20 in 1, 20.0 PPG
+        await Page.Locator("#tabs button[data-tab=players]").ClickAsync();
+        var amy = Page.Locator("#players-table tr.clickable", new() { HasText = "Amy" });
+        await Expect(amy).ToContainTextAsync("20 in 1");
+        await Expect(amy).ToContainTextAsync("20.0");
+
+        await Page.Locator("#tabs button[data-tab=games]").ClickAsync();
+        await Expect(Page.Locator(".game-row", new() { HasText = "30" })).ToContainTextAsync("some players");
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id=game-2026-04-11-bbbb");
+        await Expect(Page.Locator(".hero")).ToContainTextAsync("BLACK");
+        await Expect(Page.Locator(".card", new() { HasText = "Who played" })).ToContainTextAsync("Only 2 of 65 points");
+    }
+
     // Four games where Amy + Ben always beat Cal + Dee by 6
     private void SeedLopsidedHistory()
     {

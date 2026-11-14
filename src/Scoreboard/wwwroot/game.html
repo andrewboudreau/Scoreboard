@@ -141,7 +141,7 @@
             const team = t => {
                 const list = g.players.filter(p => p.team === t);
                 if (!list.length) return '';
-                if (!g.tracked) {
+                if (!g.tracked && !g.partial) {
                     return `<div class="box"><h3>${teamChip(t, g.names[t - 1])}</h3>
                         <div class="played">${list.map(p => `<span>${esc(p.name)}</span>`).join('')}</div></div>`;
                 }
@@ -162,7 +162,8 @@
                 <div class="card">
                     <h2>${g.tracked ? 'Box score' : 'Who played'}</h2>
                     <div class="box-grid">${team(1)}${team(2)}</div>
-                    ${!g.tracked ? '<div class="note">Player points weren’t tracked this game, just team scores.</div>' : ''}
+                    ${g.partial ? `<div class="note">Only ${g.final[0] + g.final[1] - g.unattributed[0] - g.unattributed[1]} of ${g.final[0] + g.final[1]} points were credited to players, so season player stats treat this as a team-scores game.</div>`
+                        : !g.tracked ? '<div class="note">Player points weren’t tracked this game, just team scores.</div>' : ''}
                 </div>`;
         }
 

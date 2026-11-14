@@ -355,3 +355,5 @@ details summary { cursor: pointer; font-weight: 600; min-height: 32px; display: 
 .chart .series { fill: none; stroke: var(--seq); stroke-width: 2; stroke-linejoin: round; }
 .chart .avgline { stroke: #8e8e93; stroke-dasharray: 4 4; stroke-width: 1; }
 .chart .focus { fill: var(--seq); stroke: #fff; stroke-width: 2; }
+
+.small { font-size: 0.78em; }
