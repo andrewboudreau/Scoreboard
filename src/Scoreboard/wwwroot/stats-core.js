@@ -89,18 +89,32 @@ const Stats = (() => {
             let evs = night;
             let base = carried;
             if (i > 0) {
-                // Instead of starting a new game, people often tapped every score back down to zero.
-                // Skip that wind-down: the night starts where the score bottoms out before the first
-                // quarter ends. If the score just kept running, the base is where last night ended.
+                // Instead of starting a new game, people wound the old one down: tapped every score
+                // back to zero, or reset the scores (older versions logged no event for that), tapped
+                // each player's points off (team scores went negative), then tapped the teams back to 0–0.
+                // Skip the wind-down. If the score is back at exactly 0–0 by the first quarter end,
+                // the night starts at the last such point. Otherwise it starts where the score bottoms
+                // out before the first quarter ends; if it just kept running, that's where last night ended.
                 const firstEnd = evs.findIndex(e => e?.type === 'period_end');
                 const lead = firstEnd < 0 ? evs.length : firstEnd;
-                let low = carried[0] + carried[1], lowAt = -1;
-                for (let k = 0; k < lead; k++) {
+                let zeroAt = -1;
+                for (let k = 0; k <= Math.min(lead, evs.length - 1); k++) {
                     if (!Array.isArray(evs[k]?.scores)) continue;
                     const sc = scoresOf(evs[k]);
-                    if (sc[0] + sc[1] <= low) { low = sc[0] + sc[1]; lowAt = k; base = sc; }
+                    if (sc[0] === 0 && sc[1] === 0) zeroAt = k;
                 }
-                evs = evs.slice(lowAt + 1);
+                if (zeroAt >= 0) {
+                    base = [0, 0];
+                    evs = evs.slice(zeroAt + 1);
+                } else {
+                    let low = carried[0] + carried[1], lowAt = -1;
+                    for (let k = 0; k < lead; k++) {
+                        if (!Array.isArray(evs[k]?.scores)) continue;
+                        const sc = scoresOf(evs[k]);
+                        if (sc[0] + sc[1] <= low) { low = sc[0] + sc[1]; lowAt = k; base = sc; }
+                    }
+                    evs = evs.slice(lowAt + 1);
+                }
             }
             const withScores = evs.filter(e => Array.isArray(e?.scores));
             const end = withScores.length ? scoresOf(withScores[withScores.length - 1]) : base;
