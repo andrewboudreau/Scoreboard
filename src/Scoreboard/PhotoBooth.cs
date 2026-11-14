@@ -62,6 +62,7 @@ public static class PhotoBooth
         api.MapPost("/save", Save).DisableAntiforgery();
         api.MapGet("/usage", Usage);
         api.MapPost("/block", Block).DisableAntiforgery();
+        api.MapPost("/reset", Reset).DisableAntiforgery();
     }
 
     public sealed record StylizeRequest(long PlayerId, string? Style, string? Image, string? Device, string? Code);
@@ -239,6 +240,15 @@ public static class PhotoBooth
         return Results.NoContent();
     }
 
+    // Give a phone its full daily allowance back (usage page).
+    private static async Task<IResult> Reset(BlockRequest req, HttpContext ctx, IOptions<ScoreboardOptions> options, PhotoUsage usage)
+    {
+        if (!IsAdmin(ctx, options.Value)) return Problem(401, "Wrong or missing admin key.");
+        if (string.IsNullOrWhiteSpace(req.Key)) return Problem(400, "Which phone?");
+        await usage.AddAsync(new(DateTimeOffset.UtcNow, "reset", Clean(req.Key), ClientIp(ctx), null, null, null, true, null, 0));
+        return Results.NoContent();
+    }
+
     // ---- helpers ----
 
     private static bool IsAdmin(HttpContext ctx, ScoreboardOptions o) =>
@@ -360,10 +370,19 @@ public sealed class PhotoUsage(ScoreboardStore store)
     /// <summary>AI style calls today (UTC) by this phone, by this IP, and by everyone.</summary>
     public Task<(int ByDevice, int ByIp, int Total)> TodayAsync(string device, string ip) => Locked(() =>
     {
-        var today = DateTimeOffset.UtcNow.Date;
-        var calls = _entries!.Where(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today).ToList();
+        var calls = CountedToday(_entries!);
         return Task.FromResult((calls.Count(e => e.Device == device), calls.Count(e => e.Ip == ip), calls.Count));
     });
+
+    // Today's AI calls that count toward the limits: a "reset" entry (from the usage page)
+    // clears that phone's earlier calls, so the log keeps everything that happened.
+    private static List<PhotoUsageEntry> CountedToday(List<PhotoUsageEntry> entries)
+    {
+        var today = DateTimeOffset.UtcNow.Date;
+        var todays = entries.Where(e => e.Ts.UtcDateTime.Date == today).ToList();
+        var resets = todays.Where(e => e.Action == "reset").GroupBy(e => e.Device).ToDictionary(g => g.Key, g => g.Max(e => e.Ts));
+        return todays.Where(e => e.Action == "stylize" && !(resets.TryGetValue(e.Device, out var r) && e.Ts <= r)).ToList();
+    }
 
     public Task<bool> IsBlockedAsync(string device, string ip) =>
         Locked(() => Task.FromResult(_blocked!.Contains(device) || _blocked.Contains(ip)));
@@ -388,13 +407,15 @@ public sealed class PhotoUsage(ScoreboardStore store)
         var m = month is { Length: 7 } ? month : _month!;
         var entries = m == _month ? _entries! : await ReadMonthAsync(m);
         var today = DateTimeOffset.UtcNow.Date;
-        var devices = entries.GroupBy(e => e.Device).Select(g => new
+        var counted = CountedToday(entries);
+        var devices = entries.Where(e => e.Action != "reset").GroupBy(e => e.Device).Select(g => new
         {
             device = g.Key,
             ips = g.Select(e => e.Ip).Distinct().ToArray(),
             players = g.Where(e => e.Player is not null).Select(e => e.Player).Distinct().ToArray(),
             styles = g.Count(e => e.Action == "stylize"),
             stylesToday = g.Count(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today),
+            countedToday = counted.Count(e => e.Device == g.Key),
             failed = g.Count(e => e.Action == "stylize" && !e.Ok),
             refused = g.Count(e => e.Action is "limited" or "blocked"),
             saves = g.Count(e => e.Action == "save"),

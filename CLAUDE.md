@@ -67,7 +67,7 @@ All prefixed with `/Scoreboard/api/`:
 - `GET|PUT /player-links` - `{links: {fromId: toId}}`: one person under two ids (each iPad used to keep its own player list); set from a player's stats page
 - `POST|GET /players/{id}/image` - player photos (256px PNG)
 - `GET /photo/config`, `POST /photo/stylize`, `POST /photo/save` - photo page (`/Scoreboard/photo`, `?k=<code>` unlocks AI styles, `?p=<playerId>` skips the name list). Save writes `players/{id}.png`, sets the roster `imageUrl` and keeps a copy in `photo-archive/`
-- `GET /photo/usage`, `POST /photo/block` - usage report and block list, `X-Admin-Key` header (page: `/Scoreboard/photo/usage`). Log in `photo-usage/yyyy-MM.json`, blocks in `photo-blocked.json`
+- `GET /photo/usage`, `POST /photo/block`, `POST /photo/reset` - usage report, block list, give a phone its daily tries back, `X-Admin-Key` header (page: `/Scoreboard/photo/usage`). Log in `photo-usage/yyyy-MM.json`, blocks in `photo-blocked.json`
 
 ### Data
 - Blob container from `BlobStorage:ContainerName` (prod: `scoreboard`), connection from `BlobStorage:ConnectionString`
@@ -90,7 +90,7 @@ Assets embedded in module assembly, served from `/_content/Scoreboard/*` via `St
 
 - **Directory.Build.props**: Centralized versioning (VersionPrefix)
 - **nuget.config**: NuGet sources (C:\LocalNuGet for local dev, nuget.org for releases)
-- **Photo page secrets** (module host env, never in the repo): `Modules__Scoreboard__OpenAIKey` (AI styles off when unset), `Modules__Scoreboard__PhotoAdminKey` (usage page off when unset), `Modules__Scoreboard__PhotoLinkCode` (optional `?k=` code). Also `OpenAIImageModel` (gpt-image-2), `OpenAIImageQuality` (low), `OpenAIBaseUrl`, `PhotoDailyLimitPerDevice` (10, an IP gets 2x), `PhotoDailyLimitTotal` (80)
+- **Photo page secrets** (module host env, never in the repo): `Modules__Scoreboard__OpenAIKey` (AI styles off when unset), `Modules__Scoreboard__PhotoAdminKey` (usage page off when unset), `Modules__Scoreboard__PhotoLinkCode` (optional `?k=` code). Also `OpenAIImageModel` (gpt-image-2), `OpenAIImageQuality` (low), `OpenAIBaseUrl`, `PhotoDailyLimitPerDevice` (30, an IP gets 2x), `PhotoDailyLimitTotal` (300)
 - **appsettings.json**: Blob storage connection (uses Azure Storage Emulator by default: `UseDevelopmentStorage=true`)
 
 ## CI/CD

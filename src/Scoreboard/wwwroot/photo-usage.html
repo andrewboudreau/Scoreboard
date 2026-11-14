@@ -116,6 +116,19 @@
                 load();
             }
 
+            async function reset(device) {
+                const res = await fetch('/Scoreboard/api/photo/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': $('key').value.trim() },
+                    body: JSON.stringify({ key: device })
+                });
+                if (!res.ok) {
+                    $('error').textContent = `Couldn't reset (${res.status})`;
+                    $('error').hidden = false;
+                }
+                load();
+            }
+
             function render(d) {
                 $('report').hidden = false;
                 $('t-today').textContent = d.stylesToday;
@@ -129,14 +142,14 @@
                     <tr>
                         <td class="mono" title="${esc(x.device)}">${esc(short(x.device))}</td>
                         <td class="wrapcell">${esc(x.players.join(', '))}</td>
-                        <td class="num${x.stylesToday >= 10 ? ' bad' : ''}">${x.stylesToday}</td>
+                        <td class="num" title="Counting toward today's limit${x.countedToday !== x.stylesToday ? ` (${x.stylesToday} before a reset)` : ''}">${x.countedToday}${x.countedToday !== x.stylesToday ? ` <span class="dim">/ ${x.stylesToday}</span>` : ''}</td>
                         <td class="num">${x.styles}</td>
                         <td class="num">${x.failed || ''}</td>
                         <td class="num${x.refused ? ' bad' : ''}">${x.refused || ''}</td>
                         <td class="num">${x.saves}</td>
                         <td class="mono wrapcell">${x.ips.map(esc).join('<br>')}</td>
                         <td>${when(x.last)}</td>
-                        <td><button class="small-btn${x.blocked ? '' : ' danger'}" data-device="${esc(x.device)}" data-blocked="${x.blocked}">${x.blocked ? 'Unblock' : 'Block'}</button></td>
+                        <td>${x.countedToday ? `<button class="small-btn" data-reset="${esc(x.device)}" title="Give this phone its full daily tries back">Reset today</button> ` : ''}<button class="small-btn${x.blocked ? '' : ' danger'}" data-device="${esc(x.device)}" data-blocked="${x.blocked}">${x.blocked ? 'Unblock' : 'Block'}</button></td>
                     </tr>`).join('') || '<tr><td colspan="10" class="dim">Nobody yet.</td></tr>'}`;
 
                 $('blocked').innerHTML = d.blocked.length
@@ -161,7 +174,8 @@
             document.addEventListener('click', e => {
                 const t = e.target.closest('button');
                 if (!t) return;
-                if (t.dataset.device) block(t.dataset.device, t.dataset.blocked !== 'true');
+                if (t.dataset.reset) reset(t.dataset.reset);
+                else if (t.dataset.device) block(t.dataset.device, t.dataset.blocked !== 'true');
                 else if (t.dataset.unblock) block(t.dataset.unblock, false);
             });
             $('load').addEventListener('click', load);
