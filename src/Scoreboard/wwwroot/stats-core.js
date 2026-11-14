@@ -2,7 +2,8 @@
 // Games come in two flavors and everything here works for both:
 //   - player-tracked: score events carry playerId and players[].points add up
 //   - team-only: just team scores, usually captured at the end of each quarter
-// Teams are 1 (BLACK) and 2 (WHITE).
+// Teams are 1 (BLACK) and 2 (WHITE). They're reshuffled every week and the colors are picked
+// at random, so colors only name the two sides of one game: nothing adds them up across games.
 
 const Stats = (() => {
     const DATE_IN_ID = /^game-(\d{4}-\d{2}-\d{2})/;
@@ -239,73 +240,64 @@ const Stats = (() => {
         return { leadChanges, ties, biggest };
     }
 
-    // Team-level summary. Works for every game, tracked or not.
+    // Game-level summary. Teams are reshuffled every week and the colors are picked at random,
+    // so nothing here adds up BLACK or WHITE across games: it's winners vs losers instead.
     function summarize(games) {
         const s = {
             games: games.length,
-            wins: [0, 0], ties: 0,
-            points: [0, 0],
+            ties: 0,
+            points: { winner: 0, loser: 0, decided: 0 },
             closest: null, biggest: null,
-            streak: { team: 0, count: 0 },
             comebacks: [],
-            otherNames: [], // names typed for a team other than BLACK/WHITE: { team, name, games, last }
-            quarters: [] // per quarter index: { games, points: [a,b], won: [a,b] }
+            halfLeader: { won: 0, games: 0 }, // team ahead at half went on to win
+            quarters: [] // per quarter: { games, winner, loser (points), taken (quarters the winner won) }
         };
 
-        // games are newest first; the streak counts back from the latest game
-        if (games[0]?.winner) {
-            const team = games[0].winner;
-            let count = 0;
-            for (const g of games) {
-                if (g.winner !== team) break;
-                count++;
-            }
-            s.streak = { team, count };
-        }
-
-        const otherNames = new Map();
         for (const g of games) {
-            g.recordedNames.forEach((name, i) => {
-                if (!name || name.toUpperCase() === g.names[i]) return;
-                const key = `${i + 1}:${name.toUpperCase()}`;
-                const row = otherNames.get(key) || { team: i + 1, name, games: 0, last: g };
-                row.games++;
-                otherNames.set(key, row);
-            });
-            if (g.winner) s.wins[g.winner - 1]++; else s.ties++;
-            s.points[0] += g.final[0];
-            s.points[1] += g.final[1];
+            if (!g.winner) { s.ties++; } else {
+                const w = g.winner - 1;
+                s.points.decided++;
+                s.points.winner += g.final[w];
+                s.points.loser += g.final[1 - w];
+            }
             if (g.winner && (!s.closest || g.margin < s.closest.margin)) s.closest = g;
             if (!s.biggest || g.margin > s.biggest.margin) s.biggest = g;
 
-            // Won after trailing at half (or after Q3 if that's all we have)
             const half = g.quarters[1] || null;
             if (g.winner && half) {
                 const [a, b] = half.total;
                 const trailing = g.winner === 1 ? a < b : b < a;
                 if (trailing) s.comebacks.push({ game: g, deficit: Math.abs(a - b) });
+                if (a !== b) {
+                    s.halfLeader.games++;
+                    if (!trailing) s.halfLeader.won++;
+                }
             }
 
+            if (!g.winner) continue;
+            const w = g.winner - 1;
             g.quarters.forEach((q, i) => {
-                const row = s.quarters[i] ||= { games: 0, points: [0, 0], won: [0, 0] };
+                const row = s.quarters[i] ||= { games: 0, winner: 0, loser: 0, taken: 0 };
                 row.games++;
-                row.points[0] += q.points[0];
-                row.points[1] += q.points[1];
-                if (q.points[0] > q.points[1]) row.won[0]++;
-                else if (q.points[1] > q.points[0]) row.won[1]++;
+                row.winner += q.points[w];
+                row.loser += q.points[1 - w];
+                if (q.points[w] > q.points[1 - w]) row.taken++;
             });
         }
-        // Longest win streak per team (oldest to newest; a tie breaks it)
-        s.longest = [null, null];
-        let run = null;
-        for (const g of [...games].reverse()) {
-            if (run && g.winner === run.team) { run.count++; run.to = g; }
-            else run = g.winner ? { team: g.winner, count: 1, from: g, to: g } : null;
-            if (run && (!s.longest[run.team - 1] || run.count > s.longest[run.team - 1].count)) s.longest[run.team - 1] = { ...run };
-        }
-
-        s.otherNames = [...otherNames.values()].sort((a, b) => a.team - b.team || b.games - a.games);
         return s;
+    }
+
+    // How to name one team of one game. Colors only mean something for that night, so name
+    // the side after its top scorer, or list who was on it.
+    function teamLabel(g, t) {
+        const list = g.players.filter(p => p.team === t);
+        if (!list.length) return g.names[t - 1];
+        if (g.tracked) {
+            const top = [...list].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+            if (top[0].points > top[1]?.points || (top.length === 1 && top[0].points > 0)) return `Team ${top[0].name}`;
+        }
+        const names = list.map(p => p.name).sort((a, b) => a.localeCompare(b));
+        return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length - 2}` : names.join(' & ');
     }
 
     // Per-player numbers. Games played, record and +/- come from team results, so they
@@ -337,10 +329,27 @@ const Stats = (() => {
         }
         return [...byId.values()].map(r => ({
             ...r,
+            ...winStreaks(r.log),
             winPct: r.gp ? (r.wins + r.ties / 2) / r.gp : 0,
+            // For ranking by win%: two phantom games at 50% keep 2-0 from topping 9-3
+            winPctSort: (r.wins + r.ties / 2 + 1) / (r.gp + 2),
             avgPlusMinus: r.gp ? r.plusMinus / r.gp : 0,
             ppg: r.trackedGp ? r.points / r.trackedGp : null
         }));
+    }
+
+    // A player's wins in a row, counting only games they played. log: newest first.
+    // streak: current run of wins; best: longest run { count, from, to } (oldest to newest).
+    function winStreaks(log) {
+        let streak = 0;
+        while (streak < log.length && log[streak].result === 'W') streak++;
+        let best = null, run = null;
+        for (const l of [...log].reverse()) {
+            if (l.result !== 'W') { run = null; continue; }
+            run = run ? { ...run, count: run.count + 1, to: l.game } : { count: 1, from: l.game, to: l.game };
+            if (!best || run.count > best.count) best = run;
+        }
+        return { streak, bestStreak: best };
     }
 
     // ---- formatting ----
@@ -458,15 +467,41 @@ const Stats = (() => {
     }
 
     async function loadGames() {
-        const res = await fetch('/Scoreboard/api/games');
+        const [res, hidden] = await Promise.all([fetch('/Scoreboard/api/games'), hiddenIds()]);
         if (!res.ok) throw new Error(`Couldn't load games (${res.status})`);
-        const played = (await res.json())
+        const all = (await res.json())
             .flatMap(gamesFromDoc)
             .filter(isPlayed)
             .sort((a, b) => (b.date + (b.raw.lastUpdated || '')).localeCompare(a.date + (a.raw.lastUpdated || '')));
+        const played = all.filter(g => !hidden.has(g.id));
         const games = played.filter(g => !isShort(g));
         games.shortGames = played.filter(isShort);
+        games.hiddenGames = all.filter(g => hidden.has(g.id));
         return games;
+    }
+
+    // ---- games removed from stats (tests, mistakes); see /api/hidden-games ----
+
+    async function hiddenIds() {
+        try {
+            const res = await fetch('/Scoreboard/api/hidden-games', { cache: 'no-store' });
+            const doc = res.ok ? await res.json() : null;
+            return new Set(Array.isArray(doc?.ids) ? doc.ids.map(String) : []);
+        } catch {
+            return new Set();
+        }
+    }
+
+    // Reads the latest list first so two people removing games don't undo each other.
+    async function setHidden(id, hide) {
+        const ids = await hiddenIds();
+        if (hide) ids.add(id); else ids.delete(id);
+        const res = await fetch('/Scoreboard/api/hidden-games', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [...ids] })
+        });
+        if (!res.ok) throw new Error(`Couldn't save (${res.status})`);
     }
 
     // A finished warm-up or test: too few points to count in the stats. Its game page still works.
@@ -476,5 +511,5 @@ const Stats = (() => {
         return g.final[0] + g.final[1] < MIN_POINTS && !(age < SESSION_GAP_MS);
     }
 
-    return { normalize, gamesFromDoc, isShort, MIN_POINTS, isPlayed, flow, summarize, players, esc, formatDate, formatTime, signed, teamChip, shareText, share, chartSvg, loadGames };
+    return { normalize, gamesFromDoc, isShort, MIN_POINTS, isPlayed, flow, summarize, players, teamLabel, hiddenIds, setHidden, esc, formatDate, formatTime, signed, teamChip, shareText, share, chartSvg, loadGames };
 })();

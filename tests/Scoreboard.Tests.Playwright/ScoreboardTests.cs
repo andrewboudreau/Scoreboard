@@ -457,7 +457,9 @@ public class ScoreboardTests : PageTest
 
         // --- Dashboard ---
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats");
-        await Expect(Page.Locator(".card", new() { HasText = "Head to head" })).ToContainTextAsync("1 game");
+        var lastGame = Page.Locator(".card", new() { HasText = "Last game" });
+        await Expect(lastGame).ToContainTextAsync("44");
+        await Expect(lastGame).ToContainTextAsync("Adams");
         await Page.Locator("#tabs button[data-tab=games]").ClickAsync();
         var row = Page.Locator(".game-row").First;
         await Expect(row).ToContainTextAsync("44");
@@ -574,9 +576,13 @@ public class ScoreboardTests : PageTest
         }));
 
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#overview");
-        await Expect(Page.Locator(".card", new() { HasText = "Team names" })).ToContainTextAsync("DARK");
-        await Expect(Page.Locator(".card", new() { HasText = "Head to head" })).Not.ToContainTextAsync("DARK");
-        await Expect(Page.Locator(".card", new() { HasText = "Longest win streak" })).ToBeVisibleAsync();
+        // Colors are reshuffled weekly, so nothing totals BLACK vs WHITE; sides are named by who played
+        var lastGame = Page.Locator(".card", new() { HasText = "Last game" });
+        await Expect(lastGame).ToContainTextAsync("Ben");
+        await Expect(lastGame).ToContainTextAsync("35");
+        await Expect(lastGame).Not.ToContainTextAsync("DARK");
+        await Expect(Page.Locator(".card", new() { HasText = "Head to head" })).ToHaveCountAsync(0);
+        await Expect(Page.Locator(".card", new() { HasText = "Where games are won" })).ToContainTextAsync("Winner avg");
 
         // Amy played 2 games, but points only count the tracked one: 20 in 1, 20.0 PPG
         await Page.Locator("#tabs button[data-tab=players]").ClickAsync();
@@ -651,7 +657,42 @@ public class ScoreboardTests : PageTest
         await Expect(Page.Locator(".card", new() { HasText = "Best duos" })).ToContainTextAsync("Amy + Ben");
 
         await Page.Locator("#tabs button[data-tab=overview]").ClickAsync();
-        await Expect(Page.Locator("#matchup")).ToContainTextAsync("Predicted: BLACK by");
+        // Sides are named after their top-impact player; Amy and Ben always played together
+        await Expect(Page.Locator("#matchup")).ToContainTextAsync(new Regex(@"Predicted: Team (Amy|Ben) by"));
+
+        // Streaks follow players: Amy and Ben won all 4
+        var streaks = Page.Locator(".card", new() { HasText = "Win streaks" });
+        await Expect(streaks).ToContainTextAsync("Amy");
+        await Expect(streaks).ToContainTextAsync("4");
+    }
+
+    [Test]
+    public async Task StatsPage_RemoveGameFromStatsAndPutItBack()
+    {
+        SeedLopsidedHistory();
+        const string id = "game-2026-03-04-0003";
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id={id}");
+        var remove = Page.Locator("#hide-btn");
+        await Expect(remove).ToHaveTextAsync("Remove from stats");
+        await remove.ClickAsync();
+        await Expect(remove).ToHaveTextAsync("Tap again to remove");
+        await remove.ClickAsync();
+        await Expect(Page.Locator(".removed-banner")).ToBeVisibleAsync();
+        Assert.That(_api.Docs["hidden-games"], Does.Contain(id));
+
+        // Left out of stats, listed under History so it can be put back
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#games");
+        await Expect(Page.Locator(".game-row")).ToHaveCountAsync(3);
+        await Expect(Page.Locator("#removed-games")).ToContainTextAsync("30–24");
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id={id}");
+        await Page.Locator("#hide-btn", new() { HasText = "Put back in stats" }).ClickAsync();
+        await Expect(Page.Locator(".removed-banner")).ToHaveCountAsync(0);
+        Assert.That(_api.Docs["hidden-games"], Does.Not.Contain(id));
+
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#games");
+        await Expect(Page.Locator(".game-row")).ToHaveCountAsync(4);
     }
 
     [Test]

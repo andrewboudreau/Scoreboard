@@ -358,3 +358,23 @@ details summary { cursor: pointer; font-weight: 600; min-height: 32px; display: 
 .chart .focus { fill: var(--seq); stroke: #fff; stroke-width: 2; }
 
 .small { font-size: 0.78em; }
+
+/* One side of one game: shirt-color chip named after its players, the names, the score */
+.card-link { display: block; color: inherit; text-decoration: none; }
+.card-link:active { background: #f4f4f7; }
+.side-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.side-row:last-of-type { border-bottom: none; }
+.side-who { flex: 1; min-width: 0; }
+.side-names { font-size: 13px; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-score { font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.side-row.lost .side-score { color: #b9b9bf; }
+.subhead { font-size: 12px; font-weight: 700; color: var(--muted); margin: 8px 0 2px; }
+.subhead:first-of-type { margin-top: 0; }
+.game-row .chip { max-width: 36vw; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; font-size: 11px; }
+.note.center { text-align: center; font-size: 13px; color: var(--muted); margin: 4px 0 12px; }
+.removed-banner { background: #fff4e5; color: #8a5300; border-radius: 10px; padding: 8px 12px; font-size: 14px; margin-top: 10px; }
+.btn.danger { background: #fbe9e9; color: #c4271c; }
+.btn.danger.armed { background: #d70015; color: #fff; }
+.hero .roster { font-size: 13px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+.hero .scoreline { align-items: flex-start; }
+.hero .dash { margin-top: 36px; }
