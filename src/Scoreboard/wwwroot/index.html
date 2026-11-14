@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>MDL Scoreboard</title>
-    <link rel="stylesheet" href="/_content/Scoreboard/styles.css">
-    <script src="/_content/Scoreboard/app.js"></script>
+    <link rel="stylesheet" href="/_content/Scoreboard/styles.css?v={{v}}">
+    <script src="/_content/Scoreboard/app.js?v={{v}}"></script>
 </head>
 <body>
+    <div id="sync-status" role="status" hidden>Not saved yet, retrying…</div>
     <audio id="alarm" src="/_content/Scoreboard/audio/buzzer.mp3"></audio>
 
     <div class="scoreboard">
@@ -34,7 +35,7 @@
             <div class="score-history" id="score-history"></div>
         </div>
         <div class="control-buttons">
-<button id="players-btn" class="control-btn">
+<button id="players-btn" class="control-btn" title="Teams">
                 <img src="/_content/Scoreboard/icons/players.svg" alt="Players Icon" width="24" height="24">
             </button>
             <button id="settings-btn" class="control-btn">
@@ -45,33 +46,35 @@
             </button>
         </div>
 
-        <div id="players-panel" class="side-panel">
-            <div class="players-container">
-                <table class="players-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Team</th>
-                            <th>Active</th>
-                            <th>Points</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="players-list">
-                        <!-- Player rows will be added here dynamically -->
-                    </tbody>
-                </table>
-                <div class="add-player">
-                    <input type="text" id="player-name-input" placeholder="Player name...">
-                    <button id="add-player-btn">Add</button>
-                    <button id="export-players-btn" class="action-button">Export</button>
-                    <button id="import-players-btn" class="action-button">Import</button>
-                    <button id="load-default-players-btn" class="action-button">Load Defaults</button>
+        <div id="players-panel" class="side-panel teams-panel">
+            <div class="teams-header">
+                <div id="team-counts" class="team-counts"></div>
+                <div class="teams-actions">
+                    <button id="shuffle-btn" title="Randomly split everyone who's in into even teams (pinned players stay put)">Shuffle</button>
+                    <button id="all-out-btn" title="Mark everyone out, then tap in whoever shows up">All out</button>
+                    <button id="share-teams-btn" title="Send the teams to the group chat">Share</button>
+                    <button id="edit-roster-btn" title="Rename, add photos, or delete players">Edit</button>
+                    <button id="close-teams-btn" class="done-btn">Done</button>
                 </div>
             </div>
+            <div id="players-list" class="roster-list"></div>
+            <div class="add-player">
+                <input type="text" id="player-name-input" placeholder="Add a player...">
+                <button id="add-player-btn">Add</button>
+            </div>
+            <input type="file" id="player-photo-input" accept="image/*" hidden>
         </div>
 
         <div id="settings-panel" class="side-panel">
+            <div class="settings-group quarter-entry">
+                <label>Quarter score <span class="hint">for games without player tracking</span></label>
+                <div class="quarter-inputs">
+                    <label><span id="q-team1-label">BLACK</span><input type="number" inputmode="numeric" id="q-team1" min="0" max="999"></label>
+                    <label><span id="q-team2-label">WHITE</span><input type="number" inputmode="numeric" id="q-team2" min="0" max="999"></label>
+                </div>
+                <button id="end-quarter-btn">End Q1 at this score</button>
+                <button id="set-score-btn">Just set the score</button>
+            </div>
             <div class="settings-group">
                 <label for="timer-minutes">Timer (minutes)</label>
                 <input type="number" id="timer-minutes" min="1" max="60" value="10">
@@ -89,8 +92,8 @@
                 </div>
             </div>
             <div class="settings-group">
-                <button id="reset-scores-btn">Reset Scores</button>
-                <button id="reset-history-btn">Reset History</button>
+                <button id="reset-scores-btn" title="Saves this game to history and starts a fresh one">New Game</button>
+                <button id="reset-history-btn">Clear Periods</button>
                 <button id="test-buzzer-btn">Test Buzzer</button>
                 <button id="simulate-timer-end-btn">Test Timer End</button>
             </div>
@@ -111,29 +114,10 @@
                     <input type="checkbox" id="keep-screen-on"> Keep screen on (prevents device sleep)
                 </label>
             </div>
-            <div class="settings-group" id="group-section">
-                <label>Group</label>
-                <div id="group-info" style="display: none;">
-                    <div class="help-text">Connected to: <strong id="group-name-display"></strong>
-                        <span id="group-admin-badge" style="display: none; color: #69db7c;">(Admin)</span>
-                    </div>
-                    <div class="help-text">Code: <strong id="group-code-display"></strong></div>
-                    <button id="share-group-btn">Share Link</button>
-                    <button id="share-game-btn" style="display: none;">Share Game Results</button>
-                    <button id="leave-group-btn">Leave Group</button>
-                </div>
-                <div id="group-join">
-                    <div class="group-join-row">
-                        <input type="text" id="group-code-input" placeholder="Enter group code...">
-                        <button id="join-group-btn">Join</button>
-                    </div>
-                    <button id="create-group-btn">Create Group</button>
-                </div>
-            </div>
             <div class="settings-group">
-                <label>Player Management</label>
-                <div class="help-text">Configure default players used across all sessions.</div>
-                <button id="manage-default-players-btn">Manage Default Players</button>
+                <label>Results</label>
+                <button id="share-game-btn">Copy Results Link</button>
+                <button id="stats-btn">Stats &amp; History</button>
             </div>
         </div>
 

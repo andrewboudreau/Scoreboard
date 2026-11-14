@@ -42,10 +42,10 @@ This is a SharedTools module system application with two main components:
 
 ### Scoreboard (src/Scoreboard/) - The Module
 A dynamically loadable ASP.NET Core module implementing `IApplicationPartModule`:
-- **ScoreboardModule.cs**: Entry point - registers services, maps endpoints, configures rate limiting
-- **Services/**: `DefaultPlayersService`, `GameShareService`, `GroupService` for business logic
-- **API endpoints**: `ScoreboardApiMethods.cs`, `GameShareApiMethods.cs`, `GroupApiMethods.cs`
-- **wwwroot/**: Embedded static assets (SPA with app.js, styles.css, HTML pages)
+- **ScoreboardModule.cs**: Entry point - registers services, serves the embedded HTML pages (`Page()` replaces `{{v}}` with the build id for cache busting)
+- **ScoreboardApi.cs**: JSON API. The server is the single source of truth; there is no auth (private friend group) and no groups/share codes
+- **Services/ScoreboardStore.cs**: Reads/writes JSON blobs in one container under a data folder
+- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `stats.css`)
 
 ### Scoreboard.WebApp (src/Scoreboard.WebApp/) - The Host
 Minimal ASP.NET Core app that loads and hosts modules. Program.cs explicitly loads `SharedTools.Scoreboard` and `SharedTools.ModuleManagement` from NuGet.
@@ -57,11 +57,18 @@ Minimal ASP.NET Core app that loads and hosts modules. Program.cs explicitly loa
 4. Module's `ConfigureServices()` and `Configure()` called
 
 ### API Endpoints
-All endpoints prefixed with `/Scoreboard/`:
-- `POST /Scoreboard/api/games/share` - Create shareable game link
-- `GET /Scoreboard/api/shares/{code}` - Retrieve shared game (public)
-- `/Scoreboard/api/default-players/**` - Player CRUD
-- `/Scoreboard/api/groups/**` - Group management
+All prefixed with `/Scoreboard/api/`:
+- `GET /info` - version, data folder, game count
+- `GET|PUT /roster` - players, team names, who's in
+- `GET|PUT /current-game` - PUT `{gameId}` pointer; GET returns the game doc (204 if none)
+- `GET /games`, `GET|PUT /games/{id}` - game docs (events: `score`, `score_set`, `period_end`)
+- `POST|GET /players/{id}/image` - player photos
+
+### Data
+- Blob container from `BlobStorage:ContainerName` (prod: `scoreboard`), connection from `BlobStorage:ConnectionString`
+- Data folder: `BlobStorage:DataFolder`, else the legacy group folder with the most games, else `main`
+- Teams are BLACK (`'1'`) and WHITE (`'2'`). Games may have per-player points, or only team scores typed per quarter; stats handle both
+- Clients poll the server every 15s; localStorage only holds device prefs (old keys are migrated to the server once)
 
 ### Static Assets
 Assets embedded in module assembly, served from `/_content/Scoreboard/*` via `StaticWebAssetBasePath`.
@@ -92,6 +99,8 @@ When the user says "release", "tag", or "tag and release", run the **Tag and Pub
 ```bash
 gh workflow run "Tag and Publish"
 ```
+
+Production picks up the new stable nuget.org version when its container restarts (`blogfor_net`, managed by the hosting-service session). Prerelease versions are not picked up.
 
 ## Troubleshooting
 

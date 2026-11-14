@@ -2,395 +2,191 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Results — MDL Scoreboard</title>
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #f5f5f5;
-            color: #222;
-            line-height: 1.5;
-            padding: 16px;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .loading, .error {
-            text-align: center;
-            padding: 60px 20px;
-            color: #666;
-            font-size: 18px;
-        }
-
-        .error { color: #c00; }
-
-        /* Final Score */
-        .final-score {
-            background: #fff;
-            border-radius: 12px;
-            padding: 24px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 16px;
-        }
-
-        .final-score .label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            margin-bottom: 4px;
-        }
-
-        .final-score .date {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 16px;
-        }
-
-        .score-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 20px;
-        }
-
-        .team-block {
-            text-align: center;
-            min-width: 100px;
-        }
-
-        .team-block .name {
-            font-size: 14px;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: #555;
-            margin-bottom: 4px;
-        }
-
-        .team-block .score {
-            font-size: 48px;
-            font-weight: 700;
-            color: #111;
-            line-height: 1;
-        }
-
-        .team-block .score.winner { color: #2b8a3e; }
-
-        .vs {
-            font-size: 16px;
-            color: #aaa;
-            font-weight: 600;
-        }
-
-        /* Period Breakdown */
-        .card {
-            background: #fff;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 16px;
-        }
-
-        .card h2 {
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            margin-bottom: 12px;
-        }
-
-        .periods-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .periods-table th, .periods-table td {
-            padding: 8px 12px;
-            text-align: center;
-            font-size: 14px;
-        }
-
-        .periods-table th {
-            color: #999;
-            font-weight: 500;
-            border-bottom: 1px solid #eee;
-        }
-
-        .periods-table td {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .periods-table tr:not(:last-child) td {
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        /* Player Stats */
-        .player-stats-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .player-stats-table th, .player-stats-table td {
-            padding: 8px 12px;
-            text-align: left;
-            font-size: 14px;
-        }
-
-        .player-stats-table th {
-            color: #999;
-            font-weight: 500;
-            border-bottom: 1px solid #eee;
-        }
-
-        .player-stats-table td {
-            color: #333;
-        }
-
-        .player-stats-table td:last-child {
-            text-align: right;
-            font-weight: 600;
-        }
-
-        .player-stats-table tr:not(:last-child) td {
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .team-header {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #999;
-            padding: 12px 12px 4px;
-        }
-
-        /* Event Timeline */
-        .timeline {
-            list-style: none;
-            padding: 0;
-        }
-
-        .timeline li {
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-            padding: 6px 0;
-            font-size: 13px;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        .timeline li:last-child { border-bottom: none; }
-
-        .timeline .time {
-            color: #999;
-            font-size: 12px;
-            white-space: nowrap;
-            min-width: 50px;
-        }
-
-        .timeline .event-desc {
-            color: #444;
-            flex: 1;
-        }
-
-        .timeline .event-score {
-            color: #888;
-            font-size: 12px;
-            white-space: nowrap;
-        }
-
-        .timeline .period-event {
-            font-weight: 600;
-            color: #2b8a3e;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #aaa;
-            padding: 16px;
-            font-size: 14px;
-        }
-
-        .branding {
-            text-align: center;
-            margin-top: 24px;
-            padding: 16px;
-            font-size: 12px;
-            color: #aaa;
-        }
-
-        .branding a { color: #888; text-decoration: none; }
-        .branding a:hover { color: #555; }
-
-        @media (max-width: 600px) {
-            .team-block .score { font-size: 36px; }
-            .score-row { gap: 12px; }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Game — MDL Scoreboard</title>
+    <link rel="stylesheet" href="/_content/Scoreboard/stats.css?v={{v}}">
+    <script src="/_content/Scoreboard/stats-core.js?v={{v}}"></script>
 </head>
 <body>
     <div class="container">
-        <div id="loading" class="loading">Loading game results...</div>
-        <div id="error" class="error" style="display:none;"></div>
-        <div id="results" style="display:none;"></div>
+        <div class="topbar">
+            <a href="/Scoreboard/stats">&larr; Stats</a>
+            <a href="/Scoreboard/">Scoreboard</a>
+        </div>
+        <div id="loading" class="loading">Loading game…</div>
+        <div id="error" class="error" hidden></div>
+        <div id="results" hidden></div>
     </div>
 
     <script>
-        (async function () {
-            const params = new URLSearchParams(window.location.search);
-            const code = params.get('s');
-            const loadingEl = document.getElementById('loading');
-            const errorEl = document.getElementById('error');
-            const resultsEl = document.getElementById('results');
+        const { esc, formatDate, formatTime, teamChip } = Stats;
+        const id = new URLSearchParams(location.search).get('id');
+        let game = null;
+        let lastJson = '';
 
-            if (!code) {
-                loadingEl.style.display = 'none';
-                errorEl.style.display = 'block';
-                errorEl.textContent = 'No share code provided.';
-                return;
-            }
+        load();
 
+        async function load() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
             try {
-                const res = await fetch(`/Scoreboard/api/shares/${encodeURIComponent(code)}`);
-                if (!res.ok) {
-                    throw new Error(res.status === 404 ? 'Game not found or link has expired.' : `Error ${res.status}`);
+                if (!id) throw new Error('No game specified.');
+                const [res, current] = await Promise.all([
+                    fetch(`/Scoreboard/api/games/${encodeURIComponent(id)}`),
+                    fetch('/Scoreboard/api/current-game').then(r => r.status === 200 ? r.json() : null).catch(() => null)
+                ]);
+                if (!res.ok) throw new Error(res.status === 404 ? 'Game not found.' : `Error ${res.status}`);
+                const json = await res.text();
+                const live = current?.id === id && isRecent(current);
+                if (json !== lastJson) {
+                    lastJson = json;
+                    game = Stats.normalize(JSON.parse(json));
+                    render(live);
                 }
-                const game = await res.json();
-                loadingEl.style.display = 'none';
-                resultsEl.style.display = 'block';
-                render(game);
+                loading.hidden = true;
+                document.getElementById('results').hidden = false;
+                // Follow along while the game is being played
+                if (live) setTimeout(load, 15000);
             } catch (e) {
-                loadingEl.style.display = 'none';
-                errorEl.style.display = 'block';
-                errorEl.textContent = e.message;
+                loading.hidden = true;
+                error.hidden = false;
+                error.textContent = e.message;
             }
-        })();
+        }
 
-        function render(game) {
-            const el = document.getElementById('results');
-            const t1 = game.team1 || { name: 'Team 1', score: 0 };
-            const t2 = game.team2 || { name: 'Team 2', score: 0 };
-            const t1Wins = t1.score > t2.score;
-            const t2Wins = t2.score > t1.score;
-            const periods = game.periodScores || [];
-            const players = game.players || [];
-            const events = game.events || [];
-            const dateStr = game.weekDate || '';
+        // The current game counts as live if it was updated in the last 3 hours
+        function isRecent(raw) {
+            const t = Date.parse(raw.lastUpdated || '');
+            return Number.isFinite(t) && Date.now() - t < 3 * 3600 * 1000;
+        }
 
-            document.title = `${t1.name} ${t1.score} - ${t2.score} ${t2.name} — MDL Scoreboard`;
+        function render(live) {
+            const g = game;
+            const [n1, n2] = g.names;
+            document.title = `${n1} ${g.final[0]}–${g.final[1]} ${n2} · ${formatDate(g.date)}`;
+            const result = g.winner === 0 ? 'Tied' : `${esc(g.names[g.winner - 1])} ${live ? 'leads' : 'won'} by ${g.margin}`;
 
-            let html = '';
-
-            // Final Score
-            html += `
-                <div class="final-score">
-                    <div class="label">Final Score</div>
-                    ${dateStr ? `<div class="date">${formatDate(dateStr)}</div>` : ''}
-                    <div class="score-row">
-                        <div class="team-block">
-                            <div class="name">${esc(t1.name)}</div>
-                            <div class="score${t1Wins ? ' winner' : ''}">${t1.score}</div>
-                        </div>
-                        <div class="vs">—</div>
-                        <div class="team-block">
-                            <div class="name">${esc(t2.name)}</div>
-                            <div class="score${t2Wins ? ' winner' : ''}">${t2.score}</div>
-                        </div>
+            let html = `
+                <div class="card hero">
+                    <div class="date">${formatDate(g.date, { weekday: 'long', month: 'long', day: 'numeric' })}
+                        ${live ? ' · <span class="badge live">LIVE</span>' : ''}</div>
+                    <div class="scoreline">
+                        <div class="team">${teamChip(1, n1)}<div class="big ${g.winner === 2 ? 'lost' : ''}">${g.final[0]}</div></div>
+                        <div class="dash">–</div>
+                        <div class="team">${teamChip(2, n2)}<div class="big ${g.winner === 1 ? 'lost' : ''}">${g.final[1]}</div></div>
+                    </div>
+                    <div class="result">${result}</div>
+                    <div class="actions">
+                        <button class="btn" id="share-btn">Share result</button>
                     </div>
                 </div>`;
 
-            // Period Breakdown
-            if (periods.length > 0) {
-                html += `<div class="card"><h2>Periods</h2><table class="periods-table"><thead><tr><th></th><th>${esc(t1.name)}</th><th>${esc(t2.name)}</th></tr></thead><tbody>`;
-                periods.forEach((p, i) => {
-                    const parts = String(p).split('-').map(s => s.trim());
-                    html += `<tr><td style="color:#999">P${i + 1}</td><td>${esc(parts[0] || '—')}</td><td>${esc(parts[1] || '—')}</td></tr>`;
-                });
-                html += `</tbody></table></div>`;
-            }
-
-            // Player Stats
-            const activePlayers = players.filter(p => p.active && p.points > 0);
-            if (activePlayers.length > 0) {
-                const team1Players = activePlayers.filter(p => p.team === '1').sort((a, b) => b.points - a.points);
-                const team2Players = activePlayers.filter(p => p.team === '2').sort((a, b) => b.points - a.points);
-
-                html += `<div class="card"><h2>Player Stats</h2><table class="player-stats-table"><tbody>`;
-
-                if (team1Players.length > 0) {
-                    html += `<tr><td colspan="2" class="team-header">${esc(t1.name)}</td></tr>`;
-                    team1Players.forEach(p => {
-                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
-                    });
+            html += quartersCard(g) + chartCard(g) + boxScore(g) + playByPlay(g);
+            document.getElementById('results').innerHTML = html;
+            document.getElementById('share-btn').addEventListener('click', async e => {
+                const outcome = await Stats.share(Stats.shareText(g, location.href));
+                if (outcome === 'copied') {
+                    e.target.textContent = 'Copied!';
+                    setTimeout(() => e.target.textContent = 'Share result', 1500);
                 }
+            });
+        }
 
-                if (team2Players.length > 0) {
-                    html += `<tr><td colspan="2" class="team-header">${esc(t2.name)}</td></tr>`;
-                    team2Players.forEach(p => {
-                        html += `<tr><td>${esc(p.name)}</td><td>${p.points}</td></tr>`;
-                    });
+        function quartersCard(g) {
+            if (!g.quarters.length) return '';
+            const qs = g.quarters;
+            const cell = (q, t) => {
+                const won = q.points[t] > q.points[1 - t];
+                return `<td class="${won ? 'best' : 'dim'}">${q.points[t]}</td>`;
+            };
+            const row = t => `<tr>
+                <td>${teamChip(t + 1, g.names[t])}</td>
+                ${qs.map(q => cell(q, t)).join('')}
+                ${g.unfinished ? `<td class="dim">${g.final[t] - qs[qs.length - 1].total[t]}</td>` : ''}
+                <td class="best">${g.final[t]}</td></tr>`;
+            return `
+                <div class="card">
+                    <h2>Quarters</h2>
+                    <div class="table-wrap"><table>
+                        <thead><tr><th></th>${qs.map((_, i) => `<th>Q${i + 1}</th>`).join('')}${g.unfinished ? '<th>Now</th>' : ''}<th>Final</th></tr></thead>
+                        <tbody>${row(0)}${row(1)}</tbody>
+                    </table></div>
+                </div>`;
+        }
+
+        function chartCard(g) {
+            const svg = Stats.chartSvg(g);
+            if (!svg) return '';
+            const f = Stats.flow(g);
+            const lead = t => f.biggest[t] ? `${f.biggest[t]}` : '0';
+            return `
+                <div class="card">
+                    <h2>Score</h2>
+                    ${svg}
+                    <div class="legend"><span><i></i>${esc(g.names[0])}</span><span><i class="t2"></i>${esc(g.names[1])}</span></div>
+                    <div class="facts" style="margin-top:12px">
+                        <div><div class="value">${f.leadChanges}</div><div class="label">Lead changes</div></div>
+                        <div><div class="value">${lead(0)}</div><div class="label">${esc(g.names[0])} biggest lead</div></div>
+                        <div><div class="value">${lead(1)}</div><div class="label">${esc(g.names[1])} biggest lead</div></div>
+                    </div>
+                    ${g.scoreEvents.length < 2 ? '<div class="note">Team scores at the end of each quarter.</div>' : ''}
+                </div>`;
+        }
+
+        function boxScore(g) {
+            if (!g.players.length) return '';
+            const team = t => {
+                const list = g.players.filter(p => p.team === t);
+                if (!list.length) return '';
+                if (!g.tracked) {
+                    return `<div class="box"><h3>${teamChip(t, g.names[t - 1])}</h3>
+                        <div class="played">${list.map(p => `<span>${esc(p.name)}</span>`).join('')}</div></div>`;
                 }
-
-                html += `</tbody></table></div>`;
-            }
-
-            // Event Timeline
-            if (events.length > 0) {
-                html += `<div class="card"><h2>Event Timeline</h2><ul class="timeline">`;
-                // Show events in chronological order
-                events.forEach(ev => {
-                    const time = ev.ts ? formatTime(ev.ts) : '';
-                    if (ev.type === 'period_end') {
-                        const scores = ev.scores || [];
-                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc period-event">Period ${ev.period || '?'} ended</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
-                    } else if (ev.type === 'score') {
-                        const resolved = resolvePlayerName(ev, players);
-                        const who = resolved ? esc(resolved) : `Team ${ev.team}`;
-                        const action = ev.action === 'increment' ? '+1' : '-1';
-                        const scores = ev.scores || [];
-                        html += `<li><span class="time">${esc(time)}</span><span class="event-desc">${who} ${action}</span><span class="event-score">${scores[0] || 0} - ${scores[1] || 0}</span></li>`;
-                    }
-                });
-                html += `</ul></div>`;
-            }
-
-            html += `<div class="branding"><a href="/Scoreboard/">MDL Scoreboard</a></div>`;
-
-            el.innerHTML = html;
+                const sorted = [...list].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+                const max = Math.max(1, ...sorted.map(p => p.points));
+                const top = sorted[0].points;
+                const other = g.unattributed[t - 1];
+                return `<div class="box"><h3>${teamChip(t, g.names[t - 1])}</h3>
+                    <table><tbody>
+                        ${sorted.map(p => `<tr>
+                            <td class="name">${esc(p.name)}</td>
+                            <td><span class="share-bar ${t === 2 ? 't2' : ''}" style="width:${Math.round(60 * p.points / max)}px"></span><span class="${p.points === top && top > 0 ? 'best' : ''}">${p.points}</span></td>
+                        </tr>`).join('')}
+                        ${other ? `<tr><td class="dim">Not credited</td><td class="dim">${other}</td></tr>` : ''}
+                    </tbody></table></div>`;
+            };
+            return `
+                <div class="card">
+                    <h2>${g.tracked ? 'Box score' : 'Who played'}</h2>
+                    <div class="box-grid">${team(1)}${team(2)}</div>
+                    ${!g.tracked ? '<div class="note">Player points weren’t tracked this game, just team scores.</div>' : ''}
+                </div>`;
         }
 
-        function resolvePlayerName(ev, players) {
-            if (ev.playerId && players && players.length) {
-                const p = players.find(p => p.id === ev.playerId);
-                if (p) return p.name;
-            }
-            return ev.player || null;
-        }
-
-        function esc(s) {
-            const d = document.createElement('div');
-            d.textContent = s;
-            return d.innerHTML;
-        }
-
-        function formatDate(dateStr) {
-            try {
-                const d = new Date(dateStr + 'T00:00:00');
-                return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            } catch { return dateStr; }
-        }
-
-        function formatTime(ts) {
-            try {
-                const d = new Date(ts);
-                return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-            } catch { return ''; }
+        function playByPlay(g) {
+            const items = g.events.filter(e => e.type === 'score' || e.type === 'period_end' || e.type === 'score_set');
+            if (!items.length) return '';
+            const byId = new Map(g.raw.players?.map(p => [p.id, p.name]) || []);
+            let q = 0;
+            const lis = items.map(e => {
+                const s = Array.isArray(e.scores) ? `${e.scores[0]}–${e.scores[1]}` : '';
+                if (e.type === 'period_end') {
+                    q++;
+                    return `<li class="q"><span class="t">${formatTime(e.ts)}</span><span class="who">End of Q${e.period || q}</span><span class="s">${s}</span></li>`;
+                }
+                if (e.type === 'score_set') {
+                    return `<li><span class="t">${formatTime(e.ts)}</span><span class="who dim">Score set</span><span class="s">${s}</span></li>`;
+                }
+                const who = (e.playerId && byId.get(e.playerId)) || e.player || g.names[(e.team || 1) - 1];
+                return `<li><span class="t">${formatTime(e.ts)}</span><span class="who">${teamChip(e.team === 2 ? 2 : 1, '')} ${esc(who)} <span class="dim">${e.action === 'decrement' ? '−1' : '+1'}</span></span><span class="s">${s}</span></li>`;
+            });
+            return `
+                <div class="card">
+                    <details>
+                        <summary>Play-by-play (${items.length})</summary>
+                        <ul class="pbp">${lis.join('')}</ul>
+                    </details>
+                </div>`;
         }
     </script>
 </body>

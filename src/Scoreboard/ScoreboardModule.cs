@@ -1,5 +1,4 @@
 using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -17,19 +16,13 @@ public class ScoreboardModule : IApplicationPartModule
 {
     public string Name => "Scoreboard";
 
-    private static string htmlIndexContent = "";
-    private static string htmlDocsContent = "";
-    private static string htmlManagePlayersContent = "";
-    private static string htmlGameContent = "";
-    private static string htmlStatsContent = "";
+    // The module's wwwroot is embedded in this assembly; HTML pages are served from here.
+    private static readonly string PagePrefix =
+        $"{typeof(ScoreboardModule).Assembly.GetName().Name}.wwwroot.";
 
     public void ConfigureServices(IServiceCollection services)
     {
-        // Add HttpContextAccessor for the API methods
-        services.AddHttpContextAccessor();
-
-        // Add Azure Blob Storage
-        services.AddSingleton<BlobContainerClient>(provider =>
+        services.AddSingleton(provider =>
         {
             var configuration = provider.GetRequiredService<IConfiguration>();
             var connectionString = configuration["BlobStorage:ConnectionString"];
@@ -40,176 +33,41 @@ public class ScoreboardModule : IApplicationPartModule
                 throw new InvalidOperationException("Blob storage connection string or container name is not configured.");
             }
 
-            var blobServiceClient = new BlobServiceClient(connectionString);
-
-            // Configure CORS to allow the SPA to make direct blob requests
-            try
-            {
-                var properties = blobServiceClient.GetProperties().Value;
-                var hasWildcardCors = properties.Cors?.Any(r => r.AllowedOrigins == "*") ?? false;
-                if (!hasWildcardCors)
-                {
-                    properties.Cors ??= [];
-                    properties.Cors.Add(new BlobCorsRule
-                    {
-                        AllowedOrigins = "*",
-                        AllowedMethods = "GET,PUT,POST,DELETE,HEAD,OPTIONS",
-                        AllowedHeaders = "*",
-                        ExposedHeaders = "*",
-                        MaxAgeInSeconds = 3600
-                    });
-                    blobServiceClient.SetProperties(properties);
-                }
-            }
-            catch { /* Non-fatal: CORS setup may fail in some environments */ }
-
-            var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
-
-            // Create the container if it doesn't exist
-            containerClient.CreateIfNotExists();
-            return containerClient;
+            var container = new BlobContainerClient(connectionString, containerName);
+            container.CreateIfNotExists();
+            return container;
         });
 
-        // Register the default players service as singleton so it persists across requests
-        services.AddSingleton<IDefaultPlayersService, DefaultPlayersService>();
-
-        // Register the group service for shared state management
-        services.AddSingleton<IGroupService, GroupService>();
-
-        // Register the game share service
-        services.AddSingleton<IGameShareService, GameShareService>();
+        services.AddSingleton<ScoreboardStore>();
     }
 
     public void Configure(WebApplication app)
     {
-        // Map the module's home page
-        // map to the embedded resource directly as content
-        app.MapGet("/Scoreboard/", () =>
-        {
-            if (string.IsNullOrEmpty(htmlIndexContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.index.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
+        app.MapGet("/Scoreboard/", () => Page("index.html"));
+        app.MapGet("/Scoreboard/docs", () => Page("docs.html"));
+        app.MapGet("/Scoreboard/game", () => Page("game.html"));
+        app.MapGet("/Scoreboard/stats", () => Page("stats.html"));
+        // The team builder now lives on the scoreboard itself.
+        app.MapGet("/Scoreboard/ManagePlayers", () => Results.Redirect("/Scoreboard/#teams"));
 
-                if (stream is null)
-                {
-                    return Results.Problem("Scoreboard home page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlIndexContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlIndexContent, "text/html");
-        });
-
-        app.MapGet("/Scoreboard/docs", () =>
-        {
-            if (string.IsNullOrEmpty(htmlDocsContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.docs.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Scoreboard docs page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlDocsContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlDocsContent, "text/html");
-        });
-
-        app.MapGet("/Scoreboard/ManagePlayers", () =>
-        {
-            if (string.IsNullOrEmpty(htmlManagePlayersContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.manage-players.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Manage Players page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlManagePlayersContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlManagePlayersContent, "text/html");
-        });
-
-        // Shared game results page
-        app.MapGet("/Scoreboard/game", () =>
-        {
-            if (string.IsNullOrEmpty(htmlGameContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.game.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Game results page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlGameContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlGameContent, "text/html");
-        });
-
-        // Stats / game history page
-        app.MapGet("/Scoreboard/stats", () =>
-        {
-            if (string.IsNullOrEmpty(htmlStatsContent))
-            {
-                var assembly = typeof(ScoreboardModule).Assembly;
-                var resourceName = "SharedTools.Scoreboard.wwwroot.stats.html";
-                using var stream = assembly.GetManifestResourceStream(resourceName);
-
-                if (stream is null)
-                {
-                    return Results.Problem("Stats page not found.", statusCode: 404);
-                }
-                using var reader = new StreamReader(stream);
-                htmlStatsContent = reader.ReadToEnd();
-            }
-
-            return Results.Content(htmlStatsContent, "text/html");
-        });
-
-        // Game share endpoints
-        app.MapPost("/Scoreboard/api/games/share", GameShareApiMethods.CreateShare);
-        app.MapGet("/Scoreboard/api/shares/{code}", GameShareApiMethods.GetShare);
-
-        // Player management endpoints
-        app.MapGet("/Scoreboard/api/default-players", ScoreboardApiMethods.GetDefaultPlayers);
-
-        // Player management endpoints
-        app.MapPost("/Scoreboard/api/default-players/move", ScoreboardApiMethods.MovePlayer);
-        app.MapPost("/Scoreboard/api/default-players/add", ScoreboardApiMethods.AddPlayer);
-        app.MapPost("/Scoreboard/api/default-players/delete", ScoreboardApiMethods.DeletePlayer);
-        app.MapPost("/Scoreboard/api/default-players/save", ScoreboardApiMethods.SaveDefaultPlayers);
-        app.MapPost("/Scoreboard/api/default-players/toggle-active", ScoreboardApiMethods.TogglePlayerActive);
-        app.MapPost("/Scoreboard/api/default-players/rename", ScoreboardApiMethods.RenamePlayer);
-        app.MapGet("/Scoreboard/api/default-players/team-names", ScoreboardApiMethods.GetTeamNames);
-        app.MapPost("/Scoreboard/api/default-players/team-names", ScoreboardApiMethods.SaveTeamNames);
-        app.MapPost("/Scoreboard/api/default-players/{id}/image", ScoreboardApiMethods.UploadPlayerImage);
-        app.MapGet("/Scoreboard/api/default-players/{id}/image", ScoreboardApiMethods.GetPlayerImage);
-
-        // Group management endpoints
-        app.MapPost("/Scoreboard/api/groups", GroupApiMethods.CreateGroup);
-        app.MapGet("/Scoreboard/api/groups/join", GroupApiMethods.JoinGroup);
-        app.MapPost("/Scoreboard/api/groups/{id}/members", GroupApiMethods.AddMember);
-        app.MapDelete("/Scoreboard/api/groups/{id}/members/{code}", GroupApiMethods.RevokeMember);
-        app.MapGet("/Scoreboard/api/groups/{id}/sas/refresh", GroupApiMethods.RefreshSas);
+        ScoreboardApi.Map(app);
     }
 
     public void ConfigureApplicationParts(ApplicationPartManager partManager)
     {
-        // Usually empty - the framework handles this
+    }
+
+    // Changes with every build, so phones pick up new app.js/styles.css instead of cached copies.
+    private static readonly string BuildVersion =
+        typeof(ScoreboardModule).Assembly.ManifestModule.ModuleVersionId.ToString("N")[..8];
+
+    // Serves an embedded HTML page from the module's wwwroot, or 404 if it is missing.
+    private static IResult Page(string fileName)
+    {
+        using var stream = typeof(ScoreboardModule).Assembly.GetManifestResourceStream(PagePrefix + fileName);
+        if (stream is null) return Results.NotFound();
+
+        var html = new StreamReader(stream).ReadToEnd().Replace("{{v}}", BuildVersion);
+        return Results.Content(html, "text/html; charset=utf-8");
     }
 }
