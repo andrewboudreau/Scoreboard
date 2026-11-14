@@ -107,6 +107,8 @@ h2 { font-size: 22px; font-weight: 800; margin-top: 14px; text-align: center; }
 .big-btn small { font-size: 14px; font-weight: 500; opacity: .75; }
 .big-btn-icon { font-size: 40px; }
 .big-btn:active { transform: scale(.98); }
+.big-btn.secondary { background: var(--card); color: var(--text); border: 2px solid var(--ink); }
+.pick-buttons { display: flex; flex-direction: column; gap: 12px; }
 
 /* ---- 3. crop ---- */
 .stage {

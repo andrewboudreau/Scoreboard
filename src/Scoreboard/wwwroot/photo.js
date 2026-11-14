@@ -85,9 +85,13 @@
 
     // ---------------- 2. choose a photo ----------------
 
-    $('file').addEventListener('change', async () => {
-        const file = $('file').files[0];
-        $('file').value = '';
+    // Computers have no camera to open, so only phones and tablets get the selfie button
+    $('camera-btn').hidden = !matchMedia('(pointer: coarse)').matches;
+
+    const onPicked = async e => {
+        const input = e.target;
+        const file = input.files[0];
+        input.value = '';
         if (!file) return;
         try {
             source = await loadPhoto(file);
@@ -96,7 +100,9 @@
         } catch {
             fail("Couldn't open that photo. Try a different one.");
         }
-    });
+    };
+    $('file').addEventListener('change', onPicked);
+    $('camera').addEventListener('change', onPicked);
 
     // Decode with the phone's orientation applied, then scale big photos down
     async function loadPhoto(file) {

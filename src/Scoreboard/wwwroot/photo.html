@@ -25,12 +25,21 @@
         <!-- 2. Pick a photo -->
         <section id="step-pick" class="step" hidden>
             <div class="me" id="me-pick"></div>
-            <label class="big-btn" for="file">
-                <span class="big-btn-icon">📷</span>
-                <span>Choose a photo</span>
-                <small>Take one or pick from your library</small>
-            </label>
+            <div class="pick-buttons">
+                <label class="big-btn" for="file">
+                    <span class="big-btn-icon">🖼️</span>
+                    <span>Choose a photo</span>
+                    <small>From your photos</small>
+                </label>
+                <!-- Android's photo picker has no camera option, so the camera gets its own button -->
+                <label class="big-btn secondary" for="camera" id="camera-btn">
+                    <span class="big-btn-icon">🤳</span>
+                    <span>Take a selfie</span>
+                    <small>Opens the camera</small>
+                </label>
+            </div>
             <input id="file" type="file" accept="image/*" hidden>
+            <input id="camera" type="file" accept="image/*" capture="user" hidden>
             <button class="link" data-back="who">Not you? Pick another name</button>
         </section>
 
