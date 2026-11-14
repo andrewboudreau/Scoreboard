@@ -178,19 +178,26 @@ public class ScoreboardPage
         await PeriodScores.Nth(index).ClickAsync();
     }
 
+    // Roster rows are sorted alphabetically by name
+    public ILocator PlayerRows => PlayersList.Locator(".roster-row");
+    public ILocator EditRosterBtn => _page.Locator("#edit-roster-btn");
+
     public async Task<int> GetPlayerRowCount()
     {
-        return await PlayersList.Locator("tr").CountAsync();
+        return await PlayerRows.CountAsync();
     }
 
     public async Task RemovePlayer(int rowIndex)
     {
-        await PlayersList.Locator("tr").Nth(rowIndex).Locator(".remove-player").ClickAsync();
+        await EditRosterBtn.ClickAsync();
+        await PlayerRows.Nth(rowIndex).Locator(".remove-player").ClickAsync();
+        await EditRosterBtn.ClickAsync();
     }
 
+    /// <summary>teamValue is "1", "2", or "out".</summary>
     public async Task ChangePlayerTeam(int rowIndex, string teamValue)
     {
-        await PlayersList.Locator("tr").Nth(rowIndex).Locator(".team-select").SelectOptionAsync(teamValue);
+        await PlayerRows.Nth(rowIndex).Locator($"[data-team=\"{teamValue}\"]").ClickAsync();
     }
 
     public async Task ClickTeam1PlayerDisplay(int index)

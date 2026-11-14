@@ -367,39 +367,6 @@ body {
         background-color: #555;
     }
 
-/* Players Panel Styles */
-.players-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.players-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 15px;
-}
-
-    .players-table th,
-    .players-table td {
-        padding: 8px;
-        text-align: left;
-        border-bottom: 1px solid #555;
-    }
-
-    .players-table th {
-        background-color: #333;
-        font-weight: bold;
-    }
-
-    .players-table tr:nth-child(even) {
-        background-color: #3a3a3a;
-    }
-
-    .players-table tr:hover {
-        background-color: #444;
-    }
-
 /* Points increment/decrement controls */
 .points-cell {
     display: flex;
@@ -440,28 +407,6 @@ body {
     color: #69db7c;
 }
 
-.remove-player {
-    background-color: #555;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 2px 6px;
-    cursor: pointer;
-    font-size: 0.8rem;
-}
-
-    .remove-player:hover {
-        background-color: #777;
-    }
-
-.team-select {
-    background-color: #444;
-    color: white;
-    border: 1px solid #555;
-    border-radius: 4px;
-    padding: 2px 4px;
-}
-
 .add-player {
     display: flex;
     gap: 5px;
@@ -494,28 +439,225 @@ body {
             background-color: #555;
         }
 
-/* Checkbox styling */
-.player-active {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-}
-
-/* Group section */
-.group-join-row {
-    display: flex;
-    gap: 5px;
-    margin-bottom: 5px;
-}
-
-.group-join-row input {
-    flex-grow: 1;
-}
-
 .help-text {
     color: #aaa;
     font-size: 0.85rem;
     margin-bottom: 5px;
+}
+
+/* Team builder panel: big panel on iPad/desktop, full screen on phones */
+.teams-panel {
+    position: fixed;
+    width: 640px;
+    max-width: calc(100vw - 40px);
+    max-height: calc(100dvh - 110px);
+    padding: 0 16px 16px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.teams-panel button {
+    touch-action: manipulation; /* no double-tap zoom delay */
+}
+
+.teams-header {
+    position: sticky;
+    top: 0;
+    margin: 0 -16px 10px;
+    padding: 16px 16px 10px;
+    background: rgb(51, 51, 51);
+    border-bottom: 1px solid #555;
+    z-index: 1;
+}
+
+.team-counts {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.count-chip {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.count-chip.team1 { background: #111; color: #fff; border: 1px solid #777; }
+.count-chip.team2 { background: #eee; color: #111; }
+.count-chip.out { background: transparent; color: #aaa; border: 1px solid #666; }
+.team-counts.uneven .count-chip.team1,
+.team-counts.uneven .count-chip.team2 { box-shadow: 0 0 0 2px #f59f00; }
+
+.teams-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.teams-actions button,
+.roster-btn {
+    min-height: 44px;
+    padding: 8px 14px;
+    background-color: #444;
+    border: 1px solid gray;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.teams-actions button.active { background-color: #2b8a3e; border-color: #2b8a3e; }
+.teams-actions .done-btn { margin-left: auto; background-color: #1c7ed6; border-color: #1c7ed6; font-weight: bold; }
+
+@media (hover: hover) {
+    .teams-actions button:hover,
+    .roster-btn:hover { filter: brightness(1.2); }
+    .team-toggle button:hover { color: #fff; }
+}
+
+.roster-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.roster-empty {
+    color: #aaa;
+    padding: 20px 0;
+    text-align: center;
+}
+
+.roster-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #3a3a3a;
+}
+
+.roster-row.status-out { background: transparent; }
+.roster-row.status-out .roster-name { color: #888; }
+
+.roster-name {
+    flex: 1 1 90px;
+    min-width: 0;
+    font-weight: bold;
+    font-size: 1.05rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.roster-points {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.roster-points .points-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+}
+
+.pin-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1rem;
+    opacity: 0.25;
+    filter: grayscale(1);
+    flex-shrink: 0;
+}
+
+.pin-btn.pinned { opacity: 1; filter: none; background: #555; }
+.pin-btn:disabled { visibility: hidden; }
+
+.team-toggle {
+    display: flex;
+    border: 1px solid #666;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.team-toggle button {
+    min-width: 76px;
+    max-width: 120px;
+    min-height: 44px;
+    padding: 8px;
+    border: none;
+    border-right: 1px solid #666;
+    background: #2a2a2a;
+    color: #999;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.team-toggle button:last-child { border-right: none; }
+.team-toggle button.team1.selected { background: #000; color: #fff; box-shadow: inset 0 0 0 2px #888; }
+.team-toggle button.team2.selected { background: #eee; color: #000; }
+.team-toggle button.out.selected { background: #555; color: #ddd; }
+
+.remove-player { color: #ff8787; }
+
+.teams-panel .add-player {
+    margin-top: 12px;
+}
+
+.teams-panel .add-player input,
+.teams-panel .add-player button {
+    min-height: 44px;
+    padding: 10px;
+    font-size: 16px; /* 16px+ stops iOS zooming in on focus */
+}
+
+/* Phones: full screen, toggle on its own full-width line */
+@media (max-width: 700px) {
+    .teams-panel {
+        inset: 0;
+        width: 100%;
+        max-width: none;
+        max-height: none;
+        border: none;
+        border-radius: 0;
+        z-index: 200;
+        padding: 0 12px calc(16px + env(safe-area-inset-bottom));
+    }
+
+    .teams-header {
+        margin: 0 -12px 10px;
+        padding: calc(12px + env(safe-area-inset-top)) 12px 10px;
+    }
+
+    .teams-actions button {
+        flex: 1;
+        padding: 8px 6px;
+    }
+
+    .team-toggle {
+        width: 100%;
+    }
+
+    .team-toggle button {
+        flex: 1;
+        max-width: none;
+    }
 }
 
 @media (max-width: 768px) {
@@ -556,5 +698,84 @@ body {
 
     .timer {
         font-size: 8rem;
+    }
+}
+
+/* Shown while changes haven't reached the server */
+#sync-status {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 300;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: #b45309;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+#sync-status[hidden] {
+    display: none;
+}
+
+/* Quarter score entry (team-only games) */
+.quarter-entry .hint {
+    display: block;
+    font-size: 12px;
+    color: #aaa;
+}
+
+.quarter-inputs {
+    display: flex;
+    gap: 10px;
+}
+
+    .quarter-inputs label {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .quarter-inputs input {
+        width: 100%;
+        font-size: 22px;
+        text-align: center;
+        min-height: 44px;
+    }
+
+.quarter-entry button {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+}
+
+/* Settings: fit the screen on phones, above the control buttons */
+@media (max-width: 700px) {
+    #settings-panel {
+        position: fixed;
+        left: 8px;
+        right: 8px;
+        bottom: calc(76px + env(safe-area-inset-bottom));
+        width: auto;
+        max-height: calc(100dvh - 100px);
+        padding: 14px;
+        z-index: 150;
+        overscroll-behavior: contain;
+    }
+
+    #settings-panel .settings-group button {
+        min-height: 40px;
+    }
+
+    #settings-panel .team-settings input {
+        flex: 1;
+        min-width: 0;
+    }
+
+    #settings-panel input[type="range"] {
+        width: 100%;
     }
 }

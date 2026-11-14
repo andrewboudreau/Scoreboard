@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Playwright.NUnit;
 using Microsoft.Playwright;
 using NUnit.Framework;
@@ -10,6 +11,8 @@ namespace Scoreboard.Tests.Playwright;
 public class ScoreboardTests : PageTest
 {
     private ScoreboardPage _scoreboard = null!;
+    private FakeApi _api = null!;
+    private static readonly Regex Active = new(@"\bactive\b");
 
     // Set the base URL via environment variable SCOREBOARD_BASE_URL, default to localhost:5000
     private static string BaseUrl =>
@@ -19,6 +22,9 @@ public class ScoreboardTests : PageTest
     public async Task SetUp()
     {
         _scoreboard = new ScoreboardPage(Page, BaseUrl);
+        // Serve the API from memory so tests never touch the real store
+        _api = new FakeApi();
+        await _api.AttachAsync(Page);
         // Clear localStorage before each test
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/");
         await Page.EvaluateAsync("() => localStorage.clear()");
@@ -227,24 +233,24 @@ public class ScoreboardTests : PageTest
     public async Task SettingsPanel_OpensAndCloses()
     {
         // Should be hidden initially
-        await Expect(_scoreboard.SettingsPanel).Not.ToHaveClassAsync("active");
+        await Expect(_scoreboard.SettingsPanel).Not.ToHaveClassAsync(Active);
 
         // Open settings
         await _scoreboard.OpenSettings();
-        await Expect(_scoreboard.SettingsPanel).ToHaveClassAsync("side-panel active");
+        await Expect(_scoreboard.SettingsPanel).ToHaveClassAsync(Active);
 
         // Click outside to close (click on the scoreboard body)
         await Page.Locator("body").ClickAsync(new() { Position = new Position { X = 10, Y = 10 } });
-        await Expect(_scoreboard.SettingsPanel).Not.ToHaveClassAsync("active");
+        await Expect(_scoreboard.SettingsPanel).Not.ToHaveClassAsync(Active);
     }
 
     [Test]
     public async Task PlayersPanel_OpensOnClick()
     {
-        await Expect(_scoreboard.PlayersPanel).Not.ToHaveClassAsync("active");
+        await Expect(_scoreboard.PlayersPanel).Not.ToHaveClassAsync(Active);
 
         await _scoreboard.OpenPlayers();
-        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync("side-panel active");
+        await Expect(_scoreboard.PlayersPanel).ToHaveClassAsync(Active);
     }
 
     [Test]
@@ -297,258 +303,230 @@ public class ScoreboardTests : PageTest
         var periodScores = await _scoreboard.GetPeriodScores();
         Assert.That(periodScores[0], Is.EqualTo("2 - 1"));
 
-        // Reset scores for next period
+        var firstGameId = await Page.EvaluateAsync<string>("() => window.scoreboardApp.currentGameId");
+
+        // Resetting scores starts a new game; the old one stays in history
         await _scoreboard.ResetScores();
         Assert.That(await _scoreboard.GetTeam1Score(), Is.EqualTo("0"));
         Assert.That(await _scoreboard.GetTeam2Score(), Is.EqualTo("0"));
+        Assert.That(await _scoreboard.GetPeriodScoreCount(), Is.EqualTo(0));
 
-        // Score more and capture second period
         await _scoreboard.ClickTeam1Score();
         await _scoreboard.ClickTeam2Score();
         await _scoreboard.ClickTeam2Score();
-
         await _scoreboard.SimulateTimerEnd();
 
-        periodCount = await _scoreboard.GetPeriodScoreCount();
-        Assert.That(periodCount, Is.EqualTo(2));
-
         periodScores = await _scoreboard.GetPeriodScores();
-        Assert.That(periodScores[1], Is.EqualTo("1 - 2"));
+        Assert.That(periodScores, Is.EqualTo(new[] { "1 - 2" }));
+
+        await Page.EvaluateAsync("() => window.scoreboardApp.sync.flush()");
+        var secondGameId = await Page.EvaluateAsync<string>("() => window.scoreboardApp.currentGameId");
+        Assert.That(secondGameId, Is.Not.EqualTo(firstGameId));
+        Assert.That(_api.Docs[$"games/{firstGameId}"], Does.Contain("2 - 1"));
+    }
+
+    [Test]
+    public async Task QuarterEntry_EndQuarterAtTypedScore()
+    {
+        await _scoreboard.OpenSettings();
+        await Page.Locator("#q-team1").FillAsync("12");
+        await Page.Locator("#q-team2").FillAsync("9");
+        await Page.Locator("#end-quarter-btn").ClickAsync();
+
+        Assert.That(await _scoreboard.GetTeam1Score(), Is.EqualTo("12"));
+        Assert.That(await _scoreboard.GetTeam2Score(), Is.EqualTo("9"));
+        Assert.That(await _scoreboard.GetPeriodScores(), Is.EqualTo(new[] { "12 - 9" }));
+
+        // Second quarter typed as cumulative score; Q1 must stay intact
+        await Page.Locator("#q-team1").FillAsync("20");
+        await Page.Locator("#q-team2").FillAsync("22");
+        await Page.Locator("#end-quarter-btn").ClickAsync();
+        Assert.That(await _scoreboard.GetPeriodScores(), Is.EqualTo(new[] { "12 - 9", "20 - 22" }));
+    }
+
+    [Test]
+    public async Task ShareTeams_TextListsBothTeams()
+    {
+        await _scoreboard.AddPlayer("Alice");
+        await _scoreboard.AddPlayer("Bob");
+        await Expect(Page.Locator("#share-teams-btn")).ToBeVisibleAsync();
+
+        var text = await Page.EvaluateAsync<string>("() => window.scoreboardApp.players.teamsText()");
+        Assert.That(text, Does.StartWith("🏀 Teams for"));
+        Assert.That(text, Does.Contain("⚫ BLACK (1)\nAlice"));
+        Assert.That(text, Does.Contain("⚪ WHITE (1)\nBob"));
+    }
+
+    [Test]
+    public async Task Roster_SavedToServer()
+    {
+        await _scoreboard.AddPlayer("Alice");
+        await Page.WaitForFunctionAsync("() => !window.scoreboardApp.sync.busy");
+        await Page.EvaluateAsync("() => window.scoreboardApp.sync.flush()");
+        Assert.That(_api.Docs.GetValueOrDefault("roster"), Does.Contain("Alice"));
+
+        // A fresh page load reads the roster back from the server, not the device
+        await Page.EvaluateAsync("() => localStorage.clear()");
+        await _scoreboard.GotoAsync();
+        await _scoreboard.OpenPlayers();
+        await Expect(_scoreboard.PlayerRows).ToHaveCountAsync(1);
     }
 
     [Test, Explicit("Slow E2E simulation — run manually to regenerate fixture")]
     public async Task FullGameSimulation_FourQuarters_TenPlayers()
     {
-        // --- 1. Create a fresh group so this test is fully self-contained ---
-        // Auto-accept all dialogs (prompt for group name, alert with admin code)
-        var groupName = $"E2E Sim {DateTime.UtcNow:yyyy-MM-dd HH:mm}";
-        Page.Dialog += async (_, dialog) =>
-        {
-            if (dialog.Type == "prompt")
-                await dialog.AcceptAsync(groupName);
-            else
-                await dialog.AcceptAsync();
-        };
-
-        await _scoreboard.OpenSettings();
-        await Page.Locator("#create-group-btn").ClickAsync();
-
-        // Wait for group connection to establish
-        await Page.WaitForFunctionAsync("() => window.scoreboardApp.blobSync.isConnected",
-            new PageWaitForFunctionOptions { Timeout = 15000 });
-        TestContext.WriteLine($"Group created: {groupName}");
-
-        // Close settings
-        await _scoreboard.SettingsBtn.ClickAsync();
-
-        // --- 2. Add 10 players ---
+        // --- 1. Add 10 players and split them into teams ---
         string[] team1Names = ["Adams", "Baker", "Clark", "Davis", "Evans"];
         string[] team2Names = ["Foster", "Garcia", "Harris", "Irving", "Jones"];
 
         foreach (var name in team1Names.Concat(team2Names))
             await _scoreboard.AddPlayer(name);
 
-        // Move players 5-9 to team 2
-        // All on team 1 sorted alphabetically:
-        // 0=Adams, 1=Baker, 2=Clark, 3=Davis, 4=Evans, 5=Foster, 6=Garcia, 7=Harris, 8=Irving, 9=Jones
-        for (int i = 5; i <= 9; i++)
-            await _scoreboard.ChangePlayerTeam(i, "2");
+        // Rows are alphabetical: 0-4 = team1Names, 5-9 = team2Names
+        for (int i = 0; i < 10; i++)
+            await _scoreboard.ChangePlayerTeam(i, i < 5 ? "1" : "2");
 
-        // Wait for team 2 display to show 5 players
-        await _scoreboard.Team2PlayersDisplay.Locator(".player-item-display").Nth(4)
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        await Expect(_scoreboard.Team2PlayersDisplay.Locator(".player-item-display")).ToHaveCountAsync(5);
+        await Page.Locator("#close-teams-btn").ClickAsync();
 
-        // Close players panel before scoring
-        await _scoreboard.PlayersBtn.ClickAsync();
-
-        // Set timer to 5 minutes
         await _scoreboard.SetTimerDuration(5);
-
-        // Close settings panel
         await _scoreboard.SettingsBtn.ClickAsync();
 
-        // --- 3. Play 4 quarters ---
-        // Q1: T1+12, T2+10 → 12-10
-        // Q2: T1+8,  T2+11 → 20-21
-        // Q3: T1+14, T2+9  → 34-30
-        // Q4: T1+10, T2+12 → 44-42
-        int[][] quarterScoring =
-        [
-            [12, 10],
-            [8, 11],
-            [14, 9],
-            [10, 12]
-        ];
-
+        // --- 2. Play 4 quarters: 12-10, 20-21, 34-30, 44-42 ---
+        int[][] quarterScoring = [[12, 10], [8, 11], [14, 9], [10, 12]];
         int cumulativeT1 = 0, cumulativeT2 = 0;
         int t1PlayerIdx = 0, t2PlayerIdx = 0;
 
         for (int q = 0; q < 4; q++)
         {
-            int t1Pts = quarterScoring[q][0];
-            int t2Pts = quarterScoring[q][1];
-
-            // Interleave scoring: alternate team1 and team2 clicks
             int t1Done = 0, t2Done = 0;
-            while (t1Done < t1Pts || t2Done < t2Pts)
+            while (t1Done < quarterScoring[q][0] || t2Done < quarterScoring[q][1])
             {
-                if (t1Done < t1Pts)
+                if (t1Done < quarterScoring[q][0])
                 {
-                    await _scoreboard.ClickTeam1PlayerDisplay(t1PlayerIdx % 5);
-                    t1PlayerIdx++;
+                    await _scoreboard.ClickTeam1PlayerDisplay(t1PlayerIdx++ % 5);
                     t1Done++;
                     cumulativeT1++;
                 }
-
-                if (t2Done < t2Pts)
+                if (t2Done < quarterScoring[q][1])
                 {
-                    await _scoreboard.ClickTeam2PlayerDisplay(t2PlayerIdx % 5);
-                    t2PlayerIdx++;
+                    await _scoreboard.ClickTeam2PlayerDisplay(t2PlayerIdx++ % 5);
                     t2Done++;
                     cumulativeT2++;
                 }
             }
 
-            // Verify cumulative scores
             Assert.That(await _scoreboard.GetTeam1Score(), Is.EqualTo(cumulativeT1.ToString()));
             Assert.That(await _scoreboard.GetTeam2Score(), Is.EqualTo(cumulativeT2.ToString()));
 
-            // Simulate timer end to capture period
             await _scoreboard.SimulateTimerEnd();
+            await _scoreboard.SettingsBtn.ClickAsync();
 
-            // Verify period count and score
-            Assert.That(await _scoreboard.GetPeriodScoreCount(), Is.EqualTo(q + 1));
             var periodScores = await _scoreboard.GetPeriodScores();
+            Assert.That(periodScores, Has.Length.EqualTo(q + 1));
             Assert.That(periodScores[q], Is.EqualTo($"{cumulativeT1} - {cumulativeT2}"));
-
-            TestContext.WriteLine($"Q{q + 1} done: {cumulativeT1} - {cumulativeT2}");
         }
 
-        // Final score assertions
-        Assert.That(cumulativeT1, Is.EqualTo(44));
-        Assert.That(cumulativeT2, Is.EqualTo(42));
-
-        // --- 4. Extract game state and save fixture ---
+        // --- 3. Save the fixture ---
         var gameStateJson = await _scoreboard.GetGameStateJson();
-        Assert.That(gameStateJson, Is.Not.Null.And.Not.Empty);
-
         var parsed = JsonSerializer.Deserialize<JsonElement>(gameStateJson);
         var prettyJson = JsonSerializer.Serialize(parsed, new JsonSerializerOptions { WriteIndented = true });
-
         var fixtureDir = Path.Combine(TestContext.CurrentContext.TestDirectory, "..", "..", "..", "Fixtures");
         Directory.CreateDirectory(fixtureDir);
-        var fixturePath = Path.Combine(fixtureDir, "full-game-state.json");
-        await File.WriteAllTextAsync(fixturePath, prettyJson);
+        await File.WriteAllTextAsync(Path.Combine(fixtureDir, "full-game-state.json"), prettyJson);
 
-        TestContext.WriteLine($"Fixture saved to: {fixturePath}");
-        TestContext.WriteLine($"Events in state: {parsed.GetProperty("events").GetArrayLength()}");
+        // --- 4. The game went to the server and shows on the game page ---
+        await Page.EvaluateAsync("() => window.scoreboardApp.sync.flush()");
+        var gameId = parsed.GetProperty("id").GetString();
+        Assert.That(_api.Docs.ContainsKey($"games/{gameId}"), Is.True);
 
-        // --- 5. Force sync to blob storage ---
-        await Page.EvaluateAsync(@"async () => {
-            const app = window.scoreboardApp;
-            const state = app._buildGameState();
-            await app.blobSync.upload('games/' + app.currentGameId + '.json', state);
-            await app.blobSync.upload('active-game.json', { gameId: app.currentGameId });
-            await app.blobSync.upload('roster.json', { players: app.playersList });
-        }");
-        TestContext.WriteLine("Game synced to blob storage");
-
-        // --- 6. Verify game appears on stats page via real blob flow ---
-        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats");
-        await Page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-
-        // Wait for game cards to load from blob (may take a moment)
-        var gameCard = Page.Locator(".game-card").First;
-        await gameCard.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 30000 });
-
-        // Verify card shows correct final score
-        await Expect(gameCard).ToContainTextAsync("44");
-        await Expect(gameCard).ToContainTextAsync("42");
-
-        // Click into detail view
-        await gameCard.ClickAsync();
-        await Page.Locator("#detail-view").WaitForAsync(new() { State = WaitForSelectorState.Visible });
-
-        // Verify detail view
-        var finalScore = Page.Locator(".final-score");
-        await Expect(finalScore).ToContainTextAsync("44");
-        await Expect(finalScore).ToContainTextAsync("42");
-        Assert.That(await Page.Locator(".periods-table tbody tr").CountAsync(), Is.EqualTo(4));
-        await Expect(Page.Locator(".player-stats-table")).ToContainTextAsync("Adams");
-        await Expect(Page.Locator(".player-stats-table")).ToContainTextAsync("Foster");
-        await Expect(Page.Locator(".scoring-timeline")).ToBeVisibleAsync();
-        await Expect(Page.Locator("#score-canvas")).ToBeVisibleAsync();
-
-        TestContext.WriteLine("Stats page verified via blob storage");
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id={gameId}");
+        await Expect(Page.Locator(".hero")).ToContainTextAsync("44");
+        await Expect(Page.Locator(".hero")).ToContainTextAsync("42");
+        await Expect(Page.Locator("text=Box score")).ToBeVisibleAsync();
     }
 
     [Test]
-    public async Task StatsPage_ShowsGameDetailCorrectly()
+    public async Task StatsPage_DashboardAndGamePage()
     {
-        // Load the fixture JSON
         var fixturePath = Path.Combine(TestContext.CurrentContext.TestDirectory, "Fixtures", "full-game-state.json");
         Assert.That(File.Exists(fixturePath), Is.True, $"Fixture file not found at {fixturePath}");
         var fixtureJson = await File.ReadAllTextAsync(fixturePath);
+        var gameId = JsonDocument.Parse(fixtureJson).RootElement.GetProperty("id").GetString();
+        _api.AddGame(fixtureJson);
 
-        // Navigate to stats page
+        // --- Dashboard ---
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats");
-        await Page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
+        var row = Page.Locator(".game-row").First;
+        await Expect(row).ToContainTextAsync("44");
+        await Expect(row).ToContainTextAsync("42");
+        await Expect(row).ToContainTextAsync("Player stats");
 
-        // Inject the fixture data and render the detail view.
-        // The stats page uses `let games` at script scope, which isn't accessible
-        // from Page.EvaluateAsync (uses new Function). Inject via <script> tag instead.
-        await Page.EvaluateAsync("(json) => { window.__fixture = json; }", fixtureJson);
-        await Page.EvaluateAsync(@"() => {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('connect').style.display = 'none';
-            const s = document.createElement('script');
-            s.textContent = 'games = [JSON.parse(window.__fixture)]; showDetail(0);';
-            document.head.appendChild(s);
-        }");
+        var players = Page.Locator("#players-table");
+        await Expect(players).ToContainTextAsync("Adams");
+        await Expect(players).ToContainTextAsync("Foster");
 
-        // Wait for detail view to be visible
-        await Page.Locator("#detail-view").WaitForAsync(new() { State = WaitForSelectorState.Visible });
+        // Tapping a player opens their game log
+        await players.Locator("tr.clickable", new() { HasText = "Adams" }).ClickAsync();
+        await Expect(Page.Locator("#sheet")).ToBeVisibleAsync();
+        await Expect(Page.Locator("#sheet-body")).ToContainTextAsync("Adams");
 
-        // Assert: Final score section exists
-        var finalScore = Page.Locator(".final-score");
-        await Expect(finalScore).ToBeVisibleAsync();
+        // --- Game page ---
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id={gameId}");
+        var hero = Page.Locator(".hero");
+        await Expect(hero).ToContainTextAsync("BLACK");
+        await Expect(hero).ToContainTextAsync("WHITE");
+        await Expect(hero).ToContainTextAsync("44");
+        await Expect(hero).ToContainTextAsync("42");
+        await Expect(hero).ToContainTextAsync("BLACK won by 2");
 
-        // Verify team names and scores in the final score section
-        var scoreRow = finalScore.Locator(".score-row");
-        await Expect(scoreRow).ToContainTextAsync("BLACK");
-        await Expect(scoreRow).ToContainTextAsync("WHITE");
-        await Expect(scoreRow).ToContainTextAsync("44");
-        await Expect(scoreRow).ToContainTextAsync("42");
+        var quarters = Page.Locator(".card", new() { HasText = "Quarters" }).Locator("thead th");
+        await Expect(quarters).ToHaveTextAsync(new[] { "", "Q1", "Q2", "Q3", "Q4", "Final" });
 
-        // Assert: 4 period rows in the periods table
-        var periodRows = Page.Locator(".periods-table tbody tr");
-        Assert.That(await periodRows.CountAsync(), Is.EqualTo(4));
+        var box = Page.Locator(".card", new() { HasText = "Box score" });
+        await Expect(box).ToContainTextAsync("Adams");
+        await Expect(box).ToContainTextAsync("Foster");
+        await Expect(Page.Locator("svg.chart")).ToBeVisibleAsync();
+        await Expect(Page.Locator("details summary")).ToContainTextAsync("Play-by-play");
+    }
 
-        // Verify period labels
-        await Expect(periodRows.Nth(0)).ToContainTextAsync("P1");
-        await Expect(periodRows.Nth(3)).ToContainTextAsync("P4");
+    [Test]
+    public async Task StatsPage_TeamScoresOnlyGame()
+    {
+        // A game where only the quarter totals were typed in, no player points
+        var game = new
+        {
+            id = "game-2026-03-07-aaaa",
+            weekDate = "2026-03-07",
+            team1 = new { name = "BLACK", score = 40 },
+            team2 = new { name = "WHITE", score = 45 },
+            periodScores = new[] { "10 - 12", "21 - 20", "30 - 33", "40 - 45" },
+            players = new[]
+            {
+                new { id = 1, name = "Ann", team = "1", active = true, points = 0 },
+                new { id = 2, name = "Ben", team = "2", active = true, points = 0 }
+            },
+            events = new object[]
+            {
+                new { ts = "2026-03-07T18:10:00Z", type = "score_set", scores = new[] { 10, 12 } },
+                new { ts = "2026-03-07T18:10:00Z", type = "period_end", period = 1, scores = new[] { 10, 12 } },
+                new { ts = "2026-03-07T18:20:00Z", type = "score_set", scores = new[] { 21, 20 } },
+                new { ts = "2026-03-07T18:20:00Z", type = "period_end", period = 2, scores = new[] { 21, 20 } },
+                new { ts = "2026-03-07T18:30:00Z", type = "score_set", scores = new[] { 30, 33 } },
+                new { ts = "2026-03-07T18:30:00Z", type = "period_end", period = 3, scores = new[] { 30, 33 } },
+                new { ts = "2026-03-07T18:40:00Z", type = "score_set", scores = new[] { 40, 45 } },
+                new { ts = "2026-03-07T18:40:00Z", type = "period_end", period = 4, scores = new[] { 40, 45 } }
+            },
+            lastUpdated = "2026-03-07T18:40:00Z"
+        };
+        _api.AddGame(JsonSerializer.Serialize(game));
 
-        // Assert: Player stats table has entries for both teams
-        var playerStatsTable = Page.Locator(".player-stats-table");
-        await Expect(playerStatsTable).ToBeVisibleAsync();
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats");
+        await Expect(Page.Locator(".game-row").First).ToContainTextAsync("Team scores");
 
-        // Should have team headers for BLACK and WHITE
-        await Expect(playerStatsTable).ToContainTextAsync("BLACK");
-        await Expect(playerStatsTable).ToContainTextAsync("WHITE");
-
-        // Should contain player names from both teams
-        await Expect(playerStatsTable).ToContainTextAsync("Adams");
-        await Expect(playerStatsTable).ToContainTextAsync("Foster");
-
-        // Assert: Scoring timeline exists and has events
-        var timeline = Page.Locator(".scoring-timeline");
-        await Expect(timeline).ToBeVisibleAsync();
-        var timelineItems = timeline.Locator("li");
-        // Should have many events (86 scores + 4 period ends = 90)
-        Assert.That(await timelineItems.CountAsync(), Is.GreaterThanOrEqualTo(10));
-
-        // Assert: Score graph canvas exists (need >= 2 score events)
-        var canvas = Page.Locator("#score-canvas");
-        await Expect(canvas).ToBeVisibleAsync();
+        await Page.GotoAsync($"{BaseUrl}/Scoreboard/game?id={game.id}");
+        await Expect(Page.Locator(".hero")).ToContainTextAsync("WHITE won by 5");
+        await Expect(Page.Locator(".card", new() { HasText = "Who played" })).ToContainTextAsync("Ann");
+        await Expect(Page.Locator(".card", new() { HasText = "Box score" })).ToHaveCountAsync(0);
     }
 }

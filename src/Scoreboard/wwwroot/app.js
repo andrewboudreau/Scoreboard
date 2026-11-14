@@ -1,213 +1,117 @@
+// Server API: the server just stores JSON documents (roster, games, current-game pointer).
+const api = {
+    async get(path) {
+        const res = await fetch(`/Scoreboard/api/${path}`);
+        if (res.status === 204 || res.status === 404) return null;
+        if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
+        return res.json();
+    },
 
-class BlobSync {
-    constructor(app) {
-        this.app = app;
-        this.groupId = null;
-        this.groupName = null;
-        this.isAdmin = false;
-        this.readUrl = null;
-        this.writeUrl = null;
-        this.code = null;
-        this.saveTimeouts = {};
-    }
-
-    get isConnected() {
-        return this.groupId !== null && this.readUrl !== null;
-    }
-
-    async join(code) {
-        const response = await fetch(`/Scoreboard/api/groups/join?code=${encodeURIComponent(code)}`);
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error || 'Invalid code');
-        }
-        const data = await response.json();
-        this.groupId = data.groupId;
-        this.groupName = data.groupName;
-        this.isAdmin = data.isAdmin;
-        this.readUrl = data.sasUrls.readUrl;
-        this.writeUrl = data.sasUrls.writeUrl;
-        this.code = code;
-        localStorage.setItem('groupCode', code);
-    }
-
-    async createGroup(name) {
-        const response = await fetch('/Scoreboard/api/groups', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-        if (!response.ok) throw new Error('Failed to create group');
-        const data = await response.json();
-        await this.join(data.adminCode);
-        return data;
-    }
-
-    leave() {
-        this.groupId = null;
-        this.groupName = null;
-        this.isAdmin = false;
-        this.readUrl = null;
-        this.writeUrl = null;
-        this.code = null;
-        localStorage.removeItem('groupCode');
-    }
-
-    // Build blob URL: insert groupId/path into the container SAS URL
-    _blobUrl(sasUrl, path) {
-        const url = new URL(sasUrl);
-        url.pathname += '/' + this.groupId + '/' + path;
-        return url.toString();
-    }
-
-    // Get fresh SAS URLs from the server (code is the anti-forgery token)
-    async _refreshSas() {
+    async put(path, data, keepalive = false) {
         try {
-            const res = await fetch(
-                `/Scoreboard/api/groups/${this.groupId}/sas/refresh?code=${encodeURIComponent(this.code)}`
-            );
-            if (!res.ok) return false;
-            const data = await res.json();
-            this.readUrl = data.readUrl;
-            this.writeUrl = data.writeUrl;
-            return true;
-        } catch { return false; }
-    }
-
-    async download(path) {
-        if (!this.isConnected) return null;
-        try {
-            let res = await fetch(this._blobUrl(this.readUrl, path));
-            if (res.status === 403 && await this._refreshSas()) {
-                res = await fetch(this._blobUrl(this.readUrl, path));
-            }
-            if (!res.ok) return null;
-            return await res.json();
-        } catch (e) {
-            console.error(`BlobSync: download ${path} failed`, e);
-            return null;
-        }
-    }
-
-    async upload(path, data) {
-        if (!this.isConnected || !this.writeUrl) return false;
-        const opts = {
-            method: 'PUT',
-            headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        };
-        try {
-            let res = await fetch(this._blobUrl(this.writeUrl, path), opts);
-            if (res.status === 403 && await this._refreshSas()) {
-                res = await fetch(this._blobUrl(this.writeUrl, path), opts);
-            }
+            const res = await fetch(`/Scoreboard/api/${path}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+                keepalive
+            });
             return res.ok;
-        } catch (e) {
-            console.error(`BlobSync: upload ${path} failed`, e);
+        } catch {
             return false;
         }
     }
+};
 
-    debouncedUpload(path, data, delayMs = 3000) {
-        if (this.saveTimeouts[path]) clearTimeout(this.saveTimeouts[path]);
-        this.saveTimeouts[path] = setTimeout(() => {
-            this.upload(path, data);
-            delete this.saveTimeouts[path];
-        }, delayMs);
-    }
-}
+// Debounced saves that retry when the device comes back online.
+// save(path, build) queues a write; build() runs at send time so the latest state goes out.
+class Sync {
+    constructor(onStatus = () => {}) {
+        this.pending = {};   // path -> build function
+        this.gen = {};       // path -> change counter, so a change made during an upload isn't dropped
+        this.timers = {};
+        this.changes = 0;    // total local changes, so a server refresh can tell if it raced with one
+        this.onStatus = onStatus; // called with true (all saved) or false (a save failed, will retry)
 
-class SyncManager {
-    constructor(app) {
-        this.app = app;
-        this.dirty = false;
-        this.periodicInterval = null;
-
-        window.addEventListener('online', () => {
-            if (this.dirty) this.app.syncGame();
-        });
-
+        window.addEventListener('online', () => this.flush());
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && this.dirty && navigator.onLine) {
-                this.app.syncGame();
-            }
+            if (document.visibilityState === 'visible') this.flush();
         });
-
-        this.periodicInterval = setInterval(() => {
-            if (this.shouldSync() && this.dirty) {
-                this.app.syncGame();
-            }
-        }, 2 * 60 * 1000);
+        // Last chance to send unsaved changes when the tab closes.
+        window.addEventListener('pagehide', () => this.flush(true));
+        setInterval(() => this.flush(), 60 * 1000);
     }
 
-    shouldSync() {
-        return navigator.onLine && this.app.blobSync.isConnected;
+    get busy() {
+        return Object.keys(this.pending).length > 0;
     }
 
-    markDirty() {
-        this.dirty = true;
+    save(path, build, delayMs = 1000) {
+        this.changes++;
+        this.pending[path] = build;
+        this.gen[path] = (this.gen[path] || 0) + 1;
+        clearTimeout(this.timers[path]);
+        this.timers[path] = setTimeout(() => this.send(path), delayMs);
     }
 
-    markClean() {
-        this.dirty = false;
+    cancel(path) {
+        clearTimeout(this.timers[path]);
+        delete this.pending[path];
+    }
+
+    async send(path, keepalive = false) {
+        const build = this.pending[path];
+        if (!build) return true;
+        clearTimeout(this.timers[path]);
+        const gen = this.gen[path];
+        const ok = await api.put(path, build(), keepalive);
+        if (ok && this.gen[path] === gen) delete this.pending[path];
+        if (!ok) this.onStatus(false);
+        else if (!this.busy) this.onStatus(true);
+        return ok;
+    }
+
+    flush(keepalive = false) {
+        if (!navigator.onLine) return Promise.resolve();
+        return Promise.all(Object.keys(this.pending).map(p => this.send(p, keepalive)));
     }
 }
 
 class ScoreboardApp {
     constructor() {
+        // Global state (set before components, which read it while rendering)
+        this.periodScores = [];
+        this.postPeriod = false;
+        this.events = [];
+        this.wakeLock = null;
+        this.playersList = [];
+        this.loaded = false;  // true once the shared roster/game came from the server
+        this.sync = new Sync(ok => this.ui?.setSyncStatus(ok));
+
         // Initialize components
         this.timer = new Timer(this);
         this.teams = new Teams(this);
         this.players = new Players(this);
         this.settings = new Settings(this);
         this.ui = new UI(this);
-        this.blobSync = new BlobSync(this);
-        this.syncManager = new SyncManager(this);
-        // Global state
-        this.periodScores = [];
-        this.postPeriod = false;
-        this.events = [];
-        this.currentShareCode = null;
-        this.wakeLock = null;
-        this.playersList = [];
 
         // Initialize app
         this.loadSavedSettings();
-        this.initGroupConnection();
+        this.refresh();
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') this.refresh();
+        });
+        window.addEventListener('online', () => this.refresh());
+        setInterval(() => {
+            if (document.visibilityState === 'visible') this.refresh();
+        }, 15 * 1000);
+        if (window.location.hash === '#teams') {
+            history.replaceState(null, '', window.location.pathname);
+            this.players.open();
+        }
     }
 
-    // Load saved settings from localStorage
+    // Device preferences (font sizes, screen wake lock). Everything else lives on the server.
     loadSavedSettings() {
-        // Initialize playersList
-        this.playersList = [];
-
-        // Restore current game ID from localStorage
-        const savedGameId = localStorage.getItem('currentGameId');
-        if (savedGameId) {
-            this._currentGameId = savedGameId;
-        }
-
-        // Migrate old scoreHistory → gameEvents
-        if (localStorage.getItem('scoreHistory') && !localStorage.getItem('gameEvents')) {
-            localStorage.setItem('gameEvents', localStorage.getItem('scoreHistory'));
-            localStorage.removeItem('scoreHistory');
-        } else if (localStorage.getItem('scoreHistory')) {
-            localStorage.removeItem('scoreHistory');
-        }
-
-        // Clean up legacy keys
-        localStorage.removeItem('lastUploadAttempt');
-
-        // Load saved game events
-        if (localStorage.getItem('gameEvents')) {
-            try {
-                this.events = JSON.parse(localStorage.getItem('gameEvents'));
-            } catch (e) {
-                console.error('Error loading game events:', e);
-                this.events = [];
-            }
-        }
-
         // Font sizes
         if (localStorage.getItem('scoreFontSize')) {
             const savedScoreFontSize = localStorage.getItem('scoreFontSize');
@@ -232,80 +136,134 @@ class ScoreboardApp {
             this.settings.keepScreenOnCheckbox.checked = true;
             this.requestWakeLock();
         }
+    }
 
-        // Load saved players
-        if (localStorage.getItem('playersList')) {
-            this.playersList = JSON.parse(localStorage.getItem('playersList'));
-            // Update player list after players component is initialized
-            setTimeout(() => {
-                if (this.players) {
-                    this.players.updatePlayersList();
-                    this.players.updatePlayersDisplay();
-                }
-            }, 0);
+    // Pull the shared roster and current game from the server and show them.
+    // Runs on load, when the page comes back to the foreground, and every 15s,
+    // so every phone/iPad shows the same teams and score.
+    async refresh() {
+        if (this.refreshing) return;
+        this.refreshing = true;
+        try {
+            await this.sync.flush();
+            if (this.sync.busy) return; // our own changes haven't reached the server yet
+            const changesBefore = this.sync.changes;
+
+            let [roster, game] = await Promise.all([api.get('roster'), api.get('current-game')]);
+            if (!this.loaded) ({ roster, game } = await this.migrateDeviceData(roster, game));
+
+            // A change made on this device while we were fetching wins over what we fetched.
+            if (this.sync.changes !== changesBefore) return;
+
+            this.applyServerState(roster, game);
+            this.loaded = true;
+        } catch (e) {
+            console.warn('Could not reach the server', e);
+        } finally {
+            this.refreshing = false;
         }
     }
 
-    // Check URL or localStorage for a group code and auto-join
-    async initGroupConnection() {
-        const urlParams = new URLSearchParams(window.location.search);
-        let code = urlParams.get('code');
+    applyServerState(roster, game) {
+        const snapshot = JSON.stringify([roster, game]);
+        if (snapshot === this.lastServerSnapshot) return;
+        this.lastServerSnapshot = snapshot;
 
-        if (!code && window.location.hash) {
-            code = window.location.hash.substring(1);
-        }
-
-        if (!code) {
-            code = localStorage.getItem('groupCode');
-        }
-
-        if (code) {
-            try {
-                await this.blobSync.join(code);
-                if (urlParams.has('code') || window.location.hash) {
-                    history.replaceState(null, '', window.location.pathname);
-                }
-                this.settings.updateGroupUI();
-                await this.loadGroupData();
-            } catch (e) {
-                console.error('Failed to join group:', e);
-                localStorage.removeItem('groupCode');
+        if (roster) {
+            this.playersList = (roster.players || []).map(p => ({ ...p, points: 0 }));
+            if (roster.team1Name && roster.team2Name) {
+                this.teams.setTeamNames(roster.team1Name, roster.team2Name);
             }
         }
+
+        if (game) {
+            if (game.id !== this._currentGameId) this.postPeriod = false;
+            this._currentGameId = game.id;
+            this.teams.team1Points = game.team1?.score || 0;
+            this.teams.team2Points = game.team2?.score || 0;
+            this.periodScores = game.periodScores || [];
+            this.events = game.events || [];
+
+            // Player points belong to the game, not the roster
+            const points = new Map((game.players || []).map(p => [p.id, p.points || 0]));
+            this.playersList.forEach(p => p.points = points.get(p.id) || 0);
+        } else {
+            this._currentGameId = null;
+            this.teams.team1Points = 0;
+            this.teams.team2Points = 0;
+            this.periodScores = [];
+            this.events = [];
+        }
+
+        this.teams.updateScoreDisplay();
+        this.ui.updateScoreHistory();
+        this.players.render();
     }
 
-    // Download group data (roster, active game) from blob
-    async loadGroupData() {
-        if (!this.blobSync.isConnected) return;
+    // One-time move of data that older versions kept only in this browser (roster, current game)
+    // up to the server. The server copy wins if it already has one.
+    async migrateDeviceData(roster, game) {
+        const keys = ['playersList', 'gameEvents', 'currentGameId', 'scoreHistory', 'groupCode', 'lastUploadAttempt'];
+        if (!keys.some(k => localStorage.getItem(k) !== null)) return { roster, game };
 
-        // Load roster
-        const roster = await this.blobSync.download('roster.json');
-        if (roster && roster.players) {
-            this.playersList = roster.players;
-            localStorage.setItem('playersList', JSON.stringify(this.playersList));
-            if (this.players) {
-                this.players.updatePlayersList();
-                this.players.updatePlayersDisplay();
+        const read = key => {
+            try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+        };
+        const players = Array.isArray(read('playersList')) ? read('playersList') : [];
+        const events = read('gameEvents') || read('scoreHistory');
+        const gameId = localStorage.getItem('currentGameId');
+        let ok = true;
+
+        if (roster?.seeded && players.length > 0) {
+            roster = {
+                team1Name: roster.team1Name,
+                team2Name: roster.team2Name,
+                players: players.map(({ points, ...p }) => p)
+            };
+            ok = await api.put('roster', roster) && ok;
+        }
+
+        if (Array.isArray(events) && events.length > 0 && gameId && /^[A-Za-z0-9_-]{1,80}$/.test(gameId)
+            && await api.get(`games/${gameId}`) === null) {
+            const last = [...events].reverse().find(e => Array.isArray(e.scores)) || { scores: [0, 0] };
+            const periods = events.filter(e => e.type === 'period_end').map(e => `${e.scores[0]} - ${e.scores[1]}`);
+            const localGame = {
+                id: gameId,
+                version: 1,
+                weekDate: (events[0].ts || new Date().toISOString()).split('T')[0],
+                team1: { name: roster?.team1Name || 'BLACK', score: last.scores[0] },
+                team2: { name: roster?.team2Name || 'WHITE', score: last.scores[1] },
+                period: periods.length + 1,
+                periodScores: periods,
+                players,
+                events,
+                lastUpdated: events[events.length - 1].ts || new Date().toISOString(),
+                migratedFromDevice: true
+            };
+            ok = await api.put(`games/${gameId}`, localGame) && ok;
+            if (!game) {
+                ok = await api.put('current-game', { gameId }) && ok;
+                game = localGame;
             }
         }
 
-        // Load active game: read pointer first, fallback to date-based ID
-        const pointer = await this.blobSync.download('active-game.json');
-        const gameId = (pointer && pointer.gameId) || `game-${new Date().toISOString().split('T')[0]}`;
-        this.currentGameId = gameId;
-        const gameState = await this.blobSync.download(`games/${gameId}.json`);
-        if (gameState) {
-            this.teams.team1Points = gameState.team1?.score || 0;
-            this.teams.team2Points = gameState.team2?.score || 0;
-            this.teams.updateScoreDisplay();
-            if (gameState.team1?.name) this.teams.team1NameElement.textContent = gameState.team1.name;
-            if (gameState.team2?.name) this.teams.team2NameElement.textContent = gameState.team2.name;
-            this.periodScores = gameState.periodScores || [];
-            this.events = gameState.events || [];
-            this.currentShareCode = gameState.shareCode || null;
-            localStorage.setItem('gameEvents', JSON.stringify(this.events));
-            this.ui.updateScoreHistory();
+        if (ok) keys.forEach(k => localStorage.removeItem(k));
+        return { roster, game };
+    }
+
+    // Roster changed (players, teams, team names): save to the server.
+    saveRoster() {
+        // Never overwrite the shared roster with a device that hasn't loaded it yet.
+        if (!this.loaded) {
+            this.ui.setSyncStatus(false);
+            this.refresh();
+            return;
         }
+        this.sync.save('roster', () => ({
+            team1Name: this.teams.team1NameElement.textContent.trim(),
+            team2Name: this.teams.team2NameElement.textContent.trim(),
+            players: this.playersList.map(({ points, ...p }) => p)
+        }));
     }
 
     // Generate a unique game ID: date + random hex suffix
@@ -315,27 +273,29 @@ class ScoreboardApp {
         return `game-${date}-${rand}`;
     }
 
-    // Get/set current game ID, persisted to localStorage
+    // The current game's id; a new one is made when there is no game yet
     get currentGameId() {
-        if (!this._currentGameId) {
-            this._currentGameId = this.generateGameId();
-            localStorage.setItem('currentGameId', this._currentGameId);
-        }
+        if (!this._currentGameId) this._currentGameId = this.generateGameId();
         return this._currentGameId;
     }
 
     set currentGameId(value) {
         this._currentGameId = value;
-        if (value) localStorage.setItem('currentGameId', value);
-        else localStorage.removeItem('currentGameId');
     }
 
-    // Build the game state object used for sync and share
+    // The day the current game was played. Game ids start with it (game-YYYY-MM-DD-xxxx),
+    // so re-saving an old game never moves it to today.
+    gameDate() {
+        return this.currentGameId.match(/^game-(\d{4}-\d{2}-\d{2})/)?.[1]
+            ?? new Date().toISOString().split('T')[0];
+    }
+
+    // Build the game state object that gets saved
     _buildGameState() {
         return {
             id: this.currentGameId,
             version: 1,
-            weekDate: new Date().toISOString().split('T')[0],
+            weekDate: this.gameDate(),
             team1: {
                 name: this.teams.team1NameElement.textContent,
                 score: this.teams.team1Points
@@ -349,53 +309,61 @@ class ScoreboardApp {
             timerMinutes: parseInt(this.settings.timerMinutesInput.value),
             players: this.playersList,
             events: this.events,
-            shareCode: this.currentShareCode,
             lastUpdated: new Date().toISOString()
         };
     }
 
-    // Start a new game: save current game state, generate new ID, reset scores
+    // Start a new game: the old game stays saved in history, scores reset
     startNewGame() {
-        // Sync final state of old game to blob
-        if (this.blobSync.isConnected && this._currentGameId) {
-            this.blobSync.upload(`games/${this._currentGameId}.json`, this._buildGameState());
+        // Save the old game's final state under its own id before switching.
+        // Only if it had any events, so empty games don't clutter the history.
+        if (this._currentGameId) {
+            const oldPath = `games/${this._currentGameId}`;
+            const finalState = this._buildGameState();
+            if (this.events.length > 0) this.sync.save(oldPath, () => finalState, 0);
+            else this.sync.cancel(oldPath);
         }
 
-        // Generate new ID
         this.currentGameId = this.generateGameId();
 
-        // Reset all state
         this.teams.reset();
         this.playersList.forEach(p => p.points = 0);
         this.periodScores = [];
         this.postPeriod = false;
         this.events = [];
-        this.currentShareCode = null;
-        localStorage.removeItem('gameEvents');
 
-        // Update UI
-        this.players.savePlayersState();
-        this.players.updatePlayersList();
-        this.players.updatePlayersDisplay();
+        this.players.render();
         this.ui.updateScoreHistory();
 
-        // Upload active-game pointer
-        if (this.blobSync.isConnected) {
-            this.blobSync.upload('active-game.json', { gameId: this.currentGameId });
-        }
+        this.syncGame(0);
     }
 
-    // Sync consolidated game state + events to blob (fire-and-forget)
-    syncGame() {
-        if (!this.blobSync.isConnected) return;
-        if (!this.syncManager.shouldSync()) {
-            this.syncManager.markDirty();
-            return;
-        }
+    // Save game state + current-game pointer (debounced)
+    syncGame(delayMs = 3000) {
+        const gameId = this.currentGameId;
+        this.sync.save(`games/${gameId}`, () => this._buildGameState(), delayMs);
+        this.sync.save('current-game', () => ({ gameId }), delayMs);
+    }
 
-        this.blobSync.debouncedUpload(`games/${this.currentGameId}.json`, this._buildGameState(), 5000);
-        this.blobSync.debouncedUpload('active-game.json', { gameId: this.currentGameId }, 10000);
-        this.syncManager.markClean();
+    // Type in the score directly (team-only games). Returns false if nothing changed.
+    setScores(team1, team2) {
+        if (team1 === this.teams.team1Points && team2 === this.teams.team2Points) return false;
+        this.teams.team1Points = team1;
+        this.teams.team2Points = team2;
+        this.teams.updateScoreDisplay();
+        this.events.push({ ts: new Date().toISOString(), type: 'score_set', scores: [team1, team2] });
+        if (this.postPeriod && this.periodScores.length > 0) {
+            this.correctPeriodScore(this.periodScores.length - 1);
+        }
+        this.syncGame();
+        return true;
+    }
+
+    // End the current quarter at a typed-in score
+    endQuarterAt(team1, team2) {
+        this.postPeriod = false; // the new score belongs to this quarter, not a correction of the last
+        this.setScores(team1, team2);
+        this.captureScore();
     }
 
     // Capture score at end of timer
@@ -409,11 +377,9 @@ class ScoreboardApp {
             scores: [this.teams.team1Points, this.teams.team2Points],
             period: period
         });
-        localStorage.setItem('gameEvents', JSON.stringify(this.events));
 
         this.postPeriod = true;
         this.ui.updateScoreHistory();
-        this.syncManager.markDirty();
         this.syncGame();
     }
 
@@ -433,9 +399,7 @@ class ScoreboardApp {
             }
         }
 
-        localStorage.setItem('gameEvents', JSON.stringify(this.events));
         this.ui.updateScoreHistory();
-        this.syncManager.markDirty();
         this.syncGame();
     }
 
@@ -449,9 +413,8 @@ class ScoreboardApp {
     // Clear game events
     clearScoreHistory() {
         this.events = [];
-        this.currentShareCode = null;
         this.postPeriod = false;
-        localStorage.removeItem('gameEvents');
+        this.syncGame();
     }
 
     // Record score change as an event
@@ -468,49 +431,25 @@ class ScoreboardApp {
         };
 
         this.events.push(event);
-        localStorage.setItem('gameEvents', JSON.stringify(this.events));
 
         // Auto-update last period score during post-period
         if (this.postPeriod && this.periodScores.length > 0) {
             this.correctPeriodScore(this.periodScores.length - 1);
         }
 
-        // Sync consolidated game to blob
-        this.syncManager.markDirty();
         this.syncGame();
     }
 
-    // Share current game results — creates a share code via server
+    // Copy a public link to this game's results
     async shareGame() {
-        if (!this.blobSync.isConnected) {
-            alert('Join a group to share game results.');
-            return;
-        }
-
-        // Ensure latest state is uploaded before sharing
-        await this.blobSync.upload(`games/${this.currentGameId}.json`, this._buildGameState());
-
-        try {
-            const res = await fetch('/Scoreboard/api/games/share', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId: this.blobSync.groupId, gameId: this.currentGameId })
-            });
-            if (!res.ok) throw new Error('Failed to create share link');
-            const data = await res.json();
-
-            this.currentShareCode = data.shareCode;
-            this.syncGame();
-
-            const shareUrl = `${window.location.origin}${data.shareUrl}`;
-            navigator.clipboard.writeText(shareUrl).then(() => {
-                alert('Share link copied to clipboard!');
-            }).catch(() => {
-                prompt('Copy this link:', shareUrl);
-            });
-        } catch (e) {
-            alert('Failed to share game: ' + e.message);
-        }
+        this.syncGame(0);
+        await this.sync.send(`games/${this.currentGameId}`);
+        const shareUrl = `${window.location.origin}/Scoreboard/game?id=${encodeURIComponent(this.currentGameId)}`;
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            alert('Results link copied to clipboard!');
+        }).catch(() => {
+            prompt('Copy this link:', shareUrl);
+        });
     }
 
     // Wake Lock API functions
@@ -771,14 +710,9 @@ class Teams {
             clearTimeout(pressTimer);
         });
 
-        // Team name sync from UI to settings
-        this.team1NameElement.addEventListener('input', () => {
-            this.app.settings.team1NameInput.value = this.team1NameElement.textContent;
-        });
-
-        this.team2NameElement.addEventListener('input', () => {
-            this.app.settings.team2NameInput.value = this.team2NameElement.textContent;
-        });
+        // Team names edited on the scoreboard
+        this.team1NameElement.addEventListener('input', () => this.namesChanged());
+        this.team2NameElement.addEventListener('input', () => this.namesChanged());
     }
 
     incrementScore(teamNumber) {
@@ -813,6 +747,17 @@ class Teams {
     setTeamNames(team1Name, team2Name) {
         this.team1NameElement.textContent = team1Name;
         this.team2NameElement.textContent = team2Name;
+        this.app.settings.team1NameInput.value = team1Name;
+        this.app.settings.team2NameInput.value = team2Name;
+        this.app.players.render();
+    }
+
+    // Keep the settings inputs and team builder in step, and save names with the roster
+    namesChanged() {
+        this.app.settings.team1NameInput.value = this.team1NameElement.textContent;
+        this.app.settings.team2NameInput.value = this.team2NameElement.textContent;
+        this.app.players.render();
+        this.app.saveRoster();
     }
 
     reset() {
@@ -841,18 +786,25 @@ class Settings {
         this.playerButtonSizeSlider = document.getElementById('player-button-size');
         this.keepScreenOnCheckbox = document.getElementById('keep-screen-on');
 
-        // Group elements
-        this.groupInfoDiv = document.getElementById('group-info');
-        this.groupJoinDiv = document.getElementById('group-join');
-        this.groupNameDisplay = document.getElementById('group-name-display');
-        this.groupCodeDisplay = document.getElementById('group-code-display');
-        this.groupAdminBadge = document.getElementById('group-admin-badge');
-        this.groupCodeInput = document.getElementById('group-code-input');
-        this.joinGroupBtn = document.getElementById('join-group-btn');
-        this.createGroupBtn = document.getElementById('create-group-btn');
-        this.shareGroupBtn = document.getElementById('share-group-btn');
         this.shareGameBtn = document.getElementById('share-game-btn');
-        this.leaveGroupBtn = document.getElementById('leave-group-btn');
+
+        // Quarter score entry
+        this.qTeam1 = document.getElementById('q-team1');
+        this.qTeam2 = document.getElementById('q-team2');
+        this.qTeam1Label = document.getElementById('q-team1-label');
+        this.qTeam2Label = document.getElementById('q-team2-label');
+        this.endQuarterBtn = document.getElementById('end-quarter-btn');
+        this.endQuarterBtn.addEventListener('click', () => {
+            const scores = this.readQuarterEntry();
+            if (!scores) return;
+            this.app.endQuarterAt(...scores);
+            this.refreshQuarterEntry();
+            this.app.players.flash(this.endQuarterBtn, 'Saved ✓');
+        });
+        document.getElementById('set-score-btn').addEventListener('click', e => {
+            const scores = this.readQuarterEntry();
+            if (scores && this.app.setScores(...scores)) this.app.players.flash(e.target, 'Saved ✓');
+        });
 
         // Initialize
         this.updateInputsFromCurrent();
@@ -896,10 +848,12 @@ class Settings {
         // Team name sync from settings to UI
         this.team1NameInput.addEventListener('input', () => {
             this.app.teams.team1NameElement.textContent = this.team1NameInput.value;
+            this.app.teams.namesChanged();
         });
 
         this.team2NameInput.addEventListener('input', () => {
             this.app.teams.team2NameElement.textContent = this.team2NameInput.value;
+            this.app.teams.namesChanged();
         });
 
         this.resetScoresBtn.addEventListener('click', () => {
@@ -938,94 +892,39 @@ class Settings {
             this.app.toggleWakeLock();
         });
 
-        // Manage default players button
-        const manageDefaultPlayersBtn = document.getElementById('manage-default-players-btn');
-        if (manageDefaultPlayersBtn) {
-            manageDefaultPlayersBtn.addEventListener('click', () => {
-                window.location.href = '/Scoreboard/ManagePlayers';
-            });
-        }
-
-        // Group management
-        this.joinGroupBtn.addEventListener('click', () => this.handleJoinGroup());
-        this.createGroupBtn.addEventListener('click', () => this.handleCreateGroup());
-        this.shareGroupBtn.addEventListener('click', () => this.handleShareGroup());
         this.shareGameBtn.addEventListener('click', () => this.app.shareGame());
-        this.leaveGroupBtn.addEventListener('click', () => this.handleLeaveGroup());
-        this.groupCodeInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleJoinGroup();
+        document.getElementById('stats-btn').addEventListener('click', () => {
+            window.location.href = '/Scoreboard/stats';
         });
     }
 
     toggle() {
         this.settingsPanel.classList.toggle('active');
+        if (this.settingsPanel.classList.contains('active')) this.refreshQuarterEntry();
     }
 
-    updateGroupUI() {
-        if (this.app.blobSync.isConnected) {
-            this.groupInfoDiv.style.display = 'block';
-            this.groupJoinDiv.style.display = 'none';
-            this.groupNameDisplay.textContent = this.app.blobSync.groupName;
-            this.groupCodeDisplay.textContent = this.app.blobSync.code;
-            this.groupAdminBadge.style.display = this.app.blobSync.isAdmin ? 'inline' : 'none';
-            this.shareGameBtn.style.display = 'inline-block';
-        } else {
-            this.groupInfoDiv.style.display = 'none';
-            this.groupJoinDiv.style.display = 'block';
-            this.shareGameBtn.style.display = 'none';
+    // Prefill the quarter score inputs with the current score
+    refreshQuarterEntry() {
+        const teams = this.app.teams;
+        this.qTeam1Label.textContent = teams.team1NameElement.textContent;
+        this.qTeam2Label.textContent = teams.team2NameElement.textContent;
+        this.qTeam1.value = teams.team1Points;
+        this.qTeam2.value = teams.team2Points;
+        this.endQuarterBtn.textContent = `End Q${this.app.periodScores.length + 1} at this score`;
+    }
+
+    readQuarterEntry() {
+        const a = parseInt(this.qTeam1.value, 10), b = parseInt(this.qTeam2.value, 10);
+        if (!(a >= 0 && b >= 0)) {
+            alert('Enter both scores.');
+            return null;
         }
-    }
-
-    async handleJoinGroup() {
-        const code = this.groupCodeInput.value.trim();
-        if (!code) return;
-
-        try {
-            await this.app.blobSync.join(code);
-            this.updateGroupUI();
-            await this.app.loadGroupData();
-            this.groupCodeInput.value = '';
-        } catch (e) {
-            alert('Failed to join group: ' + e.message);
-        }
-    }
-
-    async handleCreateGroup() {
-        const name = prompt('Enter group name:');
-        if (!name) return;
-
-        try {
-            const data = await this.app.blobSync.createGroup(name);
-            this.updateGroupUI();
-            // Upload current roster to the new group
-            if (this.app.playersList.length > 0) {
-                await this.app.blobSync.upload('roster.json', { players: this.app.playersList });
-            }
-            alert(`Group created!\nAdmin code: ${data.adminCode}\nShare this code with your group.`);
-        } catch (e) {
-            alert('Failed to create group: ' + e.message);
-        }
-    }
-
-    handleShareGroup() {
-        if (!this.app.blobSync.isConnected) return;
-
-        const url = `${window.location.origin}${window.location.pathname}?code=${this.app.blobSync.code}`;
-        navigator.clipboard.writeText(url).then(() => {
-            alert('Share link copied to clipboard!');
-        }).catch(() => {
-            prompt('Copy this link:', url);
-        });
-    }
-
-    handleLeaveGroup() {
-        if (confirm('Leave this group? You will need the code to rejoin.')) {
-            this.app.blobSync.leave();
-            this.updateGroupUI();
-        }
+        return [a, b];
     }
 }
 
+// Team builder panel + the tappable player lists on the scoreboard.
+// A player's status is team '1', team '2', or out (active === false; team is remembered).
 class Players {
     constructor(app) {
         this.app = app;
@@ -1033,566 +932,411 @@ class Players {
         // Elements
         this.playersBtn = document.getElementById('players-btn');
         this.playersPanel = document.getElementById('players-panel');
-        this.playersList = document.getElementById('players-list');
+        this.listEl = document.getElementById('players-list');
+        this.countsEl = document.getElementById('team-counts');
         this.playerNameInput = document.getElementById('player-name-input');
         this.addPlayerBtn = document.getElementById('add-player-btn');
-        this.exportPlayersBtn = document.getElementById('export-players-btn');
-        this.importPlayersBtn = document.getElementById('import-players-btn');
-        this.loadDefaultPlayersBtn = document.getElementById('load-default-players-btn');
+        this.shuffleBtn = document.getElementById('shuffle-btn');
+        this.allOutBtn = document.getElementById('all-out-btn');
+        this.shareTeamsBtn = document.getElementById('share-teams-btn');
+        this.editRosterBtn = document.getElementById('edit-roster-btn');
+        this.photoInput = document.getElementById('player-photo-input');
         this.team1PlayersDisplay = document.getElementById('team1-players-display');
         this.team2PlayersDisplay = document.getElementById('team2-players-display');
 
-        // Ensure playersList is initialized
-        if (!this.app.playersList) {
-            this.app.playersList = [];
-        }
+        this.pinned = new Set();   // player ids kept on their team when shuffling
+        this.editing = false;      // edit mode: rename / photo / delete
+        this.photoPlayerId = null;
 
-        // Initialize
         this.setupEventListeners();
-        this.updateTeamSelectOptions();
-        this.updatePlayersDisplay();
+        this.render();
     }
 
     setupEventListeners() {
-        // Players panel toggle
         this.playersBtn.addEventListener('click', () => this.toggle());
 
-        // Close players panel when clicking outside
+        // Close the panel when clicking outside it
         document.addEventListener('click', (e) => {
-            if (!this.playersPanel.contains(e.target) &&
-                e.target !== this.playersBtn &&
-                !this.playersBtn.contains(e.target)) {
+            if (!this.playersPanel.contains(e.target) && !this.playersBtn.contains(e.target)) {
                 this.playersPanel.classList.remove('active');
             }
         });
 
-        // Add player button
         this.addPlayerBtn.addEventListener('click', () => this.addPlayer());
-
-        // Add player on Enter key
         this.playerNameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.addPlayer();
-            }
+            if (e.key === 'Enter') this.addPlayer();
         });
 
-        // Export/Import players
-        this.exportPlayersBtn.addEventListener('click', () => this.exportPlayers());
-        this.importPlayersBtn.addEventListener('click', () => this.importPlayers());
-        this.loadDefaultPlayersBtn.addEventListener('click', () => this.loadDefaultPlayers());
-
-        // Update team display when team names change
-        this.app.teams.team1NameElement.addEventListener('input', () => this.updatePlayersList());
-        this.app.teams.team2NameElement.addEventListener('input', () => this.updatePlayersList());
+        this.shuffleBtn.addEventListener('click', () => this.shuffle());
+        this.allOutBtn.addEventListener('click', () => this.allOut());
+        this.shareTeamsBtn.addEventListener('click', () => this.shareTeams());
+        this.editRosterBtn.addEventListener('click', () => {
+            this.editing = !this.editing;
+            this.render();
+        });
+        this.photoInput.addEventListener('change', () => this.uploadPhoto());
+        document.getElementById('close-teams-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.playersPanel.classList.remove('active');
+        });
     }
 
     toggle() {
-        this.playersPanel.classList.toggle('active');
-        // Close settings panel if open
+        if (this.playersPanel.classList.contains('active')) {
+            this.playersPanel.classList.remove('active');
+        } else {
+            this.open();
+        }
+    }
+
+    open() {
+        this.playersPanel.classList.add('active');
         document.getElementById('settings-panel').classList.remove('active');
     }
 
-    updateTeamSelectOptions() {
-        // Update existing player rows if any
-        this.updatePlayersList();
+    // ---- Roster state ----
+
+    find(id) {
+        return this.app.playersList.find(p => p.id === id);
     }
 
-    savePlayersState() {
-        localStorage.setItem('playersList', JSON.stringify(this.app.playersList));
-        if (this.app.blobSync.isConnected) {
-            this.app.blobSync.debouncedUpload('roster.json', { players: this.app.playersList });
+    static statusOf(player) {
+        return player.active && (player.team === '1' || player.team === '2') ? player.team : 'out';
+    }
+
+    playersOn(status) {
+        return this.app.playersList
+            .filter(p => Players.statusOf(p) === status)
+            .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    }
+
+    // Roster changed: save it and redraw
+    changed() {
+        this.app.saveRoster();
+        this.render();
+    }
+
+    setStatus(id, status) {
+        const player = this.find(id);
+        if (!player) return;
+        if (status === 'out') {
+            player.active = false;
+            this.pinned.delete(id);
+        } else {
+            player.active = true;
+            player.team = status;
         }
+        this.changed();
+    }
+
+    // The team with fewer players (team 1 on a tie)
+    smallerTeam() {
+        return this.playersOn('2').length < this.playersOn('1').length ? '2' : '1';
     }
 
     addPlayer() {
-        const playerName = this.playerNameInput.value.trim();
+        const name = this.playerNameInput.value.trim();
+        if (!name) return;
 
-        if (playerName) {
-            // Create a new player object
-            const newPlayer = {
-                id: Date.now(), // Use timestamp as unique ID
-                name: playerName,
-                team: '1', // Default to team 1
-                active: true,
-                points: 0
-            };
+        this.app.playersList.push({
+            id: Date.now(),
+            name,
+            team: this.smallerTeam(),
+            active: true,
+            points: 0
+        });
+        this.changed();
 
-            // Add to players list
-            this.app.playersList.push(newPlayer);
+        this.playerNameInput.value = '';
+        this.playerNameInput.focus();
+    }
 
-            // Save state (localStorage + blob sync)
-            this.savePlayersState();
+    removePlayer(id) {
+        this.app.playersList = this.app.playersList.filter(p => p.id !== id);
+        this.pinned.delete(id);
+        this.changed();
+    }
 
-            // Update the UI
-            this.updatePlayersList();
-            this.updatePlayersDisplay();
+    renamePlayer(id) {
+        const player = this.find(id);
+        const name = player && prompt('Rename player:', player.name)?.trim();
+        if (!name) return;
+        player.name = name;
+        this.changed();
+    }
 
-            // Clear input
-            this.playerNameInput.value = '';
-            this.playerNameInput.focus();
+    choosePhoto(id) {
+        this.photoPlayerId = id;
+        this.photoInput.value = '';
+        this.photoInput.click();
+    }
+
+    async uploadPhoto() {
+        const file = this.photoInput.files[0];
+        const player = this.find(this.photoPlayerId);
+        if (!file || !player) return;
+
+        const form = new FormData();
+        form.append('image', file);
+        try {
+            const res = await fetch(`/Scoreboard/api/players/${player.id}/image`, { method: 'POST', body: form });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || res.status);
+            player.imageUrl = data.imageUrl;
+            this.changed();
+        } catch (e) {
+            alert('Photo upload failed: ' + e.message);
         }
     }
 
-    removePlayer(playerId) {
-        // Find the player index
-        const playerIndex = this.app.playersList.findIndex(player => player.id === playerId);
-
-        if (playerIndex !== -1) {
-            // Remove the player
-            this.app.playersList.splice(playerIndex, 1);
-
-            // Save state (localStorage + blob sync)
-            this.savePlayersState();
-
-            // Update the UI
-            this.updatePlayersList();
-            this.updatePlayersDisplay();
-        }
+    togglePin(id) {
+        if (this.pinned.has(id)) this.pinned.delete(id);
+        else this.pinned.add(id);
+        this.render();
     }
 
-    updatePlayerActive(playerId, isActive) {
-        // Find the player
-        const player = this.app.playersList.find(player => player.id === playerId);
+    // Randomly split everyone who's in into even teams; pinned players stay put.
+    shuffle() {
+        const playing = this.app.playersList.filter(p => Players.statusOf(p) !== 'out');
+        const free = playing.filter(p => !this.pinned.has(p.id));
+        const counts = { '1': 0, '2': 0 };
+        playing.filter(p => this.pinned.has(p.id)).forEach(p => counts[p.team]++);
 
-        if (player) {
-            // Update active status
-            player.active = isActive;
-
-            // Save state (localStorage + blob sync)
-            this.savePlayersState();
-
-            // Update the players display
-            this.updatePlayersDisplay();
+        for (let i = free.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [free[i], free[j]] = [free[j], free[i]];
         }
+
+        free.forEach(p => {
+            const team = counts['1'] === counts['2']
+                ? (Math.random() < 0.5 ? '1' : '2')
+                : (counts['1'] < counts['2'] ? '1' : '2');
+            p.team = team;
+            counts[team]++;
+        });
+        this.changed();
     }
 
-    updatePlayerPoints(playerId, points) {
-        // Find the player
-        const player = this.app.playersList.find(player => player.id === playerId);
-
-        if (player) {
-            // Update points
-            player.points = parseInt(points) || 0;
-
-            // Save state (localStorage + blob sync)
-            this.savePlayersState();
-
-            // Update the players display
-            this.updatePlayersDisplay();
-        }
+    // Start of the week: mark everyone out, then tap in whoever shows up
+    allOut() {
+        this.app.playersList.forEach(p => p.active = false);
+        this.pinned.clear();
+        this.changed();
     }
 
-    incrementPlayerPoints(playerId) {
-        // Find the player
-        const player = this.app.playersList.find(player => player.id === playerId);
+    // Chat-ready team list, e.g. for the group text
+    teamsText() {
+        const date = new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        const team = (icon, name, status) => {
+            const players = this.playersOn(status).map(p => p.name);
+            return `${icon} ${name} (${players.length})\n${players.join('\n') || '-'}`;
+        };
+        return [
+            `🏀 Teams for ${date}`,
+            team('⚫', this.app.teams.team1NameElement.textContent.trim(), '1'),
+            team('⚪', this.app.teams.team2NameElement.textContent.trim(), '2')
+        ].join('\n\n');
+    }
 
-        if (player) {
-            // Increment points
-            player.points += 1;
-
-            // Increment team score but don't record history yet
-            // (we'll do it with player info below)
-            if (parseInt(player.team) === 1) {
-                this.app.teams.team1Points += 1;
-            } else {
-                this.app.teams.team2Points += 1;
+    // Phones/iPads: open the share sheet (Messages, WhatsApp...). Elsewhere: copy to clipboard.
+    async shareTeams() {
+        const text = this.teamsText();
+        if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+            try {
+                await navigator.share({ text });
+                return;
+            } catch (e) {
+                if (e.name === 'AbortError') return; // user closed the share sheet
             }
-            this.app.teams.updateScoreDisplay();
-            
-            // Record the score change with player name and ID
-            this.app.recordScoreChange(parseInt(player.team), true, player.name, player.id);
-
-            // Save state (localStorage + blob sync)
-            this.savePlayersState();
-
-            // Update the players display and list
-            this.updatePlayersDisplay();
-            this.updatePlayersList();
+        }
+        try {
+            await navigator.clipboard.writeText(text);
+            this.flash(this.shareTeamsBtn, 'Copied!');
+        } catch {
+            prompt('Copy teams:', text);
         }
     }
 
-    updatePlayersDisplay() {
-        // Clear the displays
+    flash(button, text) {
+        const original = button.textContent;
+        button.textContent = text;
+        setTimeout(() => button.textContent = original, 1200);
+    }
+
+    // ---- Scoring ----
+
+    incrementPlayerPoints(id) {
+        this.changePlayerPoints(id, 1);
+    }
+
+    changePlayerPoints(id, delta) {
+        const player = this.find(id);
+        if (!player || Players.statusOf(player) === 'out') return;
+        if (delta < 0 && player.points <= 0) return;
+
+        player.points += delta;
+        const teams = this.app.teams;
+        if (player.team === '1') teams.team1Points = Math.max(0, teams.team1Points + delta);
+        else teams.team2Points = Math.max(0, teams.team2Points + delta);
+        teams.updateScoreDisplay();
+
+        this.app.recordScoreChange(parseInt(player.team), delta > 0, player.name, player.id);
+        this.render();
+    }
+
+    // ---- Rendering ----
+
+    render() {
+        this.renderPanel();
+        this.renderScoreboard();
+    }
+
+    renderPanel() {
+        const team1Name = this.app.teams.team1NameElement.textContent;
+        const team2Name = this.app.teams.team2NameElement.textContent;
+        const n1 = this.playersOn('1').length;
+        const n2 = this.playersOn('2').length;
+        const nOut = this.playersOn('out').length;
+
+        this.countsEl.innerHTML = '';
+        [[team1Name, n1, 'team1'], [team2Name, n2, 'team2'], ['Out', nOut, 'out']].forEach(([label, n, cls]) => {
+            const chip = document.createElement('span');
+            chip.className = `count-chip ${cls}`;
+            chip.textContent = `${label} ${n}`;
+            this.countsEl.appendChild(chip);
+        });
+        this.countsEl.classList.toggle('uneven', Math.abs(n1 - n2) > 1);
+
+        this.editRosterBtn.textContent = this.editing ? 'Done' : 'Edit';
+        this.editRosterBtn.classList.toggle('active', this.editing);
+        this.playersPanel.classList.toggle('editing', this.editing);
+
+        // Alphabetical and stable, so rows don't jump around while you tap
+        const players = [...this.app.playersList]
+            .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+        this.listEl.innerHTML = '';
+        if (players.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'roster-empty';
+            empty.textContent = 'No players yet. Add some below.';
+            this.listEl.appendChild(empty);
+        }
+
+        players.forEach(player => {
+            const status = Players.statusOf(player);
+            const row = document.createElement('div');
+            row.className = `roster-row status-${status}`;
+            row.dataset.playerId = player.id;
+
+            const name = document.createElement('span');
+            name.className = 'roster-name';
+            name.textContent = player.name;
+
+            if (this.editing) {
+                row.appendChild(name);
+                row.appendChild(this.button('Photo', 'roster-btn', () => this.choosePhoto(player.id)));
+                row.appendChild(this.button('Rename', 'roster-btn', () => this.renamePlayer(player.id)));
+                row.appendChild(this.button('Delete', 'roster-btn remove-player', () => this.removePlayer(player.id)));
+                this.listEl.appendChild(row);
+                return;
+            }
+
+            const pin = this.button('📌', 'pin-btn', () => this.togglePin(player.id));
+            pin.title = 'Pin: keep on this team when shuffling';
+            pin.classList.toggle('pinned', this.pinned.has(player.id));
+            pin.disabled = status === 'out';
+            row.appendChild(pin);
+            row.appendChild(name);
+
+            const points = document.createElement('span');
+            points.className = 'roster-points';
+            if (status !== 'out') {
+                points.appendChild(this.button('−', 'points-btn decrement-btn', () => this.changePlayerPoints(player.id, -1)));
+                const value = document.createElement('span');
+                value.className = 'points-display';
+                value.textContent = player.points || 0;
+                points.appendChild(value);
+                points.appendChild(this.button('+', 'points-btn increment-btn', () => this.changePlayerPoints(player.id, 1)));
+            }
+            row.appendChild(points);
+
+            const toggle = document.createElement('div');
+            toggle.className = 'team-toggle';
+            [['1', team1Name, 'team1'], ['out', 'Out', 'out'], ['2', team2Name, 'team2']].forEach(([value, label, cls]) => {
+                const btn = this.button(label, `${cls}${status === value ? ' selected' : ''}`, () => this.setStatus(player.id, value));
+                btn.dataset.team = value;
+                toggle.appendChild(btn);
+            });
+            row.appendChild(toggle);
+
+            this.listEl.appendChild(row);
+        });
+    }
+
+    button(text, className, onClick) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = className;
+        btn.textContent = text;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onClick();
+        });
+        return btn;
+    }
+
+    renderScoreboard() {
         this.team1PlayersDisplay.innerHTML = '';
         this.team2PlayersDisplay.innerHTML = '';
 
-        if (this.app.playersList && Array.isArray(this.app.playersList)) {
-            // Filter active players by team and sort by name
-            const team1Players = this.app.playersList
-                .filter(player => player.team === '1' && player.active)
-                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-                
-            const team2Players = this.app.playersList
-                .filter(player => player.team === '2' && player.active)
-                .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        const createPlayerButton = (player, container, isTeam2) => {
+            const playerItem = document.createElement('div');
+            playerItem.className = 'player-item-display';
+            playerItem.dataset.playerId = player.id;
 
-            const createPlayerButton = (player, container, isTeam2) => {
-                const playerItem = document.createElement('div');
-                playerItem.className = 'player-item-display';
-                playerItem.dataset.playerId = player.id;
-
-                // Avatar
-                let avatarEl;
-                if (player.imageUrl) {
-                    avatarEl = document.createElement('img');
-                    avatarEl.className = 'player-avatar';
-                    avatarEl.src = player.imageUrl;
-                    avatarEl.alt = player.name;
-                } else {
-                    avatarEl = document.createElement('div');
-                    avatarEl.className = 'player-avatar-placeholder';
-                    avatarEl.textContent = player.name.charAt(0).toUpperCase();
-                }
-
-                const playerName = document.createElement('div');
-                playerName.className = 'player-name-display';
-                playerName.textContent = player.name;
-
-                // Stack avatar above name
-                const identity = document.createElement('div');
-                identity.className = 'player-identity';
-                identity.appendChild(avatarEl);
-                identity.appendChild(playerName);
-
-                const playerPoints = document.createElement('div');
-                playerPoints.className = 'player-points-display';
-                playerPoints.textContent = player.points;
-
-                if (isTeam2) {
-                    // Team 2 (right side): points | [avatar/name]
-                    playerItem.appendChild(playerPoints);
-                    playerItem.appendChild(identity);
-                } else {
-                    // Team 1 (left side): [avatar/name] | points
-                    playerItem.appendChild(identity);
-                    playerItem.appendChild(playerPoints);
-                }
-
-                playerItem.addEventListener('click', () => {
-                    this.incrementPlayerPoints(player.id);
-                });
-
-                container.appendChild(playerItem);
-            };
-
-            team1Players.forEach(p => createPlayerButton(p, this.team1PlayersDisplay, false));
-            team2Players.forEach(p => createPlayerButton(p, this.team2PlayersDisplay, true));
-        }
-    }
-
-    updatePlayerTeam(playerId, teamNumber) {
-        // Find the player
-        const player = this.app.playersList.find(player => player.id === playerId);
-
-        if (player) {
-            // Update team
-            player.team = teamNumber;
-
-            // Save state (localStorage + blob sync)
-            this.savePlayersState();
-
-            // Update the players display
-            this.updatePlayersDisplay();
-        }
-    }
-
-    exportPlayers() {
-        try {
-            // Convert players list to JSON string
-            const playersData = JSON.stringify(this.app.playersList, null, 2);
-
-            // Copy to clipboard
-            navigator.clipboard.writeText(playersData)
-                .then(() => {
-                    alert('Players data copied to clipboard!');
-                })
-                .catch(err => {
-                    console.error('Failed to copy to clipboard:', err);
-                    // Fallback method
-                    this.fallbackCopyToClipboard(playersData);
-                });
-        } catch (error) {
-            console.error('Error exporting players:', error);
-            alert('Error exporting players data');
-        }
-    }
-
-    fallbackCopyToClipboard(text) {
-        // Create temporary textarea
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-
-        try {
-            // Execute copy command
-            const successful = document.execCommand('copy');
-            if (successful) {
-                alert('Players data copied to clipboard!');
+            let avatarEl;
+            if (player.imageUrl) {
+                avatarEl = document.createElement('img');
+                avatarEl.className = 'player-avatar';
+                avatarEl.src = player.imageUrl;
+                avatarEl.alt = player.name;
             } else {
-                alert('Unable to copy to clipboard');
-            }
-        } catch (err) {
-            console.error('Fallback clipboard copy failed:', err);
-            alert('Unable to copy to clipboard');
-        }
-
-        document.body.removeChild(textArea);
-    }
-
-    loadDefaultPlayers() {
-        try {
-            // Show loading message
-            const loadingMessage = confirm("Load default players? This will replace your current player list.");
-            if (!loadingMessage) {
-                return; // User cancelled
+                avatarEl = document.createElement('div');
+                avatarEl.className = 'player-avatar-placeholder';
+                avatarEl.textContent = player.name.charAt(0).toUpperCase();
             }
 
-            // Fetch the default players and team names
-            Promise.all([
-                fetch('/Scoreboard/api/default-players').then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }),
-                fetch('/Scoreboard/api/default-players/team-names').then(r => r.ok ? r.json() : null)
-            ])
-                .then(([defaultPlayers, teamNames]) => {
-                    if (teamNames) {
-                        this.app.teams.setTeamNames(teamNames.team1Name, teamNames.team2Name);
-                        this.app.settings.team1NameInput.value = teamNames.team1Name;
-                        this.app.settings.team2NameInput.value = teamNames.team2Name;
-                    }
-                    this.processImportedPlayers(defaultPlayers, `${defaultPlayers.length} default players loaded successfully!`);
-                })
-                .catch(error => {
-                    console.error('Error loading default players:', error);
-                    alert(`Error loading default players: ${error.message}`);
-                });
-        }
-        catch (error) {
-            console.error('Error loading default players:', error);
-            alert(`Error loading default players: ${error.message}`);
-        }
-    }
+            const playerName = document.createElement('div');
+            playerName.className = 'player-name-display';
+            playerName.textContent = player.name;
 
-    processImportedPlayers(parsedData, successMessage = 'Players imported successfully!') {
-        // Validate the data structure
-        if (!Array.isArray(parsedData)) {
-            throw new Error('Invalid data format. Expected an array.');
-        }
+            // Stack avatar above name
+            const identity = document.createElement('div');
+            identity.className = 'player-identity';
+            identity.appendChild(avatarEl);
+            identity.appendChild(playerName);
 
-        // Check if each item has required properties
-        parsedData.forEach(player => {
-            if (!player.hasOwnProperty('name') ||
-                !player.hasOwnProperty('team') ||
-                !player.hasOwnProperty('active')) {
-                throw new Error('Invalid player data format');
-            }
-            
-            // Ensure points property exists
-            if (!player.hasOwnProperty('points')) {
-                player.points = 0;
-            }
-        });
+            const playerPoints = document.createElement('div');
+            playerPoints.className = 'player-points-display';
+            playerPoints.textContent = player.points || 0;
 
-        // Add unique IDs if missing
-        parsedData.forEach(player => {
-            if (!player.id) {
-                player.id = Date.now() + Math.floor(Math.random() * 1000);
-            }
-        });
-
-        // Replace the current players list
-        this.app.playersList = parsedData;
-
-        // Save state (localStorage + blob sync)
-        this.savePlayersState();
-
-        // Update the UI
-        this.updatePlayersList();
-        this.updatePlayersDisplay();
-    }
-
-    importPlayers() {
-        try {
-            // Prompt user to paste the JSON data
-            const playersData = prompt('Paste players data here:');
-
-            if (!playersData) {
-                return; // User cancelled
+            if (isTeam2) {
+                // Team 2 (right side): points | [avatar/name]
+                playerItem.appendChild(playerPoints);
+                playerItem.appendChild(identity);
+            } else {
+                // Team 1 (left side): [avatar/name] | points
+                playerItem.appendChild(identity);
+                playerItem.appendChild(playerPoints);
             }
 
-            // Parse the JSON data
-            const parsedData = JSON.parse(playersData);
+            playerItem.addEventListener('click', () => this.incrementPlayerPoints(player.id));
+            container.appendChild(playerItem);
+        };
 
-            // Confirm before replacing
-            if (confirm(`Import ${parsedData.length} players? This will replace your current player list.`)) {
-                this.processImportedPlayers(parsedData);
-            }
-        } catch (error) {
-            console.error('Error importing players:', error);
-            alert(`Error importing players: ${error.message}`);
-        }
-    }
-
-    updatePlayersList() {
-        // Clear the list
-        this.playersList.innerHTML = '';
-
-        // Get team names for display
-        const team1Name = this.app.teams.team1NameElement.textContent;
-        const team2Name = this.app.teams.team2NameElement.textContent;
-
-        // Sort players by team, name, and active status
-        const sortedPlayers = [...this.app.playersList].sort((a, b) => {
-            // First sort by team
-            if (a.team !== b.team) {
-                return parseInt(a.team) - parseInt(b.team);
-            }
-            
-            // Then sort by active status (active first)
-            if (a.active !== b.active) {
-                return b.active ? 1 : -1;
-            }
-            
-            // Finally sort by name (case insensitive)
-            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-        });
-
-        // Add each player to the table
-        if (sortedPlayers && Array.isArray(sortedPlayers)) {
-            sortedPlayers.forEach(player => {
-                const row = document.createElement('tr');
-
-                // Name cell
-                const nameCell = document.createElement('td');
-                nameCell.textContent = player.name;
-                row.appendChild(nameCell);
-
-                // Team cell
-                const teamCell = document.createElement('td');
-                const teamSelect = document.createElement('select');
-                teamSelect.className = 'team-select';
-
-                const team1Option = document.createElement('option');
-                team1Option.value = '1';
-                team1Option.textContent = team1Name;
-
-                const team2Option = document.createElement('option');
-                team2Option.value = '2';
-                team2Option.textContent = team2Name;
-
-                teamSelect.appendChild(team1Option);
-                teamSelect.appendChild(team2Option);
-                teamSelect.value = player.team;
-
-                teamSelect.addEventListener('change', (e) => {
-                    this.updatePlayerTeam(player.id, e.target.value);
-                });
-
-                teamCell.appendChild(teamSelect);
-                row.appendChild(teamCell);
-
-                // Active cell
-                const activeCell = document.createElement('td');
-                const activeCheckbox = document.createElement('input');
-                activeCheckbox.type = 'checkbox';
-                activeCheckbox.className = 'player-active';
-                activeCheckbox.checked = player.active;
-
-                activeCheckbox.addEventListener('change', (e) => {
-                    this.updatePlayerActive(player.id, e.target.checked);
-                });
-
-                activeCell.appendChild(activeCheckbox);
-                row.appendChild(activeCell);
-
-                // Points cell with increment/decrement controls
-                const pointsCell = document.createElement('td');
-                pointsCell.className = 'points-cell';
-                
-                // Create decrement button
-                const decrementBtn = document.createElement('button');
-                decrementBtn.className = 'points-btn decrement-btn';
-                decrementBtn.textContent = '-';
-                decrementBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (player.points > 0) {
-                        player.points--;
-                        pointsDisplay.textContent = player.points;
-                        
-                        // Update team score
-                        if (parseInt(player.team) === 1) {
-                            this.app.teams.team1Points -= 1;
-                        } else {
-                            this.app.teams.team2Points -= 1;
-                        }
-                        this.app.teams.updateScoreDisplay();
-                        
-                        // Record the score change with player name and ID
-                        this.app.recordScoreChange(parseInt(player.team), false, player.name, player.id);
-
-                        // Save state (localStorage + blob sync)
-                        this.savePlayersState();
-                        // Update the players display
-                        this.updatePlayersDisplay();
-                    }
-                });
-                
-                // Create points display
-                const pointsDisplay = document.createElement('span');
-                pointsDisplay.className = 'points-display';
-                pointsDisplay.textContent = player.points;
-                
-                // Create increment button
-                const incrementBtn = document.createElement('button');
-                incrementBtn.className = 'points-btn increment-btn';
-                incrementBtn.textContent = '+';
-                incrementBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    player.points++;
-                    pointsDisplay.textContent = player.points;
-                    
-                    // Update team score
-                    if (parseInt(player.team) === 1) {
-                        this.app.teams.team1Points += 1;
-                    } else {
-                        this.app.teams.team2Points += 1;
-                    }
-                    this.app.teams.updateScoreDisplay();
-                    
-                    // Record the score change with player name and ID
-                    this.app.recordScoreChange(parseInt(player.team), true, player.name, player.id);
-
-                    // Save state (localStorage + blob sync)
-                    this.savePlayersState();
-                    // Update the players display
-                    this.updatePlayersDisplay();
-                });
-                
-                // Add all elements to the cell
-                pointsCell.appendChild(decrementBtn);
-                pointsCell.appendChild(pointsDisplay);
-                pointsCell.appendChild(incrementBtn);
-                row.appendChild(pointsCell);
-
-                // Action cell
-                const actionCell = document.createElement('td');
-                const removeBtn = document.createElement('button');
-                removeBtn.className = 'remove-player';
-                removeBtn.textContent = 'X';
-
-                removeBtn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Prevent event from bubbling up
-                    this.removePlayer(player.id);
-                });
-
-                actionCell.appendChild(removeBtn);
-                row.appendChild(actionCell);
-
-                // Add the row to the table
-                this.playersList.appendChild(row);
-            });
-        }
+        this.playersOn('1').forEach(p => createPlayerButton(p, this.team1PlayersDisplay, false));
+        this.playersOn('2').forEach(p => createPlayerButton(p, this.team2PlayersDisplay, true));
     }
 }
 
@@ -1603,9 +1347,15 @@ class UI {
         // UI elements
         this.fullscreenBtn = document.getElementById('fullscreen-btn');
         this.scoreHistoryElement = document.getElementById('score-history');
+        this.syncStatusElement = document.getElementById('sync-status');
 
         // Set up event listeners
         this.setupEventListeners();
+    }
+
+    // Show a small badge while changes haven't reached the server (they retry automatically)
+    setSyncStatus(ok) {
+        this.syncStatusElement.hidden = ok;
     }
 
     setupEventListeners() {
