@@ -37,8 +37,8 @@ public sealed class ScoreboardOptions
     public string? PhotoAdminKey { get; set; }
 
     /// <summary>AI style attempts per phone per day (UTC). An IP address gets twice this.</summary>
-    public int PhotoDailyLimitPerDevice { get; set; } = 10;
+    public int PhotoDailyLimitPerDevice { get; set; } = 30;
 
     /// <summary>AI style attempts per day across everyone: the cost ceiling.</summary>
-    public int PhotoDailyLimitTotal { get; set; } = 80;
+    public int PhotoDailyLimitTotal { get; set; } = 300;
 }
