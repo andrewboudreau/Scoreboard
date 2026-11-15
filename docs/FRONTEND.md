@@ -228,11 +228,13 @@ Global `Insights`, used by `stats.html`, `game.html` and the Teams panel. Pure f
 Tabs (`#overview`, `#players`, `#insights`, `#games`, kept in the URL hash) under a range filter (Last 10 / This year / All time).
 
 - **Overview**: head-to-head record bar with streak, **Next game** prediction for the current roster, tiles (avg score, avg margin, closest game, biggest win), comebacks, by-quarter table.
-- **Players**: sortable table with an Impact column, and a "Showing up" attendance card. Tap a row for a sheet: record, impact rank, PPG, attendance, scoring by quarter, best teammates, toughest opponents, game log, and **Same person?**: the ids this player's games came from (with Not the same / Undo), and a **Same person as…** picker (players never in the same game) that saves a player link; games move onto the player on the roster.
-- **Insights**: player impact diverging bars with the back-test result, best duos, rivalries, scoring table, points-per-game trend chart (tap for values), and how close the games are.
+- **Players**: sortable table and a "Showing up" attendance card. Tap a row for a sheet: record, best game, PPG, attendance, scoring by quarter, best teammates, toughest opponents, game log, and **Same person?**: the ids this player's games came from (with Not the same / Undo), and a **Same person as…** picker (players never in the same game) that saves a player link; games move onto the player on the roster.
+- **Insights**: **Biggest impact** (the top five only, with the back-test result), best duos, scoring table, points-per-game trend chart (tap for values), and how close the games are.
 - **Games**: history grouped by month with a "Player stats" / "Team scores" badge, then **Check the data** (`#data-check`, over every game): players sharing a name, players not on the roster (when there is one), and games with few points credited to players. Tapping a name opens that player's sheet.
 
 The model and back-test always use every game; the range filter only changes what's summarized.
+
+Nothing on the page ranks anyone last: the impact model drives Balance and the predictions, but the page shows only its top five, no impact numbers per player, and no rivalries (most one-sided head-to-head records).
 
 ### game.html
 

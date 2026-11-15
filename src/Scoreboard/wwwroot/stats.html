@@ -272,7 +272,6 @@
             { key: 'winPct', label: 'Win%', fmt: r => Math.round(r.winPct * 100), value: r => r.winPctSort },
             { key: 'streak', label: 'Streak', fmt: r => r.streak ? `W${r.streak}` : '<span class="dim">–</span>' },
             { key: 'avgPlusMinus', label: '+/-', fmt: r => signed(r.avgPlusMinus, 1) },
-            { key: 'impact', label: 'Impact', fmt: r => signed(r.impact, 1) },
             { key: 'points', label: 'Pts', fmt: r => r.trackedGp ? `${r.points}${r.trackedGp < r.gp ? `<span class="dim small"> in ${r.trackedGp}</span>` : ''}` : '<span class="dim">–</span>', value: r => r.trackedGp ? r.points : -1 },
             { key: 'ppg', label: 'PPG', fmt: r => r.ppg === null ? '<span class="dim">–</span>' : r.ppg.toFixed(1) },
             { key: 'high', label: 'High', fmt: r => r.high ? r.high.points : '<span class="dim">–</span>', value: r => r.high?.points ?? -1 }
@@ -302,7 +301,7 @@
                         <thead><tr>${COLUMNS.map(c => `<th class="sortable${sort.key === c.key ? ' sorted' : ''}" data-key="${c.key}">${c.label}${sort.key === c.key ? (sort.desc ? ' ▾' : ' ▴') : ''}</th>`).join('')}</tr></thead>
                         <tbody>${rows.map(r => `<tr class="clickable" data-id="${esc(r.id)}">${COLUMNS.map(c => `<td class="${c.cls || ''}">${c.fmt(r)}</td>`).join('')}</tr>`).join('')}</tbody>
                     </table></div>
-                    <div class="note">GP, W-L, Win% and +/- (team's average margin) count every game played. Teams are balanced and reshuffled each week, so Win% sorts with a small-sample guard: 3-0 doesn't jump ahead of 9-3. Streak: wins in a row right now. Impact is the model's estimate of how many points a player adds to their team's margin, using every game (see Insights). Pts, PPG and High only count games where player points were tracked (“in 6” = points from 6 tracked games). Tap a player for more.</div>
+                    <div class="note">GP, W-L, Win% and +/- (team's average margin) count every game played. Teams are balanced and reshuffled each week, so Win% sorts with a small-sample guard: 3-0 doesn't jump ahead of 9-3. Streak: wins in a row right now. Pts, PPG and High only count games where player points were tracked (“in 6” = points from 6 tracked games). Tap a player for more.</div>
                 </div>
                 ${attendanceHtml(games)}`;
         }
@@ -340,7 +339,6 @@
             const pairs = Insights.playerPairs(games, p.id);
             const style = Insights.scoring(games).find(s => s.id === p.id);
             const att = Insights.attendance(games).find(a => a.id === p.id);
-            const rank = model.players.findIndex(m => m.id === p.id) + 1;
 
             const pairList = (title, list, note) => list.length ? `
                 <div class="card">
@@ -372,7 +370,7 @@
                 </div>
                 <div class="tiles">
                     <div class="tile"><div class="label">Record</div><div class="value">${p.wins}-${p.losses}</div><div class="sub">${Math.round(p.winPct * 100)}% wins${p.ties ? ` · ${p.ties} tied` : ''}${p.streak > 1 ? ` · won ${p.streak} straight` : ''}${p.bestStreak?.count > 1 ? ` · best ${p.bestStreak.count}` : ''}</div></div>
-                    <div class="tile"><div class="label">Impact</div><div class="value">${signed(p.impact, 1)}</div><div class="sub">${!rank ? 'no games yet' : p.gp < 4 ? `rough guess · only ${p.gp} game${p.gp === 1 ? '' : 's'}` : `#${rank} of ${model.players.length} · all games`}</div></div>
+                    <div class="tile"><div class="label">Best game</div><div class="value">${p.high ? p.high.points : '–'}</div><div class="sub">${p.high ? `points · ${formatDate(p.high.game.date)}` : 'no tracked games yet'}</div></div>
                     <div class="tile"><div class="label">Points per game</div><div class="value">${p.ppg === null ? '–' : p.ppg.toFixed(1)}</div><div class="sub">${p.trackedGp} tracked game${p.trackedGp === 1 ? '' : 's'}</div></div>
                     <div class="tile"><div class="label">Showed up</div><div class="value">${att ? Math.round(att.pct * 100) : 0}%</div><div class="sub">${att ? `${att.gp} of ${games.length}${att.streak > 1 ? ` · ${att.streak} straight` : ''}` : ''}</div></div>
                 </div>
@@ -486,8 +484,9 @@
             if (!model || model.n < 3) {
                 return `<div class="card"><h2>Player impact</h2><div class="note">Needs at least 3 games.</div></div>`;
             }
-            const rows = model.players;
-            const max = Math.max(1, ...rows.map(r => Math.abs(r.impact)));
+            // Only the top of the list: it's there to balance teams, not to rank anyone last
+            const rows = model.players.filter(r => r.impact > 0.05).slice(0, 5);
+            const max = Math.max(1, ...rows.map(r => r.impact));
             const bt = backtest;
             const acc = bt.total ? Math.round(100 * bt.correct / bt.total) : null;
             const verdict = acc === null ? 'Not enough games yet to test it.'
@@ -495,29 +494,22 @@
                 : `Tested on past games (using only the games before each one), it picked the winner ${bt.correct} of ${bt.total} times (${acc}%), so far not much better than a coin flip. It sharpens as games pile up.`;
             return `
                 <div class="card">
-                    <h2>Player impact · all ${model.n} games</h2>
-                    <div class="diverge-legend"><span>← hurts margin</span><span>helps margin →</span></div>
-                    ${rows.map(r => {
-                        const w = Math.round(50 * Math.abs(r.impact) / max);
-                        const pos = r.impact >= 0;
-                        return `
+                    <h2>Biggest impact · all ${model.n} games</h2>
+                    ${rows.map(r => `
                         <div class="hbar-row" title="${esc(r.name)}: ${signed(r.impact, 1)} pts per game, ${r.gp} games">
                             <span class="hbar-name">${esc(r.name)}</span>
-                            <span class="hbar-track diverging"><span class="hbar ${pos ? 'pos' : 'neg'}" style="width:${w}%;${pos ? 'left:50%' : `left:${50 - w}%`}"></span></span>
+                            <span class="hbar-track"><span class="hbar seq" style="width:${Math.round(100 * r.impact / max)}%"></span></span>
                             <span class="hbar-value">${signed(r.impact, 1)} <span class="dim">· ${r.gp}g</span></span>
-                        </div>`;
-                    }).join('')}
-                    <div class="note">How many points a player adds to their team's final margin compared with an average player, after accounting for who they played with and against. It only needs who played and the final score, so team-score-only games count too. Recent games count more; players with few games are pulled toward 0.</div>
+                        </div>`).join('')}
+                    <div class="note">Points a player adds to their team's final margin, after accounting for who they played with and against. It only needs who played and the final score, so team-score-only games count too. Recent games count more; players with few games are pulled toward 0. Only the top five are shown: the model is there to make even teams (<b>Balance</b>), not to rank everyone.</div>
                     <div class="note">${verdict} Typical miss: ${bt.mae === null ? '–' : bt.mae.toFixed(1)} points.</div>
                 </div>`;
         }
 
         function pairsHtml(games) {
             const duos = Insights.duos(games).slice(0, 5);
-            const rivals = Insights.rivalries(games).slice(0, 5);
-            if (!duos.length && !rivals.length) return '';
+            if (!duos.length) return '';
             return `
-                ${duos.length ? `
                 <div class="card">
                     <h2>Best duos · ${rangeLabel()}</h2>
                     ${duos.map(d => `
@@ -526,17 +518,7 @@
                             <span class="win">${signed(d.avg, 1)}</span>
                         </div>`).join('')}
                     <div class="note">Average margin when on the same team, 3+ games together.</div>
-                </div>` : ''}
-                ${rivals.length ? `
-                <div class="card">
-                    <h2>Rivalries · ${rangeLabel()}</h2>
-                    ${rivals.map(r => `
-                        <div class="list-link">
-                            <span>${esc(r.aName)} <span class="dim">vs</span> ${esc(r.bName)}</span>
-                            <span><b>${r.wins}-${r.losses}</b> <span class="dim">${signed(r.avg, 1)}</span></span>
-                        </div>`).join('')}
-                    <div class="note">Most one-sided records when on opposite teams, 3+ games.</div>
-                </div>` : ''}`;
+                </div>`;
         }
 
         function scoringHtml(games) {
