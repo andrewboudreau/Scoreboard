@@ -649,11 +649,14 @@ public class ScoreboardTests : PageTest
         SeedRoster("1", "1", "2", "2");
 
         await Page.GotoAsync($"{BaseUrl}/Scoreboard/stats#insights");
-        var impact = Page.Locator(".card", new() { HasText = "Player impact" });
+        var impact = Page.Locator(".card", new() { HasText = "Biggest impact" });
         await Expect(impact).ToContainTextAsync("all 4 games", new() { IgnoreCase = true });
         // Winners rank above losers
         var names = await impact.Locator(".hbar-name").AllTextContentsAsync();
         Assert.That(names.Take(2), Is.EquivalentTo(new[] { "Amy", "Ben" }));
+        // Only the top of the list: nobody is shown in last place
+        Assert.That(names, Does.Not.Contain("Cal").And.Not.Contain("Dee"));
+        await Expect(Page.Locator(".card", new() { HasText = "Rivalries" })).ToHaveCountAsync(0);
         await Expect(Page.Locator(".card", new() { HasText = "Best duos" })).ToContainTextAsync("Amy + Ben");
 
         await Page.Locator("#tabs button[data-tab=overview]").ClickAsync();
