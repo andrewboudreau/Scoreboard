@@ -134,20 +134,25 @@
                     return;
                 }
                 localStorage.setItem('photoAdminKey', key);
+                adminKey = key;
                 render(data);
             }
 
             // Photos are fetched with the admin key header and shown from blob URLs, so the key never sits in a URL
             const urls = new Map();
             let photos = [];
-            const headers = () => ({ 'X-Admin-Key': $('key').value.trim() });
+            // The key that last loaded the report, so autofill rewriting the box can't break later requests
+            let adminKey = '';
+            const headers = () => ({ 'X-Admin-Key': adminKey || $('key').value.trim() });
             async function photoUrl(path) {
                 if (!urls.has(path)) {
                     const res = await fetch(`/Scoreboard/api/photo/archive/file?path=${encodeURIComponent(path)}`, { headers: headers() });
-                    urls.set(path, res.ok ? URL.createObjectURL(await res.blob()) : '');
+                    if (!res.ok) { lastPhotoError = res.status; return ''; }
+                    urls.set(path, URL.createObjectURL(await res.blob()));
                 }
                 return urls.get(path);
             }
+            let lastPhotoError = 0;
             async function loadGallery(player) {
                 const res = await fetch(`/Scoreboard/api/photo/archive${player ? `?player=${encodeURIComponent(player)}` : ''}`, { headers: headers() });
                 if (!res.ok) return;
@@ -168,7 +173,11 @@
                 $('gal-count').textContent = `${list.length}${total > photos.length ? ` of ${total}` : ''}`;
                 $('gallery').innerHTML = list.map((p, i) => `<button class="shot" data-shot="${i}" title="${esc(p.path)}"><img alt="" data-path="${esc(p.path)}"><span>${esc(p.player || p.playerId)} · ${esc(p.kind === 'try' ? 'AI ' + (p.style || '') : p.kind === 'saved' ? 'saved ' + (p.style || '') : 'source')}</span></button>`).join('')
                     || '<p class="dim">No photos yet.</p>';
-                await Promise.all([...$('gallery').querySelectorAll('img[data-path]')].map(async img => { img.src = await photoUrl(img.dataset.path); }));
+                await Promise.all([...$('gallery').querySelectorAll('img[data-path]')].map(async img => {
+                    const url = await photoUrl(img.dataset.path);
+                    if (url) img.src = url;
+                    else img.closest('.shot').insertAdjacentHTML('afterbegin', `<b style="position:absolute;top:6px;left:6px;color:#c00;font-size:12px">couldn't load${lastPhotoError ? ` (${lastPhotoError})` : ''}</b>`);
+                }));
             }
             function view(p) {
                 const v = document.createElement('div');
