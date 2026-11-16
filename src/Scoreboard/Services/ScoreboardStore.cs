@@ -43,6 +43,18 @@ public sealed class ScoreboardStore(BlobContainerClient container, IOptions<Scor
     public async Task WriteAsync(string path, BinaryData data) =>
         await Blob(await PrefixAsync(), path).UploadAsync(data, overwrite: true);
 
+    /// <summary>Lists blobs under a folder of the data folder (paths are relative to it), newest first.</summary>
+    public async Task<List<(string Path, long Size, DateTimeOffset? Modified)>> ListAsync(string folder)
+    {
+        var prefix = await PrefixAsync();
+        var items = new List<(string, long, DateTimeOffset?)>();
+        await foreach (var item in container.GetBlobsAsync(BlobTraits.None, BlobStates.None, $"{prefix}/{folder}", default))
+        {
+            items.Add((item.Name[(prefix.Length + 1)..], item.Properties.ContentLength ?? 0, item.Properties.LastModified));
+        }
+        return [.. items.OrderByDescending(i => i.Item3)];
+    }
+
     /// <summary>Reads every saved game, in no particular order.</summary>
     public async Task<List<BinaryData>> ReadAllGamesAsync()
     {

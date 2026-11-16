@@ -63,6 +63,83 @@ public static class PhotoBooth
         api.MapGet("/usage", Usage);
         api.MapPost("/block", Block).DisableAntiforgery();
         api.MapPost("/reset", Reset).DisableAntiforgery();
+        api.MapPost("/events", Events).DisableAntiforgery();
+        api.MapGet("/archive", ArchiveList);
+        api.MapGet("/archive/file", ArchiveFile);
+    }
+
+    public sealed record EventItem(string? Type, string? Detail, string? PlayerId, int? Ago);
+    public sealed record EventsRequest(string? Device, string? Ua, List<EventItem>? Events);
+
+    // Page beacon: visits, step changes and clicks, batched by the page. Anonymous, so everything is clamped.
+    private static async Task<IResult> Events(EventsRequest req, HttpContext ctx, PhotoUsage usage)
+    {
+        var device = Clean(req.Device);
+        var ip = ClientIp(ctx);
+        var ua = Trim(req.Ua, 160);
+        var now = DateTimeOffset.UtcNow;
+        var list = (req.Events ?? []).Take(50)
+            .Where(e => e.Type is "visit" or "nav" or "click")
+            .Select(e => new PhotoEvent(now.AddMilliseconds(-Math.Clamp(e.Ago ?? 0, 0, 3_600_000)), e.Type!,
+                Trim(e.Detail, 60) ?? "", device, ip, Trim(e.PlayerId, 20), e.Type == "visit" ? ua : null))
+            .ToList();
+        if (list.Count > 0) await usage.AddEventsAsync(list);
+        return Results.NoContent();
+    }
+
+    private static string? Trim(string? s, int max) => string.IsNullOrWhiteSpace(s) ? null : s.Trim()[..Math.Min(s.Trim().Length, max)];
+
+    // Every photo kept in blob: saved ones, AI tries and the source photos behind them.
+    private static async Task<IResult> ArchiveList(HttpContext ctx, IOptions<ScoreboardOptions> options, ScoreboardStore store, string? player)
+    {
+        if (!IsAdmin(ctx, options.Value)) return Problem(401, "Wrong or missing admin key.");
+        var names = (await RosterAsync(store))?["players"]?.AsArray()
+            .Where(p => p is not null).ToDictionary(p => p!["id"]?.ToString() ?? "", p => p!["name"]?.GetValue<string>() ?? "?")
+            ?? [];
+        var all = await store.ListAsync(string.IsNullOrEmpty(player) ? "photo-archive/" : $"photo-archive/{Clean(player)}/");
+        var items = all.Take(400).Select(i =>
+        {
+            var parts = i.Path.Split('/');
+            var file = parts[^1];
+            var id = parts.Length > 2 ? parts[1] : "";
+            return new
+            {
+                path = i.Path,
+                playerId = id,
+                player = names.GetValueOrDefault(id),
+                kind = file.StartsWith("source-") ? "source" : file.Contains("-try") ? "try" : "saved",
+                style = file.StartsWith("source-") ? null : file.Split('-').Skip(2).FirstOrDefault()?.Replace(".jpg", ""),
+                size = i.Size,
+                ts = i.Modified
+            };
+        });
+        return Results.Json(new { total = all.Count, items }, Web);
+    }
+
+    // Images are fetched with the admin key header and shown from a blob URL, so the key never sits in a URL.
+    private static async Task<IResult> ArchiveFile(HttpContext ctx, IOptions<ScoreboardOptions> options, ScoreboardStore store, string? path)
+    {
+        if (!IsAdmin(ctx, options.Value)) return Problem(401, "Wrong or missing admin key.");
+        if (path is null || !path.StartsWith("photo-archive/") || path.Contains("..")) return Problem(400, "Bad path.");
+        var data = await store.ReadAsync(path);
+        return data is null ? Problem(404, "Not found.") : Results.File(data.ToArray(), "image/jpeg");
+    }
+
+    // The source photo and the AI result are kept even if the person never saves them. Never blocks the response.
+    private static async Task ArchiveTryAsync(ScoreboardStore store, ILogger logger, long playerId, byte[] sourcePng, byte[] resultJpg, string style)
+    {
+        try
+        {
+            var hash = Convert.ToHexString(SHA1.HashData(sourcePng))[..10].ToLowerInvariant();
+            using (var src = Image.Load(sourcePng))
+            using (var jpg = new MemoryStream())
+            {
+                await src.SaveAsJpegAsync(jpg, new JpegEncoder { Quality = 85 });
+                await store.WriteAsync($"photo-archive/{playerId}/source-{hash}.jpg", new BinaryData(jpg.ToArray()));
+            }
+            await store.WriteAsync($"photo-archive/{playerId}/{DateTimeOffset.UtcNow:yyyyMMdd-HHmmssfff}-{style}-try.jpg", new BinaryData(resultJpg));
+        }
+        catch (Exception e) { logger.LogWarning(e, "Couldn't archive the AI try for player {Player}", playerId); }
     }
 
     public sealed record StylizeRequest(long PlayerId, string? Style, string? Image, string? Device, string? Code);
@@ -174,6 +251,7 @@ public static class PhotoBooth
             await styled.SaveAsJpegAsync(jpg, new JpegEncoder { Quality = 90 });
 
             await usage.AddAsync(Entry("stylize", true, null, clock.ElapsedMilliseconds));
+            await ArchiveTryAsync(store, logger, req.PlayerId, png, jpg.ToArray(), style.Id);
             var after = await usage.TodayAsync(device, ip);
             return Results.Json(new
             {
@@ -322,6 +400,8 @@ public static class PhotoBooth
 /// <summary>Logger category for the photo page.</summary>
 public sealed class PhotoUsageLog;
 
+public sealed record PhotoEvent(DateTimeOffset Ts, string Type, string Detail, string Device, string Ip, string? PlayerId, string? Ua);
+
 public sealed record PhotoUsageEntry(DateTimeOffset Ts, string Action, string Device, string Ip,
     string? PlayerId, string? Player, string? Style, bool Ok, string? Error, int Ms);
 
@@ -336,6 +416,8 @@ public sealed class PhotoUsage(ScoreboardStore store)
     private List<PhotoUsageEntry>? _entries;
     private string? _month;
     private HashSet<string>? _blocked;
+    private List<PhotoEvent>? _events;
+    private const int MaxEventsPerMonth = 20000;
 
     private static string MonthOf(DateTimeOffset t) => t.ToString("yyyy-MM");
 
@@ -345,6 +427,7 @@ public sealed class PhotoUsage(ScoreboardStore store)
         if (_entries is null || _month != month)
         {
             _entries = await ReadMonthAsync(month);
+            _events = await ReadEventsAsync(month);
             _month = month;
         }
         if (_blocked is null)
@@ -359,6 +442,20 @@ public sealed class PhotoUsage(ScoreboardStore store)
         var data = await store.ReadAsync($"photo-usage/{month}.json");
         return data is null ? [] : JsonSerializer.Deserialize<List<PhotoUsageEntry>>(data, Web) ?? [];
     }
+
+    private async Task<List<PhotoEvent>> ReadEventsAsync(string month)
+    {
+        var data = await store.ReadAsync($"photo-events/{month}.json");
+        return data is null ? [] : JsonSerializer.Deserialize<List<PhotoEvent>>(data, Web) ?? [];
+    }
+
+    public Task AddEventsAsync(List<PhotoEvent> events) => Locked(async () =>
+    {
+        if (_events!.Count >= MaxEventsPerMonth) return false;
+        _events.AddRange(events);
+        await store.WriteAsync($"photo-events/{_month}.json", new BinaryData(JsonSerializer.SerializeToUtf8Bytes(_events, Web)));
+        return true;
+    });
 
     private async Task<T> Locked<T>(Func<Task<T>> work)
     {
@@ -422,8 +519,23 @@ public sealed class PhotoUsage(ScoreboardStore store)
             last = g.Max(e => e.Ts),
             blocked = _blocked!.Contains(g.Key)
         }).OrderByDescending(d => d.last).ToArray();
+        var evs = m == _month ? _events! : await ReadEventsAsync(m);
+        var visits = evs.Where(e => e.Type == "visit").ToList();
+        var events = new
+        {
+            visits = visits.Count,
+            visitsToday = visits.Count(e => e.Ts.UtcDateTime.Date == today),
+            visitors = visits.Select(e => e.Device).Distinct().Count(),
+            steps = evs.Where(e => e.Type == "nav").GroupBy(e => e.Detail)
+                .Select(g => new { step = g.Key, count = g.Count(), phones = g.Select(e => e.Device).Distinct().Count() }),
+            clicks = evs.Where(e => e.Type == "click").GroupBy(e => e.Detail)
+                .Select(g => new { what = g.Key, count = g.Count(), phones = g.Select(e => e.Device).Distinct().Count() })
+                .OrderByDescending(c => c.count).Take(40),
+            recent = evs.AsEnumerable().Reverse().Take(150)
+        };
         return new
         {
+            events,
             month = m,
             styles = entries.Count(e => e.Action == "stylize"),
             stylesToday = entries.Count(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today),
