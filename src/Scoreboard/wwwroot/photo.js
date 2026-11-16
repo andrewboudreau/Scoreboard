@@ -17,6 +17,33 @@
     if (params.get('k')) localStorage.setItem('photoCode', params.get('k'));
     const code = params.get('k') || localStorage.getItem('photoCode') || '';
 
+    // ---------------- tracking (visits, steps, clicks) -> admin page ----------------
+
+    const queue = [];
+    let current = '';
+    function track(type, detail) {
+        queue.push({ type, detail, playerId: me ? String(me.id) : null, at: Date.now() });
+    }
+    function flush() {
+        if (!queue.length) return;
+        const now = Date.now();
+        const events = queue.splice(0, 50).map(e => ({ type: e.type, detail: e.detail, playerId: e.playerId, ago: now - e.at }));
+        const body = JSON.stringify({ device, ua: navigator.userAgent, events });
+        if (!navigator.sendBeacon?.('/Scoreboard/api/photo/events', new Blob([body], { type: 'application/json' }))) {
+            fetch('/Scoreboard/api/photo/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => { });
+        }
+        if (queue.length) flush();
+    }
+    setInterval(flush, 8000);
+    addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+    document.addEventListener('click', e => {
+        const el = e.target.closest('button, a, label, input[type=file]');
+        if (!el) return;
+        const what = el.id || (el.dataset.style && `style:${el.dataset.style}`) || (el.dataset.back && `back:${el.dataset.back}`)
+            || (el.classList.contains('person') ? 'person' : (el.textContent || '').trim().slice(0, 30) || el.tagName.toLowerCase());
+        track('click', what);
+    }, true);
     let players = [];
     let me = null;
     let source = null;          // canvas holding the chosen photo (oriented, scaled down)
@@ -33,6 +60,7 @@
     function show(step) {
         for (const s of steps) $(`step-${s}`).hidden = s !== step;
         $('error').hidden = true;
+        if (step !== current) { current = step; track('nav', step); }
         const head = step === 'who';
         $('lead').hidden = !head;
         $('title').textContent = step === 'done' ? '' : step === 'who' ? 'Add your photo' : me ? `Hi, ${me.name.split(' ')[0]}!` : 'Add your photo';
@@ -368,6 +396,7 @@
     }
 
     (async () => {
+        track('visit', params.has('p') ? 'direct link' : 'page');
         refreshConfig();
         try {
             const [res, linksRes] = await Promise.all([
