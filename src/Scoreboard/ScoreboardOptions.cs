@@ -41,4 +41,7 @@ public sealed class ScoreboardOptions
 
     /// <summary>AI style attempts per day across everyone: the cost ceiling.</summary>
     public int PhotoDailyLimitTotal { get; set; } = 300;
+
+    /// <summary>Days to keep AI tries and source photos nobody saved, so there's time to check the page works. Saved photos are never deleted. 0 keeps everything.</summary>
+    public int PhotoTryRetentionDays { get; set; } = 14;
 }

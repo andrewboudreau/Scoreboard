@@ -125,6 +125,26 @@ public static class PhotoBooth
         return data is null ? Problem(404, "Not found.") : Results.File(data.ToArray(), "image/jpeg");
     }
 
+    // AI tries and source photos nobody saved are only kept for a while (saved photos stay for good).
+    // Checked at most every few hours, whenever someone makes a try.
+    private static DateTimeOffset _lastPurge = DateTimeOffset.MinValue;
+
+    private static async Task PurgeOldTriesAsync(ScoreboardStore store, ILogger logger, int days)
+    {
+        if (days <= 0 || DateTimeOffset.UtcNow - _lastPurge < TimeSpan.FromHours(6)) return;
+        _lastPurge = DateTimeOffset.UtcNow;
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-days);
+            var old = (await store.ListAsync("photo-archive/"))
+                .Where(i => i.Modified < cutoff && (i.Path.Contains("-try.jpg") || i.Path.Contains("/source-")))
+                .ToList();
+            foreach (var i in old) await store.DeleteAsync(i.Path);
+            if (old.Count > 0) logger.LogInformation("Deleted {Count} unsaved photo tries older than {Days} days", old.Count, days);
+        }
+        catch (Exception e) { logger.LogWarning(e, "Couldn't clean up old photo tries"); }
+    }
+
     // The source photo and the AI result are kept even if the person never saves them. Never blocks the response.
     private static async Task ArchiveTryAsync(ScoreboardStore store, ILogger logger, long playerId, byte[] sourcePng, byte[] resultJpg, string style)
     {
@@ -252,6 +272,7 @@ public static class PhotoBooth
 
             await usage.AddAsync(Entry("stylize", true, null, clock.ElapsedMilliseconds));
             await ArchiveTryAsync(store, logger, req.PlayerId, png, jpg.ToArray(), style.Id);
+            await PurgeOldTriesAsync(store, logger, o.PhotoTryRetentionDays);
             var after = await usage.TodayAsync(device, ip);
             return Results.Json(new
             {
@@ -519,6 +540,16 @@ public sealed class PhotoUsage(ScoreboardStore store)
             last = g.Max(e => e.Ts),
             blocked = _blocked!.Contains(g.Key)
         }).OrderByDescending(d => d.last).ToArray();
+        // Who tried the page: AI tries and saves per name, so "tried but never saved" stands out
+        var people = entries.Where(e => e.Player is not null && (e.Action == "stylize" || e.Action == "save"))
+            .GroupBy(e => e.Player!).Select(g => new
+            {
+                player = g.Key,
+                tries = g.Count(e => e.Action == "stylize" && e.Ok),
+                failed = g.Count(e => e.Action == "stylize" && !e.Ok),
+                saves = g.Count(e => e.Action == "save"),
+                last = g.Max(e => e.Ts)
+            }).OrderByDescending(p => p.last).ToArray();
         var evs = m == _month ? _events! : await ReadEventsAsync(m);
         var visits = evs.Where(e => e.Type == "visit").ToList();
         var events = new
@@ -536,6 +567,7 @@ public sealed class PhotoUsage(ScoreboardStore store)
         return new
         {
             events,
+            people,
             month = m,
             styles = entries.Count(e => e.Action == "stylize"),
             stylesToday = entries.Count(e => e.Action == "stylize" && e.Ts.UtcDateTime.Date == today),
