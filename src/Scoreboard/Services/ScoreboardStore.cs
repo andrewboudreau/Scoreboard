@@ -55,6 +55,9 @@ public sealed class ScoreboardStore(BlobContainerClient container, IOptions<Scor
         return [.. items.OrderByDescending(i => i.Item3)];
     }
 
+    public async Task DeleteAsync(string path) =>
+        await Blob(await PrefixAsync(), path).DeleteIfExistsAsync();
+
     /// <summary>Reads every saved game, in no particular order.</summary>
     public async Task<List<BinaryData>> ReadAllGamesAsync()
     {

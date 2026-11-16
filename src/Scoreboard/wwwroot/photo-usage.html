@@ -65,6 +65,12 @@
             </div>
 
             <div class="card">
+                <h3>People</h3>
+                <p class="dim">AI tries and saves by name. Tries nobody saved are deleted after 14 days; saved photos are kept for good.</p>
+                <div class="table-wrap"><table id="people"></table></div>
+            </div>
+
+            <div class="card">
                 <h3>Photos <span class="dim" id="gal-count"></span></h3>
                 <div class="row">
                     <select id="gal-player" class="search" aria-label="Person"><option value="">Everyone</option></select>
@@ -228,6 +234,8 @@
                 $('t-devices').textContent = d.devices.length;
                 $('t-visits').textContent = d.events.visits;
                 $('t-visitors').textContent = d.events.visitors;
+
+                $('people').innerHTML = `<tr><th>Name</th><th class="num">AI tries</th><th class="num">Failed</th><th class="num">Saved</th><th>Last</th></tr>${d.people.map(p => `<tr><td>${esc(p.player)}</td><td class="num">${p.tries}</td><td class="num${p.failed ? ' bad' : ''}">${p.failed || ''}</td><td class="num">${p.saves ? p.saves : '<span class="dim">not saved</span>'}</td><td>${when(p.last)}</td></tr>`).join('') || '<tr><td colspan="5" class="dim">Nobody yet.</td></tr>'}`;
 
                 const order = ['who', 'pick', 'crop', 'style', 'done'];
                 const steps = [...d.events.steps].sort((a, b) => order.indexOf(a.step) - order.indexOf(b.step));
