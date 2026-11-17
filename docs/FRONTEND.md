@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-How the browser side of the MDL Scoreboard is put together: pages, the `app.js` classes, how data reaches the server, and the stats pages. For the module/host loading system see the README.
+How the browser side of the MDL Scoreboard is put together: pages, the `app.js` classes, how data reaches the server, the stats pages, and the photo page. For the module/host loading system see the README.
 
 Everything lives in `src/Scoreboard/wwwroot/` as plain HTML/CSS/JS. No build step, no bundler, no framework.
 
@@ -10,12 +10,22 @@ Everything lives in `src/Scoreboard/wwwroot/` as plain HTML/CSS/JS. No build ste
 
 | File | URL | Purpose |
 |------|-----|---------|
-| `index.html` + `app.js` + `styles.css` | `/Scoreboard/` | The scoreboard (scores, timer, teams panel, settings) |
+| `index.html` + `app.js` + `tour.js` + `styles.css` | `/Scoreboard/` | The scoreboard (scores, timer, teams panel and its guided tour, settings) |
 | `stats.html` + `stats-core.js` + `insights.js` + `stats.css` | `/Scoreboard/stats` | Stats dashboard: overview, players, insights, game history |
 | `game.html` + `stats-core.js` + `insights.js` + `stats.css` | `/Scoreboard/game?id={gameId}` | One game: result, quarters, chart, box score, play-by-play |
+| `photo.html` + `photo.js` + `photo.css` | `/Scoreboard/photo` | Phone page for the group chat: pick your name, crop a photo, optional AI style, save |
+| `photo-usage.html` | `/Scoreboard/photo/usage` | Admin view of photo page usage (needs the admin key) |
 | `docs.html` | `/Scoreboard/docs` | User-facing docs (markdown rendered with marked.js) |
 
-`/Scoreboard/ManagePlayers` redirects to `/Scoreboard/#teams`, which opens the teams panel.
+Deep links into the scoreboard (`handleDeepLink()`; the parameters are stripped afterwards so a refresh doesn't replay them):
+
+| Link | Opens |
+|------|-------|
+| `#teams` or `?players` | The teams panel |
+| `?players=edit` | The teams panel in Edit mode (rename / photo / delete) |
+| `?players&tour` (or `?tour`) | The teams panel with the guided tour running |
+
+`/Scoreboard/ManagePlayers` redirects to `/Scoreboard/#teams`.
 
 HTML pages are files in the drop's `wwwroot/`, served by `Page()` in `ScoreboardModule.cs` with `Cache-Control: no-cache`. It replaces `{{v}}` with a hash of the wwwroot files (plus the assembly id), so `app.js?v={{v}}` and friends are cache-busted on every deploy. Static assets (JS, CSS, icons, audio) are served from `/_content/Scoreboard/`.
 
@@ -31,6 +41,8 @@ The server is the single source of truth. The browser reads and writes whole JSO
 | Current game pointer | `PUT current-game` | `{ gameId }` (`GET` returns the game document it points to, or 204) |
 | Game | `GET/PUT games/{id}` | see below |
 | All games | `GET games` | array of game documents |
+| Hidden games | `GET/PUT hidden-games` | `{ ids: [gameId] }`: games removed from stats; the game files stay |
+| Player links | `GET/PUT player-links` | `{ links: { fromId: toId } }`: one person under two ids |
 
 Teams are **BLACK** and **WHITE**, stored as `'1'` and `'2'`. A player is on team `'1'`, team `'2'`, or **out** (`active: false`; their last team is remembered).
 
@@ -140,9 +152,9 @@ For games where only team scores are kept. Two number inputs, prefilled with the
 
 ### Teams panel (Players class)
 
-Opened with the people icon (or `#teams` in the URL). Full screen on phones (≤ 700px).
+Opened with the people icon (or a deep link, see Pages). Full screen on phones (≤ 700px).
 
-- Header: count chips for BLACK / WHITE / Out (highlighted when teams differ by more than one), and **Shuffle**, **All out**, **Share**, **Edit**, **Done**.
+- Title bar: **?** (starts the tour), **Edit**, **✕**. Under it: count chips for BLACK / WHITE / Out (highlighted when teams differ by more than one), then **Balance**, **Shuffle**, **All out**, **Share**.
 - Each roster row (alphabetical, stable order): 📌 pin, name, −/points/+ (when in), and a **BLACK / Out / WHITE** toggle.
 - **Add a player** goes on the smaller team.
 - **Prediction** line under the counts (`#team-prediction`): "BLACK by 3 · 64% to win" from the history model (`Insights.fit`, needs 3+ games, cached 10 min); highlighted when the gap is 4+ points.
@@ -150,9 +162,17 @@ Opened with the people icon (or `#teams` in the URL). Full screen on phones (≤
 - **Shuffle**: Fisher–Yates over everyone who's in and not pinned, filling the smaller team first (random on a tie). Pins are per device and not saved.
 - **All out**: everyone out, pins cleared — start of the week, then tap in whoever shows up.
 - **Share**: chat-ready list (`🏀 Teams for Sat, Nov 14`, then each team with a count). Share sheet on touch devices, clipboard elsewhere.
-- **Edit** mode: per-row **Photo** (POST `players/{id}/image`; server crops to 96×96 PNG), **Rename**, **Delete**.
+- **Edit** mode (`setEditing`; the title becomes "Edit players" and Edit becomes **Done**): tap a row's photo to change it (POST `players/{id}/image`; the server center-crops to a 256×256 PNG), tap the name to rename, **Delete** twice to remove (the first tap arms it).
 
 Every roster change calls `saveRoster()` (1s debounce) and re-renders the panel and the scoreboard lists. Team names edited on the scoreboard (`contenteditable`) or in Settings are saved with the roster.
+
+### Guided tour (tour.js)
+
+`window.TeamsTour` (`start`, `end`, `active`), started by the **?** button or a `?players&tour` link. Eight cards walk through the panel: All out, the team switch, the counts, Balance / Shuffle, Share, adding a player, Edit.
+
+- It only points and explains. It never taps a button, saves, or changes the roster; the spotlighted control stays tappable.
+- The panel re-renders on every server poll, so the tour holds no elements: each frame it looks the current step's selector up again and moves the spotlight and card to it.
+- Clicks on the tour don't count as clicks outside the panel, so the panel stays open. If the person tries Edit mid-tour, moving to any step but the Edit one flips back to the teams view.
 
 ### Settings panel
 
@@ -169,7 +189,7 @@ Only device preferences, restored by `loadSavedSettings()`:
 | `playerButtonSize` | Player button padding (px, slider 10–50), applied via `--player-button-padding` |
 | `keepScreenOn` | `"true"`/`"false"`; Screen Wake Lock, re-acquired when the tab becomes visible |
 
-`stats.html` also stores the selected range in `statsRange`.
+Other pages keep their own keys: `stats.html` stores the selected range in `statsRange`; the photo page stores `photoDevice` and `photoCode`; the usage page stores `photoAdminKey`.
 
 ---
 
@@ -236,14 +256,38 @@ The model and back-test always use every game; the range filter only changes wha
 
 Nothing on the page ranks anyone last: the impact model drives Balance and the predictions, but the page shows only its top five, no impact numbers per player, and no rivalries (most one-sided head-to-head records).
 
+Games listed in `hidden-games` are left out everywhere (`Stats.loadGames()` puts them on `games.hiddenGames`); the Games tab lists them under "Removed from stats".
+
 ### game.html
 
-Loads `games/{id}` and `current-game` together. For `{id}~n` it loads `{id}` and picks that night from `gamesFromDoc`. Shows a hero scoreline with **Share result**, a quarters table (with a "Now" column if unfinished), the score chart with lead changes / biggest leads / longest scoring run, a box score (or **Who played** for team-only games, with "Not credited" for uncredited points), and a collapsible play-by-play.
+Loads `games/{id}` and `current-game` together. For `{id}~n` it loads `{id}` and picks that night from `gamesFromDoc`. Shows a hero scoreline with **Share result**, a quarters table (with a "Now" column if unfinished), the score chart with lead changes / biggest leads / longest scoring run, a box score (or **Who played** for team-only games, with "Not credited" for uncredited points), and a collapsible play-by-play. **Remove from stats** (two taps) adds the game to `hidden-games`; on a removed game the button is **Put back in stats**.
 
 If the game is the current game and was updated in the last 3 hours it shows **LIVE** and reloads every 15s.
 
 ---
 
+## Photo page
+
+`photo.html` + `photo.js` + `photo.css`, built for phones: the link goes in the group chat and each person adds their own photo. It doesn't use `app.js`. The server side is `PhotoBooth.cs`.
+
+Five steps, one visible at a time (`show(step)`):
+
+1. **who** — the roster, alphabetical, with a search box. A person linked under two ids (`player-links`) is listed once. `?p=<playerId>` skips this step.
+2. **pick** — choose a photo, or **Take a selfie** (touch devices only; opens the front camera).
+3. **crop** — square crop on a canvas: drag, pinch or slider to zoom, rotate. Big photos are scaled down to 2048px first; the crop sent to the server is 1024px.
+4. **style** — **Original** plus the AI styles from `GET photo/config`. Picking one POSTs the crop to `photo/stylize` (about 30 seconds); results are kept in memory, so switching back to one costs nothing. Shows the tries left today.
+5. **done** — after `POST photo/save`, which writes the avatar and sets the roster `imageUrl`.
+
+- **Device id**: a random id in `photoDevice`, sent with every call so the server can log and limit AI use per phone. It is not a login.
+- **Link code**: `?k=<code>` is remembered in `photoCode` and sent to `config` and `stylize`. Without the right code (when the server has one set) the page still works, without AI styles, and says why.
+- **Tracking**: visits, step changes and clicks are queued and sent to `POST photo/events` every 8s and when the page is hidden (`sendBeacon`).
+
+### photo-usage.html
+
+Admin page. Type the admin key once (kept in `photoAdminKey`); every call sends it as `X-Admin-Key`. Per month it shows: **People** (AI tries, failures, saves), **Photos** (the archive: saved photos, AI tries and their sources, fetched with the key header and shown from blob URLs so the key never sits in a URL), **Where people go** and **Clicks** (from the page events), **Phones** (with **Block** and **Reset today**), **Blocked**, and the latest events and attempts.
+
+---
+
 ## Tests
 
-`tests/Scoreboard.Tests.Playwright/` (NUnit + Playwright, page object `ScoreboardPage.cs`). `FakeApi.cs` intercepts `/Scoreboard/api/**` and serves documents from memory, so tests never touch real storage. The host still has to be running to serve the pages.
+`tests/Scoreboard.Tests.Playwright/` (NUnit + Playwright, page object `ScoreboardPage.cs`). `FakeApi.cs` intercepts `/Scoreboard/api/**` and serves documents from memory, so tests never touch real storage (for the photo page, `stylize` hands the photo back and `save` records the request). The host still has to be running to serve the pages.
