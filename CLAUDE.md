@@ -8,12 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build the solution
 dotnet build
 
-# Pack module for local development (outputs to C:\LocalNuGet)
-dotnet pack src/Scoreboard/Scoreboard.csproj -c Debug
-
-# Run the host application (localhost:5227)
+# Run the host application (localhost:5227). Its build also publishes the module
+# to src/Scoreboard.WebApp/bin/drops/scoreboard, which the host loads.
 dotnet run --project src/Scoreboard.WebApp/Scoreboard.WebApp.csproj
 ```
+
+There is no `dotnet pack` step: the module is not a NuGet package (`IsPackable=false`).
 
 ## Testing
 
@@ -34,28 +34,29 @@ set SCOREBOARD_BASE_URL=http://localhost:5227
 dotnet test
 ```
 
-Tests are in `tests/Scoreboard.Tests.Playwright/` using NUnit + Playwright with Page Object Model pattern (`ScoreboardPage.cs`).
+Tests are in `tests/Scoreboard.Tests.Playwright/` using NUnit + Playwright with Page Object Model pattern (`ScoreboardPage.cs`). `FakeApi.cs` intercepts `/Scoreboard/api/**` and serves documents from memory, so tests never touch real storage; the host only serves the pages.
 
 ## Architecture
 
-This is a SharedTools module system application with two main components:
+This is a SharedTools 3.0 module with two projects:
 
 ### Scoreboard (src/Scoreboard/) - The Module
-A dynamically loadable ASP.NET Core module implementing `IApplicationPartModule`:
-- **ScoreboardModule.cs**: Entry point - registers services, serves the embedded HTML pages (`Page()` replaces `{{v}}` with the build id for cache busting)
+An ASP.NET Core module implementing `IApplicationPartModule` (assembly `SharedTools.Scoreboard`). It ships as a **drop**: its `dotnet publish` output (assembly, dependencies, `wwwroot/`), which a module host loads at startup.
+- **ScoreboardModule.cs**: Entry point - registers services, serves the HTML pages from the drop's `wwwroot/` (`Page()` replaces `{{v}}` with a hash of the wwwroot files for cache busting; it must stay synchronous)
 - **ScoreboardApi.cs**: JSON API. The server is the single source of truth; there is no auth (private friend group) and no groups/share codes
+- **ScoreboardOptions.cs**: Settings bound from `Modules:Scoreboard`
 - **Services/ScoreboardStore.cs**: Reads/writes JSON blobs in one container under a data folder
-- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA; `tour.js` is the guided tour of the Teams panel, started by its "?" button or a `?players&tour` link. `?players` / `?players=edit` open the panel / roster editing), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `stats.css`), `photo.html` + `photo.js` + `photo.css` (phone page for the group chat: pick your name, crop a photo, optional AI style, save) and `photo-usage.html` (admin view of who used the AI styles)
+- **wwwroot/**: `index.html` + `app.js` + `styles.css` (scoreboard SPA; `tour.js` is the guided tour of the Teams panel, started by its "?" button or a `?players&tour` link. `?players` / `?players=edit` open the panel / roster editing), `stats.html` / `game.html` (dashboard and single game, sharing `stats-core.js` + `insights.js` + `stats.css`), `photo.html` + `photo.js` + `photo.css` (phone page for the group chat: pick your name, crop a photo, optional AI style, save), `photo-usage.html` (admin view of who used the AI styles) and `docs.html` (user-facing docs). Plain HTML/CSS/JS, no build step
 - **PhotoBooth.cs**: API behind the photo page. AI styles call OpenAI's image edit endpoint with the server-side key; each phone sends a random device id (localStorage) so usage is logged and limited per phone, per IP and in total per day
 
 ### Scoreboard.WebApp (src/Scoreboard.WebApp/) - The Host
-Minimal ASP.NET Core app that loads and hosts modules. Program.cs explicitly loads `SharedTools.Scoreboard` and `SharedTools.ModuleManagement` from NuGet.
+Minimal ASP.NET Core app for local development. `Program.cs` calls `builder.AddModules()` / `app.UseModules()` and adds the module hub (`/_modules`). After every build it publishes the module to `bin/drops/scoreboard`, which `appsettings.json` points at through `Modules:Paths:scoreboard`.
 
 ### Module Loading Flow
-1. Host reads module names from configuration
-2. NuGet packages fetched from configured sources (C:\LocalNuGet for dev, nuget.org for prod)
-3. Assemblies loaded into isolated context
-4. Module's `ConfigureServices()` and `Configure()` called
+1. Host loads every drop under `Modules:Root` plus each `Modules:Paths` entry
+2. Each drop's assemblies load into their own isolated context (the host supplies `SharedTools.Web`)
+3. Module's `ConfigureServices()` and `Configure()` are called
+4. Host serves each drop's `wwwroot/` at `/_content/{Name}/`
 
 ### API Endpoints
 All prefixed with `/Scoreboard/api/`:
@@ -67,51 +68,48 @@ All prefixed with `/Scoreboard/api/`:
 - `GET|PUT /player-links` - `{links: {fromId: toId}}`: one person under two ids (each iPad used to keep its own player list); set from a player's stats page
 - `POST|GET /players/{id}/image` - player photos (256px PNG)
 - `GET /photo/config`, `POST /photo/stylize`, `POST /photo/save` - photo page (`/Scoreboard/photo`, `?k=<code>` unlocks AI styles, `?p=<playerId>` skips the name list). Save writes `players/{id}.png`, sets the roster `imageUrl` and keeps a copy in `photo-archive/`
-- `GET /photo/usage`, `POST /photo/block`, `POST /photo/reset` - usage report, block list, give a phone its daily tries back, `X-Admin-Key` header (page: `/Scoreboard/photo/usage`). Log in `photo-usage/yyyy-MM.json`, blocks in `photo-blocked.json`
+- `POST /photo/events` - photo page beacon (visits, steps, clicks), logged in `photo-events/yyyy-MM.json`
+- `GET /photo/usage`, `POST /photo/block`, `POST /photo/reset`, `GET /photo/archive`, `GET /photo/archive/file` - usage report, block list, give a phone its daily tries back, browse archived photos; `X-Admin-Key` header (page: `/Scoreboard/photo/usage`). Log in `photo-usage/yyyy-MM.json`, blocks in `photo-blocked.json`
 
 ### Data
-- Blob container from `BlobStorage:ContainerName` (prod: `scoreboard`), connection from `BlobStorage:ConnectionString`
-- Data folder: `BlobStorage:DataFolder`, else the legacy group folder with the most games, else `main`
+- Settings come from `Modules:Scoreboard` (`ConnectionString`, `ContainerName`, `DataFolder`; prod container: `scoreboard`). The old root `BlobStorage:*` keys still work as a fallback
+- Data folder: `DataFolder`, else the legacy group folder with the most games, else `main`
 - Teams are BLACK (`'1'`) and WHITE (`'2'`), reshuffled weekly with colors picked at random: stats never add up BLACK vs WHITE across games, only per player (records, streaks, impact). Games may have per-player points, or only team scores typed per quarter; stats handle both
 - Clients poll the server every 15s; localStorage only holds device prefs (old keys are migrated to the server once)
 
 ### Static Assets
-Assets embedded in module assembly, served from `/_content/Scoreboard/*` via `StaticWebAssetBasePath`.
+`wwwroot/` ships as files in the drop; the host serves it from `/_content/Scoreboard/*`.
 
 ## Development Workflow
 
 1. Make changes to `src/Scoreboard/`
-2. Pack module: `dotnet pack src/Scoreboard/Scoreboard.csproj -c Debug`
-3. Run host: `dotnet run --project src/Scoreboard.WebApp/Scoreboard.WebApp.csproj`
-4. Test at http://localhost:5227/Scoreboard/
-5. Changes require repack and restart
+2. Run host: `dotnet run --project src/Scoreboard.WebApp/Scoreboard.WebApp.csproj` (rebuilds and republishes the drop)
+3. Test at http://localhost:5227/Scoreboard/ (module hub: http://localhost:5227/_modules)
+4. Changes require a host restart
 
 ## Configuration
 
 - **Directory.Build.props**: Centralized versioning (VersionPrefix)
-- **nuget.config**: NuGet sources (C:\LocalNuGet for local dev, nuget.org for releases)
-- **Photo page secrets** (module host env, never in the repo): `Modules__Scoreboard__OpenAIKey` (AI styles off when unset), `Modules__Scoreboard__PhotoAdminKey` (usage page off when unset), `Modules__Scoreboard__PhotoLinkCode` (optional `?k=` code). Also `OpenAIImageModel` (gpt-image-2), `OpenAIImageQuality` (low), `OpenAIBaseUrl`, `PhotoDailyLimitPerDevice` (30, an IP gets 2x), `PhotoDailyLimitTotal` (300)
-- **appsettings.json**: Blob storage connection (uses Azure Storage Emulator by default: `UseDevelopmentStorage=true`)
+- **nuget.config**: nuget.org only (`nuget.ci.config` is the copy CI restores with)
+- **src/Scoreboard.WebApp/appsettings.json**: `Modules:Paths:scoreboard` (the local drop) and `Modules:Scoreboard` (blob storage; uses Azurite by default: `UseDevelopmentStorage=true`, container `scoreboard-data`)
+- **Photo page secrets** (module host env, never in the repo): `Modules__Scoreboard__OpenAIKey` (AI styles off when unset), `Modules__Scoreboard__PhotoAdminKey` (usage page off when unset), `Modules__Scoreboard__PhotoLinkCode` (optional `?k=` code). Also `OpenAIImageModel` (gpt-image-2), `OpenAIImageQuality` (low), `OpenAIBaseUrl`, `PhotoDailyLimitPerDevice` (30, an IP gets 2x), `PhotoDailyLimitTotal` (300), `PhotoTryRetentionDays` (14; unsaved AI tries and their source photos are deleted after this)
 
 ## CI/CD
 
-- **ci.yml**: Auto-bumps patch version on push to master
-- **tag-and-publish.yml**: Manual workflow to tag and publish to NuGet.org
+- **ci.yml** (the only workflow): on push to master, bumps the patch version in `Directory.Build.props`, commits it, then runs `deploy.ps1` on the bumped commit
+- **deploy.ps1**: publishes `src/Scoreboard` to `out/`, zips it, uploads it to the module host (default https://modules.blogfor.net, id `scoreboard`) and waits until the host reports the drop as loaded. If the drop fails to load, the host keeps serving the previous one
+- The upload key is `MODULE_UPLOAD_KEY` (the `production` environment secret in CI; locally the environment or a gitignored `.env`). It lets the holder run code on the host: never commit, print or share it
 
 ### Releasing
 
-When the user says "release", "tag", or "tag and release", run the **Tag and Publish** GitHub Actions workflow:
-
-```bash
-gh workflow run "Tag and Publish"
-```
-
-Production picks up the new stable nuget.org version when its container restarts (`blogfor_net`, managed by the hosting-service session). Prerelease versions are not picked up.
+Every merge to master is a release: CI bumps the version and deploys it. When the user says "release" or "deploy", merge the work to master (or run `./deploy.ps1` to deploy the working tree) and check that `/Scoreboard/api/info` on production reports the new version. Nothing is published to NuGet.
 
 ## Troubleshooting
 
-**Module not loading (404 on /Scoreboard/)**: Clear NuGet cache with `dotnet nuget locals all --clear`, verify package exists in C:\LocalNuGet
+**Module not loading (404 on /Scoreboard/)**: Open http://localhost:5227/_modules to see what loaded and what failed; check that `src/Scoreboard.WebApp/bin/drops/scoreboard` exists (it is written by the host's build)
 
-**Blob storage errors**: Ensure Azure Storage Emulator is running, check connection string in appsettings.json
+**Blob storage errors**: Ensure Azurite is running (blob endpoint on port 10000), check `Modules:Scoreboard` in the host's appsettings.json
 
-**Static assets not found**: Verify files exist in wwwroot/, check browser DevTools network tab
+**Static assets not found**: Verify files exist in wwwroot/ and in the drop, check browser DevTools network tab
+
+**Old scripts after a change**: pages reference `app.js?v={{v}}`; the hash is computed at startup, so restart the host
